@@ -2161,6 +2161,7 @@ function modalLayer() {
     case "address": return addressModal();
     case "invoice": return invoiceModal(UI.modal.orderId);
     case "cancelReturn": return cancelReturnModal();
+    case "adminCancelOrder": return adminCancelOrderModal();
     case "payDiff": return payDiffModal();
     case "whatsapp": return whatsappModal();
     case "endShiftConfirm": return endShiftConfirmModal();
@@ -2904,6 +2905,7 @@ function orderItemRowHTML(order, it, idx) {
 
 const CANCEL_REASONS = ["Changed my mind", "Ordered by mistake", "Found a better price elsewhere", "Taking too long", "Other"];
 const RETURN_REASONS = ["Wrong item received", "Damaged item", "Missing item", "Expired item", "Quality issue", "Other"];
+const ADMIN_CANCEL_REASONS = ["Customer requested cancellation", "Item(s) unavailable / out of stock", "Store unable to fulfil in time", "Payment issue", "Suspected fraud / duplicate order", "Other"];
 function cancelReturnModal() {
   const a = UI.actionType;
   const isReturn = a.kind === "return";
@@ -2925,6 +2927,32 @@ function cancelReturnModal() {
           </div>
         ` : ""}
         <button class="btn btn-accent btn-block" data-action="submit-cancel-return">Submit</button>
+      </div>
+    </div>
+  </div>`;
+}
+
+// Admin/Store Manager cancelling an order from Admin > Orders — separate from
+// cancelReturnModal (the customer's own cancel/return flow) since the reason
+// options and audience differ, but same dialog pattern.
+function adminCancelOrderModal() {
+  const order = State.orders.find((o) => o.id === UI.modal.orderId);
+  if (!order) return "";
+  return `
+  <div class="overlay" data-action="close-modal-backdrop">
+    <div class="dialog dialog-static" role="dialog" aria-modal="true" data-action="noop">
+      <div class="dialog-head"><span>Cancel order #${esc(order.id)}?</span><button class="dialog-close" data-action="close-modal">${ic("close")}</button></div>
+      <div class="dialog-body">
+        <div class="notice notice-warn">${ic("alert")}<span>This can't be undone. The customer will see this order as cancelled.</span></div>
+        <label class="field"><span class="field-label">Reason *</span>
+          <select class="input" id="adminCancelReason">
+            ${ADMIN_CANCEL_REASONS.map((r) => `<option>${esc(r)}</option>`).join("")}
+          </select>
+        </label>
+        <div class="form-actions">
+          <button class="btn btn-outline btn-block" data-action="close-modal">Keep order</button>
+          <button class="btn btn-outline-danger btn-block" data-action="confirm-admin-cancel" data-id="${esc(order.id)}">Cancel order</button>
+        </div>
       </div>
     </div>
   </div>`;
@@ -3918,6 +3946,10 @@ function adminOrderRow(order, editable) {
         ${order.rating ? `<div class="qk-muted small">Rating: ${"★".repeat(order.rating)}${"☆".repeat(5 - order.rating)}</div>` : ""}
         ${adminOrderRatingsHTML(order)}
         ${order.returnRequest ? `<div class="qk-muted small">${order.returnRequest.resolution === "replacement" ? "Replacement" : "Refund"} request: ${esc(RETURN_STEPS.find((s) => s.key === returnRequestCurrentKey(order.returnRequest)).label)} (${esc(order.returnRequest.reason)})</div>` : ""}
+        ${order.status === "cancelled" ? (() => {
+          const entry = [...order.statusHistory].reverse().find((s) => s.status === "cancelled" && s.reason);
+          return entry ? `<div class="qk-muted small">Cancellation reason: ${esc(entry.reason)}</div>` : "";
+        })() : ""}
         ${!editable ? "" : order.fulfillment === "pickup" ? "" : DISPATCH_STATUSES.includes(order.status) ? `
         <label class="field"><span class="field-label">Delivery partner ${branch ? `(${esc(branch.name)} riders only — auto-assigned by round robin, override if needed)` : ""}</span>
           <select class="input" data-action="assign-partner" data-order="${order.id}" ${!order.branchId ? "disabled" : ""}>
@@ -3932,7 +3964,7 @@ function adminOrderRow(order, editable) {
             ${PREP_STATUSES.includes(order.status) ? `<button class="btn btn-primary-soft btn-sm" data-action="set-order-status" data-id="${order.id}" data-status="${order.fulfillment === "pickup" && order.status === "packing" ? "delivered" : TIMELINE_STEPS[TIMELINE_STEPS.indexOf(order.status) + 1]}">${order.fulfillment === "pickup" && order.status === "packing" ? "Mark picked up" : ADVANCE_LABEL[order.status]}</button>` : ""}
             ${order.fulfillment !== "pickup" && order.status === "ready_for_rider" ? `<button class="btn btn-outline btn-sm" data-action="set-order-status" data-id="${order.id}" data-status="picked_up">Mark picked up</button>` : ""}
             ${order.fulfillment !== "pickup" && order.status === "picked_up" ? `<button class="btn btn-primary-soft btn-sm" data-action="set-order-status" data-id="${order.id}" data-status="delivered">Mark delivered</button>` : ""}
-            ${[...PREP_STATUSES, "ready_for_rider"].includes(order.status) ? `<button class="btn btn-outline-danger btn-sm" data-action="set-order-status" data-id="${order.id}" data-status="cancelled">Cancel</button>` : ""}
+            ${[...PREP_STATUSES, "ready_for_rider"].includes(order.status) ? `<button class="btn btn-outline-danger btn-sm" data-action="open-admin-cancel" data-id="${order.id}">Cancel</button>` : ""}
           </div>`}
       </div>` : ""}
   </div>`;
@@ -5128,6 +5160,14 @@ const Actions = {
     if (stacked) window.scrollTo(0, restoreY);
   },
   "open-cancel-return"(el) { UI.actionType = { orderId: el.dataset.id, kind: el.dataset.kind, resolution: "refund" }; UI.modal = { type: "cancelReturn" }; render(); },
+  "open-admin-cancel"(el) { UI.modal = { type: "adminCancelOrder", orderId: el.dataset.id }; render(); },
+  "confirm-admin-cancel"(el) {
+    const id = el.dataset.id;
+    const reason = document.getElementById("adminCancelReason").value;
+    State.orders = State.orders.map((o) => o.id === id ? { ...o, status: "cancelled", statusHistory: [...o.statusHistory, { status: "cancelled", at: Date.now(), reason }] } : o);
+    persist("orders");
+    UI.modal = null; showToast("Order cancelled"); render();
+  },
   "set-return-resolution"(el) { UI.actionType = { ...UI.actionType, resolution: el.dataset.res }; render(); },
   "submit-cancel-return"() {
     const reason = document.getElementById("reasonSelect").value;
@@ -5214,7 +5254,26 @@ const Actions = {
     const current = branchStockFor(branchId, itemId);
     const branchMap = { ...(State.branchStock[branchId] || {}), [itemId]: { stock: el.checked, stockCount: current.stockCount } };
     State.branchStock = { ...State.branchStock, [branchId]: branchMap };
-    persist("branchStock"); render();
+    persist("branchStock");
+    if (!el.checked) {
+      const item = findItem(itemId);
+      let affected = 0;
+      State.orders = State.orders.map((o) => {
+        if (o.branchId !== branchId || ![...PREP_STATUSES, "ready_for_rider"].includes(o.status)) return o;
+        let touched = false;
+        const newItems = o.items.map((oi) => {
+          if (oi.id === itemId && !oi.unavailable && !oi.resolution) { touched = true; return { ...oi, unavailable: true }; }
+          return oi;
+        });
+        if (touched) affected++;
+        return touched ? { ...o, items: newItems } : o;
+      });
+      if (affected > 0) {
+        persist("orders");
+        showToast(`${item.name} going out of stock affected ${affected} active order${affected > 1 ? "s" : ""} here — offer a swap or refund from Orders.`, "danger");
+      }
+    }
+    render();
   },
   "set-branch-stock-count"(el) {
     const branchId = Number(el.dataset.branch), itemId = Number(el.dataset.id);
