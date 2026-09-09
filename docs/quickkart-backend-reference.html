@@ -1,0 +1,1110 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>QuickKart Backend Reference</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<style>
+  :root{
+    color-scheme: light dark;
+    --paper:#F5F6F8; --surface:#FFFFFF; --surface-2:#EEF1F5;
+    --ink:#121826; --ink-muted:#5B6472; --border:#DBE1E9;
+    --accent:#00569D; --accent-soft:#E4EEF8;
+    --current:#0F8B5B; --current-soft:#E1F4EA;
+    --proposed:#9C6A0C; --proposed-soft:#FBEFD9;
+    --prod:#6B33C7; --prod-soft:#EFE7FB;
+    --viewonly:#5B6472; --viewonly-soft:#EAEDF1;
+    --code-bg:#101826; --code-ink:#D6E2F0;
+    --shadow: 0 1px 2px rgba(18,24,38,.05), 0 8px 24px -12px rgba(18,24,38,.12);
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --paper:#0A0E15; --surface:#121826; --surface-2:#0D1320;
+      --ink:#E7ECF3; --ink-muted:#93A0B2; --border:#232C3C;
+      --accent:#5CA8E6; --accent-soft:#152537;
+      --current:#4ED19A; --current-soft:#0F2A1F;
+      --proposed:#E8B657; --proposed-soft:#332510;
+      --prod:#C4A6F5; --prod-soft:#241A3A;
+      --viewonly:#93A0B2; --viewonly-soft:#171E2B;
+      --code-bg:#0A1119; --code-ink:#CBDAEC;
+      --shadow: 0 1px 2px rgba(0,0,0,.4), 0 8px 28px -14px rgba(0,0,0,.6);
+    }
+  }
+  :root[data-theme="dark"]{
+    --paper:#0A0E15; --surface:#121826; --surface-2:#0D1320;
+    --ink:#E7ECF3; --ink-muted:#93A0B2; --border:#232C3C;
+    --accent:#5CA8E6; --accent-soft:#152537;
+    --current:#4ED19A; --current-soft:#0F2A1F;
+    --proposed:#E8B657; --proposed-soft:#332510;
+    --prod:#C4A6F5; --prod-soft:#241A3A;
+    --viewonly:#93A0B2; --viewonly-soft:#171E2B;
+    --code-bg:#0A1119; --code-ink:#CBDAEC;
+    --shadow: 0 1px 2px rgba(0,0,0,.4), 0 8px 28px -14px rgba(0,0,0,.6);
+  }
+
+  *{ box-sizing:border-box; }
+  html, body{ height:100%; }
+  html{ scroll-behavior:smooth; }
+  @media (prefers-reduced-motion: reduce){ html{ scroll-behavior:auto; } }
+  body{
+    margin:0; background:var(--paper); color:var(--ink);
+    font-family:"IBM Plex Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+    font-size:15px; line-height:1.55;
+    -webkit-font-smoothing:antialiased;
+  }
+  code, .mono, .k{
+    font-family:"IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+  h1,h2,h3,h4{ text-wrap:balance; font-weight:600; letter-spacing:-0.01em; margin:0; }
+  a{ color:var(--accent); }
+  table{ border-collapse:collapse; width:100%; }
+
+  .shell{ display:flex; max-width:1180px; margin:0 auto; align-items:flex-start; }
+
+  /* ---------- TOC ---------- */
+  .toc{
+    position:sticky; top:0; align-self:flex-start;
+    width:220px; flex:none; padding:40px 18px 40px 28px;
+    height:100vh; overflow-y:auto;
+  }
+  .toc-brand{ display:flex; align-items:center; gap:9px; margin-bottom:28px; }
+  .toc-mark{
+    width:26px; height:26px; border-radius:7px; background:var(--accent);
+    display:flex; align-items:center; justify-content:center;
+    color:#fff; font-weight:700; font-size:13px; font-family:"IBM Plex Mono",monospace;
+  }
+  .toc-brand-word{ font-weight:600; font-size:14.5px; }
+  .toc nav{ display:flex; flex-direction:column; gap:2px; }
+  .toc a{
+    color:var(--ink-muted); text-decoration:none; font-size:13px;
+    padding:6px 10px; border-radius:6px; border-left:2px solid transparent;
+  }
+  .toc a:hover{ color:var(--ink); background:var(--surface-2); }
+  /* Scrollspy active state — mirrors .dash-nav-item.active in the QuickKart app:
+     a soft fill plus full-contrast accent text, here with the left rail the
+     .toc a border-left placeholder was already reserving. */
+  .toc a.active{
+    color:var(--accent); background:var(--accent-soft);
+    border-left-color:var(--accent); font-weight:500;
+  }
+  .toc a.active:hover{ color:var(--accent); background:var(--accent-soft); }
+  .toc .sub{ padding-left:20px; font-size:12.5px; }
+  .toc .grp{
+    font-family:"IBM Plex Mono",monospace; font-size:10.5px; letter-spacing:.08em;
+    text-transform:uppercase; color:var(--ink-muted); opacity:.7;
+    margin:16px 0 4px 10px;
+  }
+  .toc .grp:first-of-type{ margin-top:0; }
+
+  main{ flex:1; min-width:0; padding:48px 40px 100px; }
+
+  /* ---------- Header ---------- */
+  .doc-head{ max-width:700px; margin-bottom:40px; }
+  .eyebrow{
+    font-family:"IBM Plex Mono",monospace; font-size:12px; letter-spacing:.06em;
+    text-transform:uppercase; color:var(--accent); margin-bottom:10px; display:block;
+  }
+  .doc-head h1{ font-size:34px; margin-bottom:12px; }
+  .doc-head p{ color:var(--ink-muted); font-size:15.5px; max-width:640px; }
+  .doc-head .path{
+    display:inline-block; margin-top:14px; font-size:12.5px; color:var(--ink-muted);
+    background:var(--surface-2); border:1px solid var(--border); border-radius:6px;
+    padding:5px 10px;
+  }
+
+  .legend{ display:flex; gap:8px; flex-wrap:wrap; margin-top:18px; }
+  .badge{
+    font-family:"IBM Plex Mono",monospace; font-size:11px; font-weight:500;
+    padding:3px 9px; border-radius:99px; white-space:nowrap; letter-spacing:.01em;
+  }
+  .badge.current{ background:var(--current-soft); color:var(--current); }
+  .badge.proposed{ background:var(--proposed-soft); color:var(--proposed); }
+  .badge.prod{ background:var(--prod-soft); color:var(--prod); }
+  .badge.viewonly{ background:var(--viewonly-soft); color:var(--viewonly); }
+
+  section.block{ margin-bottom:64px; scroll-margin-top:24px; }
+  .block-head{ margin-bottom:22px; max-width:700px; }
+  .block-num{ font-family:"IBM Plex Mono",monospace; color:var(--accent); font-size:13px; }
+  .block-head h2{ font-size:24px; margin-top:6px; }
+  .block-head p{ color:var(--ink-muted); font-size:14.5px; margin-top:8px; }
+
+  .portal{ margin-bottom:30px; scroll-margin-top:24px; }
+  .portal-head{ display:flex; align-items:baseline; gap:10px; margin-bottom:10px; }
+  .portal-head h3{ font-size:16px; }
+  .portal-head .tag{ font-family:"IBM Plex Mono",monospace; font-size:11.5px; color:var(--ink-muted); }
+  .portal-note{ font-size:13.5px; color:var(--ink-muted); margin:-2px 0 12px; max-width:640px; }
+
+  .screen-table{
+    background:var(--surface); border:1px solid var(--border); border-radius:10px;
+    overflow:hidden; box-shadow:var(--shadow);
+  }
+  .screen-table table{ font-size:13.5px; }
+  .screen-table th{
+    text-align:left; font-family:"IBM Plex Mono",monospace; font-size:10.5px;
+    letter-spacing:.06em; text-transform:uppercase; color:var(--ink-muted);
+    padding:10px 16px; border-bottom:1px solid var(--border); background:var(--surface-2);
+  }
+  .screen-table td{ padding:11px 16px; border-bottom:1px solid var(--border); vertical-align:top; }
+  .screen-table tr:last-child td{ border-bottom:none; }
+  .screen-table .name{ font-weight:600; white-space:nowrap; }
+  .screen-table .fn{ display:block; font-family:"IBM Plex Mono",monospace; font-size:11px; color:var(--ink-muted); margin-top:2px; }
+  .screen-table .desc{ color:var(--ink); }
+  .screen-table .level{ text-align:center; white-space:nowrap; }
+  .table-scroll{ overflow-x:auto; }
+
+  .callout{
+    background:var(--surface); border:1px solid var(--border); border-left:3px solid var(--accent);
+    border-radius:0 10px 10px 0; padding:16px 20px; font-size:13.5px; color:var(--ink);
+    box-shadow:var(--shadow); max-width:760px;
+  }
+  .callout.amber{ border-left-color:var(--proposed); }
+  .callout b{ color:var(--ink); }
+  .callout p{ margin:0 0 8px; }
+  .callout p:last-child{ margin-bottom:0; }
+
+  /* ---------- Roles ---------- */
+  .role-grid{ display:grid; grid-template-columns:repeat(auto-fill, minmax(230px,1fr)); gap:14px; margin-bottom:24px; }
+  .role-card{
+    background:var(--surface); border:1px solid var(--border); border-radius:12px;
+    padding:18px; box-shadow:var(--shadow); display:flex; flex-direction:column; gap:8px;
+  }
+  .role-card h4{ font-size:14.5px; }
+  .role-card .portal-of{ font-family:"IBM Plex Mono",monospace; font-size:11px; color:var(--accent); }
+  .role-card p{ margin:0; font-size:13px; color:var(--ink-muted); }
+  .role-card .scope{ font-size:12px; color:var(--ink-muted); border-top:1px solid var(--border); padding-top:8px; margin-top:2px; }
+  .role-card .scope b{ color:var(--ink); font-weight:500; }
+
+  .split{ display:grid; grid-template-columns:1fr 1fr; gap:16px; margin:22px 0; }
+  @media (max-width: 760px){ .split{ grid-template-columns:1fr; } }
+  .split .callout{ max-width:none; height:100%; }
+
+  /* ---------- Schema ---------- */
+  .schema-group{ margin-bottom:36px; }
+  .schema-group-head{ display:flex; align-items:center; gap:10px; margin-bottom:14px; }
+  .schema-group-head h3{ font-size:15px; }
+  .schema-group-head .tag{ font-family:"IBM Plex Mono",monospace; font-size:11px; padding:2px 8px; border-radius:5px; }
+  .schema-group-head .tag.platform{ background:var(--proposed-soft); color:var(--proposed); }
+  .schema-group-head .tag.tenant{ background:var(--accent-soft); color:var(--accent); }
+  .schema-group-body{ border-radius:14px; padding:18px; }
+  .schema-group-body.platform{ background:linear-gradient(180deg, var(--proposed-soft) 0%, transparent 90px); border:1px dashed color-mix(in srgb, var(--proposed) 45%, transparent); }
+  .schema-group-body.tenant{ background:var(--surface-2); border:1px solid var(--border); }
+
+  .table-grid{ display:grid; grid-template-columns:repeat(auto-fill, minmax(240px,1fr)); gap:12px; }
+  .tbl{
+    background:var(--surface); border:1px solid var(--border); border-radius:10px;
+    box-shadow:var(--shadow); overflow:hidden;
+  }
+  .tbl-head{
+    font-family:"IBM Plex Mono",monospace; font-size:13px; font-weight:600;
+    padding:9px 13px; background:var(--code-bg); color:var(--code-ink);
+    display:flex; justify-content:space-between; align-items:baseline; gap:12px;
+  }
+  .tbl-head > span:first-child{ flex:none; }
+  .tbl-head .from{
+    font-size:10px; color:var(--ink-muted); font-weight:400;
+    flex:0 1 auto; min-width:0; text-align:right; line-height:1.35;
+    overflow-wrap:anywhere; /* these are identifiers — break them rather than clip */
+  }
+  .tbl ul{ list-style:none; margin:0; padding:8px 0; }
+  .tbl li{
+    font-family:"IBM Plex Mono",monospace; font-size:12px; padding:3px 13px;
+    display:flex; justify-content:space-between; gap:8px; color:var(--ink);
+    flex-wrap:wrap;
+  }
+  /* Annotations run from a two-word FK to a whole status ladder — wrap onto a
+     second line inside the card rather than being clipped by its overflow. */
+  .tbl li .fk{ color:var(--accent); font-size:11px; text-align:right; min-width:0; }
+  .tbl li .pk::before{ content:"● "; color:var(--proposed); font-size:9px; }
+  /* Notes are prose and contain inline markup — they must not inherit the
+     flex row above, or every <b>/<code>/<i> becomes its own flex item and the
+     sentence breaks into fragments. */
+  .tbl li.note{
+    display:block; font-family:"IBM Plex Sans",sans-serif; color:var(--ink-muted);
+    font-size:11px; line-height:1.5; padding-top:6px; font-style:italic;
+  }
+  .tbl li.note code{ font-style:normal; font-size:10.5px; color:var(--ink); }
+  .tbl li.note b{ color:var(--ink); font-weight:600; }
+  .tbl-foot{
+    font-family:"IBM Plex Mono",monospace; font-size:10px; letter-spacing:.02em;
+    color:var(--ink-muted); padding:7px 13px;
+    border-top:1px solid var(--border); background:var(--surface-2);
+  }
+  .tbl.span2{ grid-column:span 2; }
+  @media (max-width: 780px){ .tbl.span2{ grid-column:span 1; } }
+
+  /* Clusters inside the tenant-level group — 30+ tables is unnavigable flat. */
+  .cluster{ margin-bottom:24px; scroll-margin-top:24px; }
+  .cluster:last-child{ margin-bottom:0; }
+  .cluster-label{
+    font-family:"IBM Plex Mono",monospace; font-size:10.5px; letter-spacing:.08em;
+    text-transform:uppercase; color:var(--ink-muted);
+    margin:0 0 10px 2px; display:flex; align-items:center; gap:10px;
+  }
+  .cluster-label::after{ content:""; flex:1; height:1px; background:var(--border); }
+
+  .conv-grid{ display:grid; grid-template-columns:repeat(auto-fill, minmax(300px,1fr)); gap:12px; margin-bottom:30px; }
+  .conv{
+    background:var(--surface); border:1px solid var(--border); border-radius:10px;
+    padding:14px 16px; box-shadow:var(--shadow);
+  }
+  .conv h4{ font-size:13px; margin-bottom:5px; }
+  .conv p{ margin:0; font-size:12.5px; color:var(--ink-muted); }
+  .conv code{ font-size:11.5px; color:var(--ink); }
+
+  /* ---------- Production-time implementation ---------- */
+  .prod-sub{ margin-bottom:32px; scroll-margin-top:24px; }
+  .prod-sub > h3{ font-size:16px; margin-bottom:4px; }
+  .prod-sub > .sub-note{ color:var(--ink-muted); font-size:13.5px; margin:0 0 14px; max-width:700px; }
+  .prod-item{
+    background:var(--surface); border:1px solid var(--border);
+    border-left:3px solid var(--prod); border-radius:0 12px 12px 0;
+    padding:17px 20px; box-shadow:var(--shadow); margin-bottom:14px;
+  }
+  .prod-item:last-child{ margin-bottom:0; }
+  .prod-item-head{ display:flex; align-items:baseline; gap:9px; flex-wrap:wrap; margin-bottom:8px; }
+  .prod-item-head h4{ font-size:14.5px; }
+  .prod-item p{ margin:0 0 9px; font-size:13.5px; }
+  .prod-item p:last-child{ margin-bottom:0; }
+  .prod-item .today{ color:var(--ink-muted); }
+  .prod-item .today b{ color:var(--ink); font-weight:500; }
+  .howto{ background:var(--surface-2); border-radius:8px; padding:11px 14px; font-size:13px; margin-top:11px; }
+  .howto .howto-label{
+    display:block; font-family:"IBM Plex Mono",monospace; font-size:10px;
+    letter-spacing:.07em; text-transform:uppercase; color:var(--prod); margin-bottom:5px;
+  }
+  .howto p{ margin:0; font-size:13px; }
+  .chips{ display:flex; flex-wrap:wrap; gap:6px; margin:10px 0 2px; }
+  .chips code{
+    font-size:11.5px; background:var(--code-bg); color:var(--code-ink);
+    padding:3px 8px; border-radius:5px;
+  }
+
+  footer{ max-width:700px; margin-top:20px; padding-top:24px; border-top:1px solid var(--border); }
+  footer p{ font-size:12.5px; color:var(--ink-muted); }
+
+  @media (max-width: 900px){
+    .toc{ display:none; }
+    main{ padding:32px 20px 80px; }
+  }
+  /* The legend labels are sentences, not chips — let them wrap on a phone
+     rather than pushing the page into horizontal scroll. */
+  @media (max-width: 620px){
+    .legend .badge{ white-space:normal; }
+  }
+</style>
+</head>
+<body>
+
+<div class="shell">
+  <aside class="toc">
+    <div class="toc-brand"><span class="toc-mark">Q</span><span class="toc-brand-word">QuickKart</span></div>
+    <nav>
+      <div class="grp">Reference</div>
+      <a href="#scope">Scope &amp; source</a>
+      <div class="grp">01 — Screens</div>
+      <a href="#customer" class="sub">Customer portal</a>
+      <a href="#admin" class="sub">Admin portal</a>
+      <a href="#rider" class="sub">Rider portal</a>
+      <a href="#platform" class="sub">Platform control</a>
+      <div class="grp">02 — Access</div>
+      <a href="#roles">Roles &amp; portals</a>
+      <a href="#access-model">Feature vs. permission</a>
+      <div class="grp">03 — Database</div>
+      <a href="#db-conventions" class="sub">Conventions</a>
+      <a href="#db-platform" class="sub">Platform-level</a>
+      <a href="#db-tenant" class="sub">Tenant-level</a>
+      <a href="#isolation" class="sub">Tenant isolation</a>
+      <div class="grp">04 — Production</div>
+      <a href="#prod-auth" class="sub">Authenticated checkout</a>
+      <a href="#prod-geo" class="sub">Serviceable area</a>
+      <a href="#prod-arch" class="sub">Service architecture</a>
+      <a href="#prod-money" class="sub">Money &amp; inventory</a>
+      <a href="#prod-realtime" class="sub">Real-time &amp; comms</a>
+      <a href="#prod-scale" class="sub">Scale &amp; hardening</a>
+      <a href="#prod-saas" class="sub">SaaS operations</a>
+    </nav>
+  </aside>
+
+  <main>
+    <div class="doc-head" id="scope">
+      <span class="eyebrow">Prototype → Backend hand-off</span>
+      <h1>QuickKart Backend Reference</h1>
+      <p>Screens, roles, a multi-tenant PostgreSQL schema and the production hardening the prototype skips — a starting point for the real backend build.</p>
+      <span class="path">Source inspected: QuickKart web dev prototype — assets/js/quickkart.js (~6,240 lines), single Web HTML build, mobile-responsive</span>
+      <div class="legend">
+        <span class="badge current">● current — built &amp; working today</span>
+        <span class="badge proposed">● proposed — business feature from the brief, not built</span>
+        <span class="badge prod">● production — engineering must-have for launch</span>
+        <span class="badge viewonly">● view-only</span>
+      </div>
+    </div>
+
+    <div class="callout" style="margin-bottom:56px;">
+      <p><b>How to read this doc.</b> The prototype today is a single-tenant, client-side app — one store group ("Prabhas Trading Pte Ltd", trading as QuickKart), state held in <code>localStorage</code>, no server. Everything tagged <span class="badge current" style="vertical-align:1px;">current</span> below is inspected directly from the code. Everything tagged <span class="badge proposed" style="vertical-align:1px;">proposed</span> — the platform Super Admin, tenants, feature entitlement, and most of the database — doesn't exist yet; it's drafted from the brief for this document and marked accordingly rather than presented as built.</p>
+      <p><b>Two different kinds of "not built".</b> <span class="badge proposed" style="vertical-align:1px;">proposed</span> means a <i>business</i> feature the brief asks for that the prototype doesn't have — tenants, feature entitlement, customer accounts. <span class="badge prod" style="vertical-align:1px;">production</span>, used throughout §04, means an <i>engineering</i> requirement for launch that a meeting-level prototype deliberately skips — real auth, payment capture, inventory locking, observability. The first is scope; the second is non-negotiable regardless of scope. Don't read them as the same backlog.</p>
+    </div>
+
+    <!-- ================= 01 SCREENS ================= -->
+    <section class="block" id="screens">
+      <div class="block-head">
+        <span class="block-num">01</span>
+        <h2>Screen &amp; portal structure</h2>
+        <p>One login screen with three portal tabs (Customer / Admin / Delivery Partner). There are no credential fields anywhere: Customer is a single "continue" click, Admin picks an existing user from a dropdown, Delivery Partner picks an active rider from a dropdown. Admin's visible screens depend on the signed-in user's role and permissions.</p>
+      </div>
+
+      <div class="portal" id="customer">
+        <div class="portal-head"><h3>Customer portal</h3><span class="tag badge current">current</span></div>
+        <p class="portal-note">Browse → cart → checkout → track. One shared demo session per browser (no real sign-up/multi-account system) — the session is <code>{ role:"customer", name:"Customer" }</code>, and "my orders" is simply every order whose <code>customerName</code> matches that name.</p>
+        <div class="screen-table table-scroll"><table>
+          <tr><th style="width:16%">Screen</th><th>Purpose &amp; functionality</th></tr>
+          <tr><td class="name">Home<span class="fn">viewHome()</span></td><td class="desc">Category rail, hero banner carousel, deals &amp; combos, promo/trust tiles, recently-viewed — the discovery landing page.</td></tr>
+          <tr><td class="name">Shop / Search<span class="fn">viewShop()</span></td><td class="desc">Category filter + search results grid, sort, add-to-cart, offer/BOGO badges.</td></tr>
+          <tr><td class="name">Product quick view<span class="fn">modal: product</span></td><td class="desc">Item detail popup — description, unit, price, stock, quantity stepper.</td></tr>
+          <tr><td class="name">Cart<span class="fn">viewCart()</span></td><td class="desc">Line items with qty edit, active combo/coupon savings, free-delivery progress bar.</td></tr>
+          <tr><td class="name">Checkout<span class="fn">viewCheckout()</span></td><td class="desc">Delivery vs. pickup, address select/add, delivery slot (today or scheduled), delivery instructions, coupon entry, wallet apply, payment method (PayNow / GrabPay / Card / Cash on Delivery), GST-aware bill breakdown, "Send order on WhatsApp" as an alternate channel.</td></tr>
+          <tr><td class="name">Orders<span class="fn">viewOrders()</span></td><td class="desc">Order history, status timeline (new → confirmed → picking → packing → ready for rider → picked up → delivered, or cancelled/returned), invoice, cancel/return request, pay-the-difference flow when a rider swaps in a pricier substitute, rate a delivered order.</td></tr>
+          <tr><td class="name">Wallet<span class="fn">viewWallet()</span></td><td class="desc">Credit balance — a single demo balance per browser, e.g. topped up from out-of-stock refunds.</td></tr>
+          <tr><td class="name">Wishlist<span class="fn">viewWishlist()</span></td><td class="desc">Saved items, add to cart from the list.</td></tr>
+          <tr><td class="name">Addresses<span class="fn">modal: address</span></td><td class="desc">Add/edit saved addresses (Home / Office / Work / Other), set default — used from checkout and the nav bar. Three demo addresses are seeded. Addresses store a postal code but <i>no</i> coordinates; lat/lng are estimated at read time (see below).</td></tr>
+        </table></div>
+
+        <div class="callout" style="margin-top:16px;">
+          <p><b>Store auto-assignment is real today</b> <span class="badge current" style="vertical-align:1px;">current</span> — a customer never picks a store. <code>resolveBranchForAddress()</code> takes the selected address's postal code, <code>estimateCoordsFromPostal()</code> maps its first two digits to a hardcoded sector-centroid lat/lng (<code>POSTAL_SECTOR_COORDS</code>, ~80 sectors, falling back to central Singapore), and <code>findServiceableBranch()</code> returns the nearest <i>active</i> branch whose <code>radiusKm</code> covers that straight-line <code>haversineKm()</code> distance. It legitimately returns <code>null</code> — "we don't deliver to your area yet" — rather than defaulting to a store.</p>
+          <p>Two knock-on effects that are easy to miss: the resolved branch drives what the shopper sees in stock (<code>customerActiveBranchId</code> → <code>withBranchStock</code>, so browsing reflects <i>that branch's</i> inventory overrides, not the network catalog), and it stamps <code>order.branchId</code>, which is what scopes the order to a Store Manager and to that branch's rider queue.</p>
+          <p>It is real but deliberately crude: a two-digit postal-sector centroid, straight-line distance, and a single circular radius per store. No geocoding, no road network, no service-area polygons, no capacity or stock awareness in the choice. See <a href="#prod-geo">§04 — Serviceable area</a> for what this has to become.</p>
+        </div>
+      </div>
+
+      <div class="portal" id="admin">
+        <div class="portal-head"><h3>Admin portal</h3><span class="tag badge current">current</span></div>
+        <p class="portal-note">One sidebar shell (<code>viewAdminShell()</code>) whose visible tabs are exactly the screens the signed-in user's role/permissions allow — see §02. <b>15</b> permissioned screens (<code>PERMISSION_SCREENS</code> is the single source of truth for both the sidebar and the permission grid, in that order); Dashboard, Orders, Partners and Inventory are branch-scoped (<code>BRANCH_SCOPED_TABS</code>) via a "Viewing: …" switcher.</p>
+        <div class="screen-table table-scroll"><table>
+          <tr><th style="width:16%">Screen</th><th>Purpose &amp; functionality</th><th style="width:11%">Permission</th></tr>
+          <tr><td class="name">Dashboard</td><td class="desc">Sales today / this week / this month with period-on-period trend, orders in pipeline. The secondary panel swaps by scope: network-wide shows top sellers + the shared catalog's out-of-stock list; store-scoped shows that store's rider availability and its effective (per-branch) low/out-of-stock counts.</td><td class="level">view only</td></tr>
+          <tr><td class="name">Stores</td><td class="desc">CRUD branches — name, area, geo-coords + delivery radius, hours, pickup availability/address, active flag. Only a Super Admin gets the full grid and add/delete; a store-scoped user sees just their own store(s) and can edit only hours and the open/closed flag — name, coordinates and radius are network-routing data, so they stay Super-Admin-only.</td><td class="level">view / edit</td></tr>
+          <tr><td class="name">Users</td><td class="desc">Manage Admin/Store Manager accounts — role, store scope, per-user permission overrides. Super Admin only in practice.</td><td class="level">view / edit</td></tr>
+          <tr><td class="name">Customers<span class="fn">view-only by design</span></td><td class="desc">Read-only list <i>derived from order history</i> — <code>customersFromOrders()</code> groups orders by <code>customerName</code> alone (mobile is only picked up from the first order that has one), so there is no stable customer identity. Shows order count, spend excluding cancelled, first/last order date, history.</td><td class="level"><span class="badge viewonly">view only</span></td></tr>
+          <tr><td class="name">Orders</td><td class="desc">Full order list/detail, branch-scoped for Store Managers, status advance, admin cancel with a required reason (written into <code>statusHistory</code>), assign delivery partner, view invoice, read per-item customer ratings/feedback.</td><td class="level">view / edit</td></tr>
+          <tr><td class="name">Reports<span class="fn">placeholder</span></td><td class="desc">Permissioned and present in the sidebar, but the screen itself renders a "Reports coming soon" empty state — no reporting is implemented.</td><td class="level">view only</td></tr>
+          <tr><td class="name">Brands</td><td class="desc">CRUD product brands.</td><td class="level">view / edit</td></tr>
+          <tr><td class="name">Catalog</td><td class="desc">CRUD products — name, brand, category, unit, MRP, price, ETA, global in-stock flag + optional stock count, BOGO, rail tags, image. Note the product's default out-of-stock substitute (<code>altId</code>) is read at runtime but has no field on this form — it exists only in seed data.</td><td class="level">view / edit</td></tr>
+          <tr><td class="name">Categories</td><td class="desc">CRUD product categories.</td><td class="level">view / edit</td></tr>
+          <tr><td class="name">Home Screen</td><td class="desc">Editor for the customer Home page — hero/vertical/offer/trust tiles, deals &amp; combos, promo sections — plus site branding (logo, theme colors).</td><td class="level">view / edit</td></tr>
+          <tr><td class="name">Inventory</td><td class="desc">Per-branch stock / stock-count <i>overrides</i> on top of the shared catalog — a branch with no row for a product simply inherits that product's own global stock. Nothing decrements on purchase; stock is set by hand.</td><td class="level">view / edit</td></tr>
+          <tr><td class="name">Partners</td><td class="desc">CRUD delivery partners — name, mobile, vehicle, branch assignment, active flag.</td><td class="level">view / edit</td></tr>
+          <tr><td class="name">Business Settings<span class="fn">permission key: tax</span></td><td class="desc">Company profile (legal name, UEN, GST reg., SFA licence, support contact), delivery fee &amp; free-delivery threshold, delivery slot groups, enabled payment methods, GST rate &amp; inclusive/exclusive mode.</td><td class="level">view / edit</td></tr>
+          <tr><td class="name">Promotions</td><td class="desc">CRUD homepage promotional campaigns/banners.</td><td class="level">view / edit</td></tr>
+          <tr><td class="name">Coupons</td><td class="desc">CRUD discount coupons — code, type, value, min-spend eligibility.</td><td class="level">view / edit</td></tr>
+        </table></div>
+      </div>
+
+      <div class="portal" id="rider">
+        <div class="portal-head"><h3>Rider / delivery partner portal</h3><span class="tag badge current">current</span></div>
+        <p class="portal-note">Login picks from the active partner list. Assignment is branch-scoped — a rider only ever sees orders from their home branch. Dispatch is a real FIFO round-robin (<code>tryAutoAssign</code>): when an order hits <code>ready_for_rider</code>, or when a rider goes Ready, the branch's oldest waiting orders are matched against its ready-queue, oldest-waiting rider first. Because there's no job runner, it's called inline from both of those transitions.</p>
+        <div class="screen-table table-scroll"><table>
+          <tr><th style="width:16%">Screen</th><th>Purpose &amp; functionality</th></tr>
+          <tr><td class="name">Deliveries<span class="fn">default tab</span></td><td class="desc">Orders assigned at the rider's branch. "Ready for next order" / "Pause" joins or leaves a FIFO ready-queue; expand an order to mark items delivered or unavailable (drives the pay-the-difference substitution flow) and advance its status.</td></tr>
+          <tr><td class="name">History</td><td class="desc">The rider's own completed / cancelled / returned deliveries.</td></tr>
+          <tr><td class="name">Earnings</td><td class="desc">Computed from completed deliveries at a flat fee per delivery.</td></tr>
+          <tr><td class="name">Shift management<span class="fn">modals: endShiftConfirm, shiftSummary</span></td><td class="desc">Shift starts implicitly on going "Ready"; "End shift" shows a summary receipt — deliveries done, earnings, time on shift.</td></tr>
+        </table></div>
+      </div>
+
+      <div class="portal" id="platform">
+        <div class="portal-head"><h3>Super Admin / platform control</h3><span class="tag badge proposed">proposed</span></div>
+        <p class="portal-note">Not present in the code — a repo-wide search for "tenant" returns zero matches across all versions. The prototype has exactly one implicit organization baked in as seed data. What follows is drafted from your brief, for a platform layer sitting <i>above</i> today's per-org Admin portal.</p>
+        <div class="callout amber">
+          <p><b>Super Admin (platform)</b> manages the roster of <b>tenants</b> — retailer organizations onboarded onto QuickKart (e.g. "Prabhas Trading / QuickKart", "Grace Supermarket") — and, per tenant, which platform features are switched on:</p>
+          <pre class="mono" style="margin:10px 0 8px; font-size:12.5px; line-height:1.7; white-space:pre-wrap;">Grace Supermarket
+☑ Promotions          ☑ Multiple Stores
+☑ Scheduled Delivery   ☐ Loyalty
+☐ Subscription</pre>
+          <p>A feature switched off for a tenant should be hidden from that tenant's Admin sidebar entirely — a gate <i>above</i> today's per-user <code>PERMISSION_SCREENS</code> RBAC, not a replacement for it.</p>
+          <p><b>Chain:</b> Tenant → Users → Roles → Permissions → Stores — i.e. today's existing Users / Roles / Permission-screens / Stores model, all scoped under a <code>tenant_id</code>, with the Tenant → Feature entitlement layer added on top.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= 02 ROLES ================= -->
+    <section class="block" id="roles">
+      <div class="block-head">
+        <span class="block-num">02</span>
+        <h2>Roles &amp; portal access</h2>
+        <p>Five roles across the three portals. Admin-side access is genuinely role/permission-based; rider and customer access are scope-based, not RBAC.</p>
+      </div>
+
+      <div class="role-grid">
+        <div class="role-card">
+          <h4>Super Admin</h4>
+          <span class="portal-of">Admin portal</span>
+          <p>Full access to every Admin screen. Only role that can create/edit other Admin users and tune the Store Manager permission template.</p>
+          <div class="scope"><b>Access:</b> implicit full access — the role is locked and short-circuits the permission check entirely.</div>
+        </div>
+        <div class="role-card">
+          <h4>Store Manager</h4>
+          <span class="portal-of">Admin portal</span>
+          <p>Default template: Dashboard/Reports view-only, Stores/Orders/Inventory editable, Partners view-only. Users, Customers, Catalog, Brands, Categories, Home Screen, Business Settings, Promotions and Coupons are <b>none</b> by default.</p>
+          <div class="scope"><b>Scope:</b> only their assigned store(s) (<code>storeIds</code>); permissions further tunable per user.</div>
+        </div>
+        <div class="role-card">
+          <h4>Delivery Partner / Rider</h4>
+          <span class="portal-of">Rider portal</span>
+          <p>Views and updates deliveries, marks items delivered/unavailable, tracks earnings. No admin-screen access at all.</p>
+          <div class="scope"><b>Scope:</b> orders at their home branch only, and only while marked active.</div>
+        </div>
+        <div class="role-card">
+          <h4>Customer</h4>
+          <span class="portal-of">Customer portal</span>
+          <p>Browses, orders, tracks. No admin access. Demo login — one shared session per browser, no real account system.</p>
+          <div class="scope"><b>Scope:</b> n/a — open portal.</div>
+        </div>
+        <div class="role-card" style="border-color:color-mix(in srgb, var(--proposed) 45%, var(--border));">
+          <h4>Tenant Admin <span class="badge proposed" style="margin-left:4px;">proposed</span></h4>
+          <span class="portal-of">Admin portal</span>
+          <p>Today's "Super Admin" scoped to one tenant, once multi-tenant lands — same full access, bounded to their own org.</p>
+          <div class="scope"><b>Scope:</b> one tenant, every store within it.</div>
+        </div>
+      </div>
+
+      <div id="access-model" class="split">
+        <div class="callout">
+          <p><b>Feature access</b> <span class="badge proposed" style="vertical-align:1px;">proposed</span> — tenant-level.</p>
+          <p>Does the tenant's plan include this capability at all — e.g. is "Loyalty" switched on for Grace Supermarket? Set by the platform Super Admin on Tenant Feature Management. If off, the screen is gone for <i>every</i> user in that tenant, whatever their role.</p>
+        </div>
+        <div class="callout">
+          <p><b>User permission</b> <span class="badge current" style="vertical-align:1px;">current</span> — per-user, within a tenant.</p>
+          <p>Given the feature exists for the tenant, can <i>this</i> Admin user see or edit it? Governed today by <code>PERMISSION_SCREENS</code> × the user's role template × an optional per-user override — each of the 15 screens independently set to none / view / edit (Dashboard, Customers and Reports only ever offer none / view — there is nothing to edit on them).</p>
+        </div>
+      </div>
+
+      <div class="callout" style="max-width:none;">
+        <p><b>How Store Manager permissions get assigned:</b> a Super Admin opens Admin ▸ Users, creates or edits a Store Manager, sets their store scope, and can override any of the 15 screen permissions away from the role-template default — all on one per-user form (<code>permissionOverrides</code>). No separate matrix screen; the override lives on the user record.</p>
+      </div>
+    </section>
+
+    <!-- ================= 03 DATABASE ================= -->
+    <section class="block" id="database">
+      <div class="block-head">
+        <span class="block-num">03</span>
+        <h2>PostgreSQL schema</h2>
+        <p>Re-derived field by field from the prototype's actual <code>State</code> shape, the <code>SEED_*</code> constants and every object built at runtime — then hardened into something that can be run as a real multi-tenant SaaS product rather than a single-org app. ● marks the primary key; the grey caption on each card names where in the prototype the table comes from.</p>
+      </div>
+
+      <div id="db-conventions">
+        <div class="cluster-label">Schema-wide conventions</div>
+        <div class="conv-grid">
+          <div class="conv">
+            <h4>UUID primary keys, not sequential integers</h4>
+            <p>Every table's <code>id</code> is a UUID. Sequential ints leak volume and let a tenant walk another tenant's IDs by guessing; UUIDs are also safe to expose in tenant-facing URLs and APIs. Use <b>UUIDv7</b> specifically — it's time-ordered, so it keeps B-tree locality on insert-heavy tables like <code>orders</code> instead of fragmenting pages the way random v4 does.</p>
+          </div>
+          <div class="conv">
+            <h4>tenant_id on the row, never via a join</h4>
+            <p>Every tenant-scoped table carries <code>tenant_id</code> directly — including child and junction tables that could technically reach it through a parent. An RLS policy that has to join upward to find the tenant is slower and much easier to get wrong. See <a href="#isolation">Tenant isolation</a> for how drift is prevented.</p>
+          </div>
+          <div class="conv">
+            <h4>Audit columns everywhere</h4>
+            <p>Every table gets <code>created_at</code> / <code>updated_at</code> (<code>timestamptz</code>, UTC). Tables an operator edits also get <code>created_by</code> / <code>updated_by</code> referencing the acting user. Marked <code>+ audit</code> and <code>+ actor</code> on each card below rather than repeated as four rows per table.</p>
+          </div>
+          <div class="conv">
+            <h4>Soft delete on core entities</h4>
+            <p>A nullable <code>deleted_at</code> on <code>tenants</code>, <code>stores</code>, <code>users</code>, <code>customers</code>, <code>products</code> and the other masters they reference. A SaaS platform can't hard-delete rows that historical orders and invoices still point at. Pair it with <b>partial unique indexes</b> (<code>… WHERE deleted_at IS NULL</code>) so a deleted SKU's code can be reused, and default every query and RLS predicate to excluding them.</p>
+          </div>
+          <div class="conv">
+            <h4>Uniqueness is per tenant, not global</h4>
+            <p>A product SKU, coupon code, store name or partner code must be unique <i>within</i> a tenant — two retailers will both have a "WELCOME15". Same for customer identity: <code>(tenant_id, mobile)</code> and <code>(tenant_id, email)</code>, so one tenant's customer never collides with another's. Global uniqueness would leak the existence of other tenants' data through constraint violations.</p>
+          </div>
+          <div class="conv">
+            <h4>Index discipline</h4>
+            <p>Every index on a tenant-scoped table leads with <code>tenant_id</code>, so RLS-filtered queries stay index-only. Money is <code>numeric(12,2)</code>, never float — the prototype's JS floats are fine for a demo and wrong for a ledger. Snapshot columns (<code>tax_snapshot</code>, price at purchase) are deliberately denormalized and must never be back-filled.</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="schema-group" id="db-platform">
+        <div class="schema-group-head"><h3>Platform-level</h3><span class="tag platform">not scoped to a tenant</span></div>
+        <div class="schema-group-body platform">
+          <div class="table-grid">
+            <div class="tbl"><div class="tbl-head"><span>plans</span><span class="from">what tenants buy</span></div><ul>
+              <li class="pk">id</li><li>code</li><li>name / description</li><li>price_amount / currency</li><li>billing_interval <span class="fk">month | year</span></li><li>trial_days</li><li>max_stores / max_users</li><li>max_products</li><li>max_orders_per_month</li><li>is_public</li><li>sort_order</li>
+              <li class="note">the plan is a template — a subscription snapshots the price it was sold at, so raising a plan's price never silently reprices existing tenants</li>
+            </ul><div class="tbl-foot">+ audit · soft-delete · unique (code)</div></div>
+
+            <div class="tbl"><div class="tbl-head"><span>features</span></div><ul>
+              <li class="pk">id</li><li>key</li><li>label / description</li><li>sort_order</li>
+              <li class="note">promotions, multi_store, scheduled_delivery, loyalty, subscription</li>
+            </ul><div class="tbl-foot">+ audit · unique (key)</div></div>
+
+            <div class="tbl"><div class="tbl-head"><span>plan_features</span></div><ul>
+              <li class="pk">id</li><li>plan_id <span class="fk">→ plans.id</span></li><li>feature_id <span class="fk">→ features.id</span></li><li>enabled</li>
+              <li class="note">what a plan includes by default; tenant_features can override per tenant</li>
+            </ul><div class="tbl-foot">+ audit · unique (plan_id, feature_id)</div></div>
+
+            <div class="tbl"><div class="tbl-head"><span>permission_screens</span></div><ul>
+              <li class="pk">id</li><li>key</li><li>label / icon</li><li>supports_edit</li><li>sort_order</li>
+              <li class="note">the 15 admin screens, platform-wide reference data — gives <code>screen_key</code> elsewhere an actual referent, and its order drives the admin sidebar</li>
+            </ul><div class="tbl-foot">+ audit · unique (key)</div></div>
+
+            <div class="tbl"><div class="tbl-head"><span>tenants</span></div><ul>
+              <li class="pk">id</li><li>name</li><li>slug</li><li>status <span class="fk">trial → active → past_due → suspended → cancelled</span></li><li>plan_id <span class="fk">→ plans.id</span></li><li>trial_ends_at</li><li>primary_contact_email</li>
+            </ul><div class="tbl-foot">+ audit · + actor · soft-delete · unique (slug)</div></div>
+
+            <div class="tbl"><div class="tbl-head"><span>tenant_subscriptions</span></div><ul>
+              <li class="pk">id</li><li>tenant_id <span class="fk">→ tenants.id</span></li><li>plan_id <span class="fk">→ plans.id</span></li><li>status</li><li>price_amount_snapshot</li><li>current_period_start / end</li><li>cancel_at_period_end</li><li>external_subscription_id</li>
+              <li class="note">billing lifecycle; the external id points at Stripe Billing / Chargebee</li>
+            </ul><div class="tbl-foot">+ audit</div></div>
+
+            <div class="tbl"><div class="tbl-head"><span>tenant_features</span></div><ul>
+              <li class="pk">id</li><li>tenant_id <span class="fk">→ tenants.id</span></li><li>feature_id <span class="fk">→ features.id</span></li><li>enabled</li><li>source <span class="fk">plan | override</span></li>
+              <li class="note">effective entitlement = plan_features, overridden per tenant here</li>
+            </ul><div class="tbl-foot">+ audit · + actor · unique (tenant_id, feature_id)</div></div>
+
+            <div class="tbl"><div class="tbl-head"><span>tenant_usage_daily</span></div><ul>
+              <li class="pk">id</li><li>tenant_id <span class="fk">→ tenants.id</span></li><li>day</li><li>orders_count</li><li>gmv_amount</li><li>active_stores / active_users</li><li>product_count</li><li>notifications_sent</li>
+              <li class="note">nightly rollup, metered against the plan's limits</li>
+            </ul><div class="tbl-foot">+ audit · unique (tenant_id, day)</div></div>
+
+            <div class="tbl"><div class="tbl-head"><span>platform_users</span><span class="from">platform ops</span></div><ul>
+              <li class="pk">id</li><li>name / email</li><li>password_hash</li><li>mfa_secret</li><li>active</li><li>last_login_at</li>
+              <li class="note">the platform operator is <b>not</b> a tenant user — today's "Super Admin" role is tenant-scoped and stays that way (see Tenant Admin, §02)</li>
+            </ul><div class="tbl-foot">+ audit · soft-delete · unique (email)</div></div>
+
+            <div class="tbl"><div class="tbl-head"><span>platform_audit_log</span></div><ul>
+              <li class="pk">id</li><li>platform_user_id <span class="fk">→ platform_users.id</span></li><li>tenant_id <span class="fk">→ tenants.id, nullable</span></li><li>action / entity / entity_id</li><li>before / after <span class="fk">jsonb</span></li><li>ip / user_agent</li><li>created_at</li>
+              <li class="note">append-only — who onboarded, suspended, re-planned or feature-flagged which tenant</li>
+            </ul></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="schema-group" id="db-tenant">
+        <div class="schema-group-head"><h3>Tenant-level</h3><span class="tag tenant">every table carries tenant_id</span></div>
+        <div class="schema-group-body tenant">
+
+          <div class="cluster">
+            <div class="cluster-label">Stores &amp; configuration</div>
+            <div class="table-grid">
+              <div class="tbl"><div class="tbl-head"><span>stores</span><span class="from">SEED_BRANCHES</span></div><ul>
+                <li class="pk">id</li><li>tenant_id <span class="fk">→ tenants.id</span></li><li>name</li><li>area</li><li>lat / lng</li><li>radius_km</li><li>hours_open / hours_close</li><li>pickup_available</li><li>pickup_address</li><li>active</li>
+                <li class="note">lat/lng + radius_km are the whole of today's serviceability model — see §04</li>
+              </ul><div class="tbl-foot">+ audit · + actor · soft-delete · unique (tenant_id, name)</div></div>
+
+              <div class="tbl"><div class="tbl-head"><span>business_settings</span><span class="from">companyProfile + settings</span></div><ul>
+                <li class="pk">id</li><li>tenant_id <span class="fk">→ tenants.id</span></li><li>company_profile <span class="fk">jsonb</span></li><li>delivery_fee</li><li>free_delivery_threshold</li><li>payment_methods <span class="fk">jsonb</span></li><li>tax_name</li><li>tax_rate</li><li>tax_inclusive</li>
+                <li class="note">company_profile: legal name, trading-as, address, UEN, GST reg no., SFA licence, support email/phone/hours, website. The live tax settings live here; each order freezes its own copy</li>
+              </ul><div class="tbl-foot">+ audit · + actor · one row per tenant</div></div>
+
+              <div class="tbl"><div class="tbl-head"><span>delivery_slot_groups</span><span class="from">slotGroups</span></div><ul>
+                <li class="pk">id</li><li>tenant_id <span class="fk">→ tenants.id</span></li><li>store_id <span class="fk">→ stores.id, nullable</span></li><li>day_label</li><li>slots <span class="fk">jsonb</span></li><li>sort_order</li>
+                <li class="note">prototype uses relative labels ("Today"/"Tomorrow") with no calendar behind them; production needs real dated slots with per-store capacity</li>
+              </ul><div class="tbl-foot">+ audit</div></div>
+
+              <div class="tbl"><div class="tbl-head"><span>site_customization</span><span class="from">siteCustomization</span></div><ul>
+                <li class="pk">id</li><li>tenant_id <span class="fk">→ tenants.id</span></li><li>theme <span class="fk">jsonb</span></li><li>branding <span class="fk">jsonb</span></li>
+                <li class="note">theme: primary, accent, background, surface, text, textMuted, border, success, danger, headerBg, footerBg · branding: logo_url, logo_size</li>
+              </ul><div class="tbl-foot">+ audit · + actor · one row per tenant</div></div>
+            </div>
+          </div>
+
+          <div class="cluster">
+            <div class="cluster-label">Identity &amp; access</div>
+            <div class="table-grid">
+              <div class="tbl"><div class="tbl-head"><span>roles</span><span class="from">SEED_ROLES</span></div><ul>
+                <li class="pk">id</li><li>tenant_id <span class="fk">→ tenants.id</span></li><li>key <span class="fk">super_admin | store_manager | …</span></li><li>name</li><li>is_system</li><li>locked</li>
+                <li class="note">super_admin is locked and short-circuits the permission check entirely — it has no rows in role_permissions by design</li>
+              </ul><div class="tbl-foot">+ audit · unique (tenant_id, key)</div></div>
+
+              <div class="tbl"><div class="tbl-head"><span>role_permissions</span><span class="from">role.permissions{}</span></div><ul>
+                <li class="pk">id</li><li>tenant_id <span class="fk">→ tenants.id</span></li><li>role_id <span class="fk">→ roles.id</span></li><li>screen_key <span class="fk">→ permission_screens.key</span></li><li>level <span class="fk">none | view | edit</span></li>
+              </ul><div class="tbl-foot">+ audit · unique (tenant_id, role_id, screen_key)</div></div>
+
+              <div class="tbl"><div class="tbl-head"><span>users</span><span class="from">SEED_USERS</span></div><ul>
+                <li class="pk">id</li><li>tenant_id <span class="fk">→ tenants.id</span></li><li>name / email / mobile</li><li>password_hash</li><li>role_id <span class="fk">→ roles.id</span></li><li>active</li><li>last_login_at</li>
+                <li class="note">prototype stores <code>password: ""</code> and never checks it</li>
+              </ul><div class="tbl-foot">+ audit · + actor · soft-delete · unique (tenant_id, email)</div></div>
+
+              <div class="tbl"><div class="tbl-head"><span>user_stores</span><span class="from">user.storeIds[]</span></div><ul>
+                <li class="pk">id</li><li>tenant_id <span class="fk">→ tenants.id</span></li><li>user_id <span class="fk">→ users.id</span></li><li>store_id <span class="fk">→ stores.id</span></li>
+                <li class="note">scope (which stores), kept strictly separate from permissions (what they may do). A user can cover several stores; a Super Admin's scope is implicitly all of them and has no rows here</li>
+              </ul><div class="tbl-foot">+ audit · unique (tenant_id, user_id, store_id)</div></div>
+
+              <div class="tbl"><div class="tbl-head"><span>user_permission_overrides</span><span class="from">permissionOverrides{}</span></div><ul>
+                <li class="pk">id</li><li>tenant_id <span class="fk">→ tenants.id</span></li><li>user_id <span class="fk">→ users.id</span></li><li>screen_key <span class="fk">→ permission_screens.key</span></li><li>level</li>
+                <li class="note">override wins over the role template; absent ⇒ fall back to the role; unknown ⇒ none</li>
+              </ul><div class="tbl-foot">+ audit · + actor · unique (tenant_id, user_id, screen_key)</div></div>
+            </div>
+          </div>
+
+          <div class="cluster">
+            <div class="cluster-label">Customers &amp; wallet</div>
+            <div class="table-grid">
+              <div class="tbl"><div class="tbl-head"><span>customers</span><span class="badge proposed" style="font-size:9px;padding:1px 6px;">proposed</span></div><ul>
+                <li class="pk">id</li><li>tenant_id <span class="fk">→ tenants.id</span></li><li>name / email / mobile</li><li>password_hash</li><li>mobile_verified_at</li><li>wallet_balance</li><li>last_login_at</li>
+                <li class="note">no such table today — the Customers screen derives a list from order history keyed on <code>customerName</code> alone. wallet_balance is a cached projection of wallet_ledger, not the source of truth</li>
+              </ul><div class="tbl-foot">+ audit · soft-delete · unique (tenant_id, mobile) · unique (tenant_id, email)</div></div>
+
+              <div class="tbl"><div class="tbl-head"><span>addresses</span><span class="from">profile.addresses</span></div><ul>
+                <li class="pk">id</li><li>tenant_id <span class="fk">→ tenants.id</span></li><li>customer_id <span class="fk">→ customers.id</span></li><li>label <span class="fk">Home | Office | Work | Other</span></li><li>name / mobile</li><li>line1 / line2 / city / postal</li><li>lat / lng <span class="fk">nullable</span></li><li>is_default</li>
+                <li class="note">prototype stores no coordinates — they're re-estimated from the postal code on every lookup. Production geocodes once, on save</li>
+              </ul><div class="tbl-foot">+ audit · soft-delete</div></div>
+
+              <div class="tbl"><div class="tbl-head"><span>wallet_ledger</span><span class="badge proposed" style="font-size:9px;padding:1px 6px;">proposed</span></div><ul>
+                <li class="pk">id</li><li>tenant_id <span class="fk">→ tenants.id</span></li><li>customer_id <span class="fk">→ customers.id</span></li><li>order_id <span class="fk">→ orders.id, nullable</span></li><li>amount <span class="fk">signed</span></li><li>reason</li><li>balance_after</li><li>created_at</li>
+                <li class="note">append-only. Today's wallet is one number per browser, credited on an unavailable item (at 1.1× as a goodwill bonus) or a completed return, and spent at checkout</li>
+              </ul></div>
+
+              <div class="tbl"><div class="tbl-head"><span>carts + cart_items</span><span class="from">State.cart</span></div><ul>
+                <li class="pk">id</li><li>tenant_id <span class="fk">→ tenants.id</span></li><li>customer_id <span class="fk">→ customers.id, nullable</span></li><li>anonymous_token <span class="fk">pre-login</span></li><li>store_id <span class="fk">→ stores.id</span></li>
+                <li class="note">cart_items: tenant_id, cart_id, product_id, qty. Server-side because the cart has to survive the login step at checkout (§04)</li>
+              </ul><div class="tbl-foot">+ audit · unique (tenant_id, cart_id, product_id)</div></div>
+
+              <div class="tbl"><div class="tbl-head"><span>wishlists</span><span class="from">State.wishlist</span></div><ul>
+                <li class="pk">id</li><li>tenant_id <span class="fk">→ tenants.id</span></li><li>customer_id <span class="fk">→ customers.id</span></li><li>product_id <span class="fk">→ products.id</span></li><li>created_at</li>
+              </ul><div class="tbl-foot">unique (tenant_id, customer_id, product_id)</div></div>
+            </div>
+          </div>
+
+          <div class="cluster">
+            <div class="cluster-label">Catalog &amp; inventory</div>
+            <div class="table-grid">
+              <div class="tbl"><div class="tbl-head"><span>categories</span><span class="from">SEED_CATEGORIES</span></div><ul>
+                <li class="pk">id</li><li>tenant_id <span class="fk">→ tenants.id</span></li><li>name</li><li>image_url</li><li>sort_order</li>
+              </ul><div class="tbl-foot">+ audit · soft-delete · unique (tenant_id, name)</div></div>
+
+              <div class="tbl"><div class="tbl-head"><span>brands</span><span class="from">SEED_BRANDS</span></div><ul>
+                <li class="pk">id</li><li>tenant_id <span class="fk">→ tenants.id</span></li><li>name</li>
+                <li class="note">bootstrapped in the prototype from the distinct brand strings on the catalog</li>
+              </ul><div class="tbl-foot">+ audit · soft-delete · unique (tenant_id, name)</div></div>
+
+              <div class="tbl span2"><div class="tbl-head"><span>products</span><span class="from">SEED_ITEMS</span></div><ul>
+                <li class="pk">id</li><li>tenant_id <span class="fk">→ tenants.id</span></li><li>sku</li><li>category_id <span class="fk">→ categories.id</span></li><li>brand_id <span class="fk">→ brands.id, nullable</span></li><li>name</li><li>unit</li><li>mrp / price</li><li>image_url</li><li>eta_minutes</li><li>in_stock</li><li>stock_count <span class="fk">nullable ⇒ unlimited</span></li><li>bogo</li><li>hsn_code</li><li>default_substitute_product_id <span class="fk">→ products.id, nullable</span></li>
+                <li class="note"><b>in_stock / stock_count belong here, not only on store_inventory</b> — a store with no inventory row inherits the product's own values, so they are the network-wide default, not a duplicate.</li>
+                <li class="note"><b>default_substitute_product_id is the prototype's <code>altId</code></b> — a product-level "if this is out, offer that instead". It is genuinely product data (only one seeded item has it, and no admin form exposes it), and it's what pre-selects the rider's substitute picker and what the product modal shows a shopper. It belongs on <code>products</code> <i>as well as</i> the per-line substitution record on the order.</li>
+                <li class="note">hsn_code is new: the invoice currently fabricates one from the product id (<code>2106…</code>), which cannot ship on a real tax invoice.</li>
+              </ul><div class="tbl-foot">+ audit · + actor · soft-delete · unique (tenant_id, sku)</div></div>
+
+              <div class="tbl"><div class="tbl-head"><span>product_tags</span><span class="from">item.tags[]</span></div><ul>
+                <li class="pk">id</li><li>tenant_id <span class="fk">→ tenants.id</span></li><li>product_id <span class="fk">→ products.id</span></li><li>tag <span class="fk">bestseller | fresh | indian | sg | offer</span></li>
+                <li class="note">drives the home-page rails and the shop quick-filters</li>
+              </ul><div class="tbl-foot">unique (tenant_id, product_id, tag)</div></div>
+
+              <div class="tbl"><div class="tbl-head"><span>store_inventory</span><span class="from">State.branchStock</span></div><ul>
+                <li class="pk">id</li><li>tenant_id <span class="fk">→ tenants.id</span></li><li>store_id <span class="fk">→ stores.id</span></li><li>product_id <span class="fk">→ products.id</span></li><li>in_stock</li><li>stock_count</li>
+                <li class="note">an <i>override</i>, not a full inventory table — no row for a product means "use the product's own stock". Nothing decrements it on purchase (see §04 — inventory reservation)</li>
+              </ul><div class="tbl-foot">+ audit · + actor · unique (tenant_id, store_id, product_id)</div></div>
+            </div>
+          </div>
+
+          <div class="cluster">
+            <div class="cluster-label">Storefront content &amp; promotions</div>
+            <div class="table-grid">
+              <div class="tbl"><div class="tbl-head"><span>home_sections</span><span class="from">State.homeSections</span></div><ul>
+                <li class="pk">id</li><li>tenant_id <span class="fk">→ tenants.id</span></li><li>type</li><li>enabled</li><li>sort_order</li><li>title <span class="fk">rail / promo</span></li><li>pool_key / see_all_tag</li><li>content <span class="fk">jsonb</span></li>
+                <li class="note">types: hero, verticalTiles, deals, offerTiles, freshSpotlight, secondaryBanner, trustStrip, recentlyViewed, rail, promo. <code>content</code> is only for the singleton banner copy overrides and the custom promo section — anything individually CRUD'd gets its own table</li>
+              </ul><div class="tbl-foot">+ audit · + actor</div></div>
+
+              <div class="tbl"><div class="tbl-head"><span>home_section_tiles</span><span class="from">section.tiles[]</span></div><ul>
+                <li class="pk">id</li><li>tenant_id <span class="fk">→ tenants.id</span></li><li>section_id <span class="fk">→ home_sections.id</span></li><li>title / subtitle</li><li>image_url</li><li>icon <span class="fk">trustStrip</span></li><li>category_id <span class="fk">verticalTiles link</span></li><li>tag <span class="fk">offerTiles link</span></li><li>sort_order</li>
+                <li class="note">one shape behind hero / verticalTiles / offerTiles / trustStrip; individually added, edited, deleted and drag-reordered in admin</li>
+              </ul><div class="tbl-foot">+ audit · + actor</div></div>
+
+              <div class="tbl"><div class="tbl-head"><span>combos + combo_items</span><span class="from">SEED_COMBOS</span></div><ul>
+                <li class="pk">id</li><li>tenant_id <span class="fk">→ tenants.id</span></li><li>section_id <span class="fk">→ home_sections.id</span></li><li>title / subtitle</li><li>bundle_price</li><li>image_url</li><li>sort_order</li>
+                <li class="note">combo_items: tenant_id, combo_id, product_id, sort_order. A combo discount applies only when <i>every</i> member product is in the cart</li>
+              </ul><div class="tbl-foot">+ audit · soft-delete</div></div>
+
+              <div class="tbl"><div class="tbl-head"><span>promotions</span><span class="from">SEED_PROMOTIONS</span></div><ul>
+                <li class="pk">id</li><li>tenant_id <span class="fk">→ tenants.id</span></li><li>title / subtitle</li><li>image_url</li><li>enabled</li>
+                <li class="note">admin-authored hero slides, appended after the hero section's own baseline tiles</li>
+              </ul><div class="tbl-foot">+ audit · + actor · soft-delete</div></div>
+
+              <div class="tbl"><div class="tbl-head"><span>coupons</span><span class="from">SEED_COUPONS</span></div><ul>
+                <li class="pk">id</li><li>tenant_id <span class="fk">→ tenants.id</span></li><li>code</li><li>type <span class="fk">percent | flat | freeship</span></li><li>value</li><li>min_order</li><li>max_discount <span class="fk">nullable, percent cap</span></li><li>description</li><li>enabled</li><li>expires_at <span class="fk">null ⇒ no expiry</span></li>
+              </ul><div class="tbl-foot">+ audit · + actor · soft-delete · unique (tenant_id, code)</div></div>
+            </div>
+          </div>
+
+          <div class="cluster">
+            <div class="cluster-label">Orders, fulfilment &amp; audit</div>
+            <div class="table-grid">
+              <div class="tbl span2"><div class="tbl-head"><span>orders</span><span class="from">handlePay()</span></div><ul>
+                <li class="pk">id</li><li>tenant_id <span class="fk">→ tenants.id</span></li><li>store_id <span class="fk">→ stores.id</span></li><li>customer_id <span class="fk">→ customers.id</span></li><li>partner_id <span class="fk">→ partners.id, nullable</span></li><li>order_no <span class="fk">QK#####</span></li><li>invoice_no <span class="fk">INV-#####</span></li><li>status</li><li>fulfillment <span class="fk">delivery | pickup</span></li><li>pickup_store_id <span class="fk">→ stores.id, nullable</span></li><li>contact_name / contact_mobile</li><li>address_type</li><li>address_snapshot <span class="fk">text + jsonb</span></li><li>delivery_speed <span class="fk">express | scheduled</span></li><li>scheduled_slot</li><li>delivery_instructions</li><li>item_total</li><li>discount <span class="fk">MRP → price</span></li><li>bogo_savings</li><li>combo_discount</li><li>active_combos <span class="fk">jsonb, titles</span></li><li>coupon_code / coupon_discount</li><li>coupon_free_ship</li><li>delivery_fee</li><li>tax_snapshot <span class="fk">jsonb</span></li><li>gst_amount</li><li>wallet_applied</li><li>payment_method</li><li>total</li><li>rating <span class="fk">order-level, nullable</span></li><li>rider_earning</li>
+                <li class="note">the money columns are <b>not</b> collapsible into one <code>discount</code> — MRP savings, BOGO, combo and coupon are four separate lines on the bill, and the invoice can't be reproduced without all of them.</li>
+                <li class="note"><code>tax_snapshot</code> (name / rate / inclusive) is frozen at purchase so a later change to the tenant's GST settings never rewrites a past invoice. This is one thing the prototype already gets right — keep it.</li>
+                <li class="note">never soft-deleted: an order is a financial record, and cancellation is a status.</li>
+              </ul><div class="tbl-foot">+ audit · unique (tenant_id, order_no) · unique (tenant_id, invoice_no)</div></div>
+
+              <div class="tbl"><div class="tbl-head"><span>order_items</span><span class="from">order.items[]</span></div><ul>
+                <li class="pk">id</li><li>tenant_id <span class="fk">→ tenants.id</span></li><li>order_id <span class="fk">→ orders.id</span></li><li>product_id <span class="fk">→ products.id</span></li><li>name / unit <span class="fk">snapshot</span></li><li>price <span class="fk">snapshot</span></li><li>eta_minutes</li><li>qty</li><li>bogo <span class="fk">snapshot</span></li><li>delivered <span class="fk">nullable tri-state</span></li><li>unavailable</li><li>resolution <span class="fk">swap | wallet | original</span></li><li>substituted_product_id <span class="fk">→ products.id, nullable</span></li>
+                <li class="note">prototype embeds these inline on the order; normalized here</li>
+              </ul><div class="tbl-foot">+ audit</div></div>
+
+              <div class="tbl"><div class="tbl-head"><span>order_status_history</span><span class="from">order.statusHistory[]</span></div><ul>
+                <li class="pk">id</li><li>tenant_id <span class="fk">→ tenants.id</span></li><li>order_id <span class="fk">→ orders.id</span></li><li>status</li><li>reason</li><li>changed_by_user_id <span class="fk">→ users.id, nullable</span></li><li>changed_by_partner_id <span class="fk">→ partners.id, nullable</span></li><li>created_at</li>
+                <li class="note">real today and easy to overlook: an admin cancellation writes its required reason in here. Append-only — this is the order's audit trail</li>
+              </ul></div>
+
+              <div class="tbl"><div class="tbl-head"><span>order_item_substitutions</span><span class="from">item.changeRequest</span></div><ul>
+                <li class="pk">id</li><li>tenant_id <span class="fk">→ tenants.id</span></li><li>order_item_id <span class="fk">→ order_items.id</span></li><li>alt_product_id <span class="fk">→ products.id, nullable</span></li><li>alt_name / alt_unit / alt_price <span class="fk">snapshot</span></li><li>refund_only</li><li>offered_at / offered_by_partner_id</li><li>responded_at</li><li>outcome <span class="fk">swap | wallet | original</span></li>
+                <li class="note">the pay-the-difference flow: rider offers a substitute (defaulting to the product's <code>default_substitute_product_id</code>) or confirms none, customer accepts and pays any difference, takes a wallet credit at 1.1×, or takes the refund</li>
+              </ul><div class="tbl-foot">+ audit</div></div>
+
+              <div class="tbl"><div class="tbl-head"><span>order_item_ratings</span><span class="from">order.itemRatings{}</span></div><ul>
+                <li class="pk">id</li><li>tenant_id <span class="fk">→ tenants.id</span></li><li>order_id <span class="fk">→ orders.id</span></li><li>product_id <span class="fk">→ products.id</span></li><li>rating <span class="fk">1–5</span></li><li>feedback</li>
+                <li class="note">per-product stars + written feedback, separate from the order-level <code>rating</code>; admin reads them on the order</li>
+              </ul><div class="tbl-foot">+ audit · unique (tenant_id, order_id, product_id)</div></div>
+
+              <div class="tbl"><div class="tbl-head"><span>order_returns</span><span class="from">order.returnRequest</span></div><ul>
+                <li class="pk">id</li><li>tenant_id <span class="fk">→ tenants.id</span></li><li>order_id <span class="fk">→ orders.id</span></li><li>reason</li><li>resolution <span class="fk">refund | replacement</span></li><li>status <span class="fk">submitted → under_review → approved → processing → completed</span></li><li>finalized</li>
+                <li class="note">the prototype advances these stages purely on elapsed minutes; production needs a real operator workflow behind them</li>
+              </ul><div class="tbl-foot">+ audit</div></div>
+
+              <div class="tbl"><div class="tbl-head"><span>partners</span><span class="from">SEED_PARTNERS</span></div><ul>
+                <li class="pk">id</li><li>tenant_id <span class="fk">→ tenants.id</span></li><li>store_id <span class="fk">→ stores.id</span></li><li>code</li><li>name / mobile / email</li><li>vehicle_type</li><li>active</li>
+                <li class="note">one home store per rider — dispatch only ever draws from that store's own riders</li>
+              </ul><div class="tbl-foot">+ audit · + actor · soft-delete · unique (tenant_id, code)</div></div>
+
+              <div class="tbl"><div class="tbl-head"><span>rider_shifts</span><span class="from">State.shiftStart</span></div><ul>
+                <li class="pk">id</li><li>tenant_id <span class="fk">→ tenants.id</span></li><li>partner_id <span class="fk">→ partners.id</span></li><li>store_id <span class="fk">→ stores.id</span></li><li>started_at / ended_at</li><li>deliveries_count</li><li>earnings</li>
+                <li class="note">a shift starts implicitly on going "Ready" and ends on "End shift", which prints a summary receipt. Earnings are a flat fee per completed delivery</li>
+              </ul><div class="tbl-foot">+ audit</div></div>
+
+              <div class="tbl"><div class="tbl-head"><span>audit_events</span><span class="badge prod" style="font-size:9px;padding:1px 6px;">production</span></div><ul>
+                <li class="pk">id</li><li>tenant_id <span class="fk">→ tenants.id</span></li><li>actor_user_id <span class="fk">→ users.id</span></li><li>action / entity / entity_id</li><li>before / after <span class="fk">jsonb</span></li><li>ip / user_agent</li><li>created_at</li>
+                <li class="note">append-only tenant-side audit for every write on Users, Roles, Business Settings, catalog price changes and order cancellations — see §04</li>
+              </ul></div>
+            </div>
+            <div class="callout" style="margin-top:16px; max-width:none;">
+              <p><b>Deliberately not tables.</b> <code>State.readyQueue</code> (the per-store FIFO rider queue) and <code>State.recentlyViewed</code> are ephemeral and belong in Redis, not Postgres — the queue changes on every dispatch and every rider tap, and browsing history is analytics, not a record. <code>State.notices</code> is a transient toast buffer with no persistence at all. <code>State.session</code> and <code>State.cart</code> are per-browser today; the cart becomes a real table above because it has to survive login, the session becomes a JWT.</p>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <div class="callout amber" id="isolation" style="max-width:none;">
+        <p><b>Tenant isolation.</b> Every table in the tenant-level group carries <code>tenant_id</code> on the row itself — including the child and junction tables that could reach it through a parent (<code>addresses</code>, <code>order_items</code>, <code>order_status_history</code>, <code>user_stores</code>, <code>user_permission_overrides</code>, <code>role_permissions</code>, <code>combo_items</code>, <code>home_section_tiles</code>, <code>store_inventory</code>, <code>cart_items</code>, <code>product_tags</code>). Enforce with Postgres row-level security keyed on a session GUC — <code>USING (tenant_id = current_setting('app.tenant_id')::uuid)</code> — set from the request's verified token, never from a client-supplied parameter.</p>
+        <p><b>Denormalized tenant_id can drift, so make drift impossible.</b> Give each parent a redundant unique index on <code>(tenant_id, id)</code> and point children at it with a <b>composite foreign key</b> — <code>FOREIGN KEY (tenant_id, order_id) REFERENCES orders (tenant_id, id)</code>. An order_item can then never carry a different tenant from its order, and no foreign key can cross tenants, structurally rather than by trigger or convention. The same pattern covers the cross-entity invariant that an order's <code>store_id</code> and <code>customer_id</code> must resolve to the order's own tenant.</p>
+        <p><b>RLS is not on until it's forced.</b> Table owners and superusers bypass row-level security by default, so the application must connect as a non-owning role and every tenant table needs <code>ALTER TABLE … FORCE ROW LEVEL SECURITY</code>. Keep policies simple column comparisons against an indexed <code>tenant_id</code> — a policy that calls a function per row, or joins upward to find the tenant, is both slower and easier to get wrong.</p>
+        <p>Only the platform group sits outside that boundary: <code>plans</code>, <code>features</code>, <code>plan_features</code>, <code>permission_screens</code>, <code>tenants</code>, <code>tenant_subscriptions</code>, <code>tenant_features</code>, <code>tenant_usage_daily</code>, <code>platform_users</code> and <code>platform_audit_log</code> — reachable only by the platform Super Admin, on a separate connection role.</p>
+        <p>Today's prototype is exactly one implicit tenant hard-coded as seed data (<code>DEFAULT_COMPANY_PROFILE</code>, the <code>SEED_*</code> constants). Going multi-tenant means turning those into the first row of <code>tenants</code> plus its scoped children — not a structural rewrite of the app itself.</p>
+      </div>
+    </section>
+
+    <!-- ================= 04 PRODUCTION ================= -->
+    <section class="block" id="production">
+      <div class="block-head">
+        <span class="block-num">04</span>
+        <h2>Production-time implementation</h2>
+        <p>What the prototype deliberately skips because it's a meeting artefact, and what a real build has to put back. Everything here is tagged <span class="badge prod" style="vertical-align:1px;">production</span> — engineering requirements for launch, not business scope. Reference points are how quick-commerce platforms (Blinkit, Zepto, Swiggy Instamart, Instacart, DoorDash) actually build each one.</p>
+      </div>
+
+      <div class="callout amber" style="max-width:none; margin-bottom:34px;">
+        <p><b>Read this as a sequence, not a shopping list.</b> Five of these actually block a first paying tenant going live: <b>authenticated checkout</b>, <b>real payment capture</b>, <b>inventory reservation</b>, <b>GST-compliant invoice numbering</b>, and <b>admin audit logging</b>. Everything else is scale and hardening you can stage — and several items (event bus, search cluster, service split) are explicitly <i>not</i> day-one work. Where a simpler Postgres-only path exists, it's named.</p>
+      </div>
+
+      <div class="prod-sub" id="prod-auth">
+        <h3>Authenticated checkout</h3>
+        <p class="sub-note">The single biggest gap between the prototype and a real storefront.</p>
+
+        <div class="prod-item">
+          <div class="prod-item-head"><h4>Real customer identity and an auth gate at checkout</h4><span class="badge prod">production</span></div>
+          <p class="today"><b>Today:</b> one shared demo session per browser — <code>{ role:"customer", name:"Customer" }</code> with no password, no account and no server. Every order placed on a machine belongs to the same notional person, and "my orders" is a string match on <code>customerName</code>. Anyone can place an order for anyone.</p>
+          <div class="howto">
+            <span class="howto-label">How production apps actually do this</span>
+            <p>Quick-commerce apps in this market are <b>mobile + OTP</b>, not email + password — Blinkit, Zepto and Instamart all open the app to a browsable catalog and only ask who you are when you commit. The flow is: <b>browse and build a cart as a guest → hit checkout → OTP wall → return to the exact same cart</b>. Losing the cart across that step is the classic implementation bug and the reason the cart is a server-side table in §03: the anonymous cart is keyed by a device token, and on successful verification the server merges it into the customer's cart (union by product, take the higher qty) before rendering checkout.</p>
+            <p>Mechanics: 6-digit OTP, 5-minute TTL, max 3 verify attempts, rate-limited per mobile <i>and</i> per IP to stop SMS-pumping fraud. Issue a short-lived access JWT (~15 min) plus a rotating refresh token in an httpOnly cookie on web / secure storage in the app. The token carries <code>tenant_id</code>, subject and role — but <b>not</b> the admin store scope, which is resolved server-side per request from <code>user_stores</code> so a re-assignment takes effect immediately instead of at token expiry. Email + password with verification is a reasonable secondary factor for account recovery. The admin portal is a different problem: email + password with mandatory TOTP MFA, since those accounts can change prices and cancel orders. Riders use OTP like customers.</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="prod-sub" id="prod-geo">
+        <h3>Serviceable area &amp; store assignment</h3>
+        <p class="sub-note">Real today, but the crudest possible version of a genuinely hard problem.</p>
+
+        <div class="prod-item">
+          <div class="prod-item-head"><h4>Geospatial service zones and multi-store ranking</h4><span class="badge prod">production</span></div>
+          <p class="today"><b>Today:</b> the first two digits of the postal code map to one of ~80 hardcoded sector centroids, straight-line <code>haversineKm</code> distance is compared against each store's single <code>radiusKm</code>, and the nearest match wins (see §01). A whole postal sector collapses to one point, a circle ignores rivers, expressways and the coastline, and the choice is blind to whether that store actually has the cart's items or the capacity to pick them.</p>
+          <div class="howto">
+            <span class="howto-label">How production apps actually do this</span>
+            <p><b>Zones, not radii.</b> Every operator draws real coverage polygons — PostGIS <code>geography(Polygon)</code> per store with a GiST index, so serviceability is a <code>ST_Contains</code> against a geocoded delivery point. The alternative, and what Uber/DoorDash-lineage systems favour for dispatch, is <b>H3 hexagons</b> (resolution 8–9): coverage becomes a set of cell IDs, membership is a hash lookup rather than a geometry test, and the same cells key demand heatmaps and surge. PostGIS is the pragmatic start here — it's an extension on the database you already run, not another system.</p>
+            <p><b>Geocode once, on save.</b> Addresses store a real <code>geography(Point)</code> from a geocoder (OneMap for Singapore, Google/Mapbox elsewhere) at the moment the customer saves them, not re-estimated on every lookup.</p>
+            <p><b>Rank candidates, don't pick the nearest.</b> Multiple stores will cover a dense address. Score them on road-network ETA from a routing engine (not straight-line distance), live stock coverage of <i>this cart</i>, current picking backlog and rider availability, then pick the best. Splitting a cart across two stores is a deliberate product decision — most operators refuse it and instead drop the unavailable lines.</p>
+            <p><b>Define the fallback explicitly.</b> Today an out-of-range address returns <code>null</code>, which is honest. Production wants a ladder: exact zone → nearest zone within a tolerance buffer → capture the address as unserved demand ("notify me when we reach you") → block checkout with a clear message. That unserved-demand log is how operators decide where the next dark store goes.</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="prod-sub" id="prod-arch">
+        <h3>Service architecture &amp; API design</h3>
+        <p class="sub-note">Where today's single <code>quickkart.js</code> state object would actually split, and when.</p>
+
+        <div class="prod-item">
+          <div class="prod-item-head"><h4>Modular monolith first — microservices only when something forces it</h4><span class="badge prod">production</span></div>
+          <p>Start as <b>one deployable</b> with hard internal module boundaries: a package (and its own Postgres schema) per bounded context, cross-module access only through a module's published interface, never a direct table read. That gives you the boundaries without the distributed-systems tax — no network partitions, no distributed transactions, one deploy, one trace. Instacart and DoorDash both ran monoliths well past the scale this platform will see for years, and split by extraction under specific pressure rather than up front.</p>
+          <p>Split a module out when one of these is actually true, not before: it needs a different scaling profile (inventory writes vs catalog reads), a different deploy cadence, a different compliance boundary (payments), or a different language/runtime. Use the <b>strangler pattern</b> — route the module's traffic through a façade first, then move it behind that façade. When you do split, each service takes its tables with it; a shared database across services is the anti-pattern that gives you the coupling of a monolith with the latency of a distributed system.</p>
+          <div class="howto">
+            <span class="howto-label">Candidate service boundaries, in likely extraction order</span>
+            <p><b>Identity &amp; auth</b> (first out — every other service depends on it and it has a clean contract) · <b>Catalog &amp; merchandising</b> (read-heavy, cacheable, low write rate) · <b>Inventory</b> (write-hot, concurrency-critical, the one that will hurt first) · <b>Orders</b> (the transactional core — extract last, it touches everything) · <b>Payments</b> (extract early <i>if</i> PCI scope demands isolation) · <b>Delivery &amp; dispatch</b> (real-time, geospatial, its own latency profile) · <b>Notifications</b> (extract early — it's cheap, and it isolates third-party provider latency from request paths).</p>
+          </div>
+        </div>
+
+        <div class="prod-item">
+          <div class="prod-item-head"><h4>Where today's <code>State</code> object splits</h4><span class="badge prod">production</span></div>
+          <div class="screen-table table-scroll" style="margin-top:4px;"><table>
+            <tr><th style="width:34%">Prototype state</th><th>Owning service</th></tr>
+            <tr><td class="name" style="white-space:normal"><code>items</code>, <code>categories</code>, <code>brands</code>, <code>homeSections</code>, <code>promotions</code>, <code>siteCustomization</code></td><td class="desc">Catalog &amp; merchandising — plus a search index it owns and rebuilds</td></tr>
+            <tr><td class="name" style="white-space:normal"><code>branchStock</code></td><td class="desc">Inventory — the only writer of stock levels and reservations</td></tr>
+            <tr><td class="name" style="white-space:normal"><code>cart</code>, <code>wishlist</code>, <code>recentlyViewed</code>, <code>profile.addresses</code></td><td class="desc">Customer &amp; cart (addresses call out to a geocoding adapter)</td></tr>
+            <tr><td class="name" style="white-space:normal"><code>orders</code></td><td class="desc">Orders — owns the lifecycle state machine and emits its events</td></tr>
+            <tr><td class="name" style="white-space:normal"><code>wallet</code></td><td class="desc">Payments &amp; wallet ledger</td></tr>
+            <tr><td class="name" style="white-space:normal"><code>partners</code>, <code>readyQueue</code>, <code>shiftStart</code></td><td class="desc">Delivery &amp; dispatch — <code>tryAutoAssign</code> becomes a real dispatcher, not an inline call</td></tr>
+            <tr><td class="name" style="white-space:normal"><code>users</code>, <code>roles</code>, <code>session</code></td><td class="desc">Identity &amp; auth (RBAC resolution moves server-side)</td></tr>
+            <tr><td class="name" style="white-space:normal"><code>deliverySettings</code>, <code>companyProfile</code>, <code>tax</code>, <code>branches</code></td><td class="desc">Tenant configuration — read by nearly everything, written rarely</td></tr>
+            <tr><td class="name" style="white-space:normal"><code>notices</code></td><td class="desc">Notifications — a real outbound channel, not a toast buffer</td></tr>
+          </table></div>
+        </div>
+
+        <div class="prod-item">
+          <div class="prod-item-head"><h4>API style: REST, contract-first, <code>/v1</code></h4><span class="badge prod">production</span></div>
+          <p>REST over HTTP with an <b>OpenAPI 3.1 document as the source of truth</b>, written before the handlers and used to generate typed clients for all three portals plus contract tests. URL versioning (<code>/api/v1/…</code>) — it's greppable in logs, trivially routable at the gateway, and unambiguous in a bug report. Within a version, additive changes only; breaking changes get a new version, with <code>Deprecation</code> and <code>Sunset</code> headers and a stated window (six months is a reasonable default) before the old one is withdrawn.</p>
+          <p>Cursor-based pagination on every collection (offset pagination skips and duplicates rows on a list that's being written to, which order lists always are). Idempotency keys — a client-supplied <code>Idempotency-Key</code> header on every unsafe mutation, deduplicated server-side — on checkout, payment and status transitions, so a retried request can't place two orders.</p>
+          <p><b>GraphQL is not the primary contract here.</b> Three first-party clients don't have the field-shaping problem GraphQL solves, and it buys resolver N+1 risk, harder HTTP caching and a much more awkward story for rate limiting and per-portal scopes. If the customer app later needs aggregation badly enough, add a GraphQL BFF <i>over</i> the same services rather than replacing REST with it. gRPC is the right choice for internal service-to-service calls once anything is actually split out — schema-enforced and cheaper on the wire than JSON.</p>
+        </div>
+
+        <div class="prod-item">
+          <div class="prod-item-head"><h4>Gateway with portal scopes, and only one BFF</h4><span class="badge prod">production</span></div>
+          <p>Put a single <b>API gateway</b> (Kong, Envoy, or your cloud's managed equivalent) in front: TLS termination, JWT verification once at the edge, per-portal OAuth scopes (<code>customer:*</code>, <code>admin:*</code>, <code>rider:*</code>), rate limiting, request-ID injection. Portal scopes matter more than they look — they're what stops a stolen customer token from being replayed against an admin endpoint even if that endpoint's own authorization has a bug.</p>
+          <p><b>Skip per-portal BFFs at the monolith stage.</b> Three BFFs in front of one monolith is three more deploys for no isolation benefit; the monolith already shapes responses per portal. The one case that earns a BFF is the <b>customer home screen</b> — it assembles sections, tiles, combos, several product rails and live per-store stock, which is exactly the fan-out <code>viewHome()</code> does client-side today. Collapsing that into one server-composed, cacheable response is a real latency win on mobile. Add it there and nowhere else until a second case proves itself.</p>
+        </div>
+
+        <div class="prod-item">
+          <div class="prod-item-head"><h4>Sync for reads and checkout, async for the order lifecycle</h4><span class="badge prod">production</span></div>
+          <p>Reads and the checkout write path stay <b>synchronous</b> — the customer needs a definitive yes or no about stock, payment and the order. Everything downstream of a committed order is <b>asynchronous</b>: notifications, dispatch, analytics rollups, invoice generation and loyalty accrual all consume events rather than being called inline, so a slow SMS provider can't add a second to checkout.</p>
+          <div class="chips">
+            <code>order.placed</code><code>order.status_changed</code><code>order.cancelled</code>
+            <code>order.item_unavailable</code><code>substitution.offered</code><code>substitution.resolved</code>
+            <code>delivery.assigned</code><code>delivery.picked_up</code><code>delivery.completed</code>
+            <code>payment.captured</code><code>payment.refunded</code><code>wallet.credited</code>
+            <code>return.requested</code><code>return.completed</code>
+          </div>
+          <p style="margin-top:11px;"><b>Don't start with Kafka.</b> Use the <b>transactional outbox</b> pattern: the order write and its event row commit in the same Postgres transaction, and a poller publishes them — that removes the dual-write failure where the order saves but the event is lost. At this stage the "bus" can be a Postgres outbox table plus a worker, or SQS/SNS. Kafka earns its operational cost when you need replayable log retention, multiple independent consumer groups over the same stream, or ordering guarantees per partition key — say it out loud as a threshold rather than adopting it on day one.</p>
+          <p>Whatever carries the events: version every schema and evolve additively, make every consumer idempotent on <code>event_id</code> (at-least-once delivery is the norm, so redelivery must be a no-op), and give every topic a dead-letter queue with a documented replay procedure. Checkout itself is a <b>saga</b> — reserve inventory → authorize payment → create order → confirm reservation — with explicit compensating steps for each failure; orchestrated rather than choreographed, because a failed checkout needs one place that knows how to unwind it.</p>
+        </div>
+
+        <div class="prod-item">
+          <div class="prod-item-head"><h4>Resilience built in, not retrofitted</h4><span class="badge prod">production</span></div>
+          <p>Every outbound call — payment gateway, SMS, geocoder, routing engine — gets a timeout, a circuit breaker and retries with exponential backoff <i>and jitter</i> (without jitter, retries synchronize into a thundering herd). Bulkhead the connection pools so a hung geocoder can't exhaust the threads serving checkout. Define the degraded behaviour explicitly for each dependency: search down → fall back to Postgres category browse; geocoder down → accept the address and resolve the store asynchronously; notifications down → queue, never block the order.</p>
+        </div>
+
+        <div class="prod-item">
+          <div class="prod-item-head"><h4>Observability as a first-class concern</h4><span class="badge prod">production</span></div>
+          <p>OpenTelemetry from day one — traces with <code>tenant_id</code>, <code>order_id</code> and <code>store_id</code> as span attributes so you can answer "what happened to this order" in one query, structured JSON logs carrying the gateway's request ID, and RED metrics (rate, errors, duration) per endpoint. Define SLOs that mean something operationally: checkout success rate, checkout p99, order-status propagation latency, dispatch time-to-assign. Alert on those, not on CPU. Tenant-tagged metrics also give you the per-tenant health view you'll need to answer a support ticket without a database session.</p>
+        </div>
+      </div>
+
+      <div class="prod-sub" id="prod-money">
+        <h3>Money &amp; inventory</h3>
+        <p class="sub-note">The two places where a prototype shortcut becomes a real financial loss.</p>
+
+        <div class="prod-item">
+          <div class="prod-item-head"><h4>Real payment gateway integration &amp; PCI scope</h4><span class="badge prod">production</span></div>
+          <p class="today"><b>Today:</b> <code>handlePay(method)</code> records the chosen method and marks the order paid. Nothing is charged, authorized or refunded. The four methods (PayNow, GrabPay, Card, Cash on Delivery) are labels in <code>business_settings</code>.</p>
+          <div class="howto">
+            <span class="howto-label">How production apps actually do this</span>
+            <p><b>Never let card data touch your servers.</b> Use the gateway's hosted fields or mobile SDK so the PAN goes browser-to-gateway and you receive a token — that keeps you in <b>PCI-DSS SAQ-A</b>, the lightest scope, instead of SAQ-D. In Singapore that's Stripe or Adyen plus PayNow via a bank/PSP rail; in India, Razorpay/PayU with UPI as the dominant method.</p>
+            <p><b>The webhook is the source of truth, not the client.</b> Create the order server-side in a <code>pending_payment</code> state → create the gateway order → client completes payment → the gateway's webhook confirms it. Verify the webhook's HMAC signature, handle it idempotently (gateways redeliver), and never mark an order paid because the browser said so. Reconcile against the settlement file nightly and alert on any mismatch — that reconciliation job is what catches both gateway bugs and fraud.</p>
+            <p><b>COD is its own workflow</b> and is still the majority of orders in parts of this market: the order is confirmed but unpaid, the rider collects, and cash is reconciled against the rider's shift at handover. That needs a cash-collection record per delivery and a shift-level float reconciliation — neither exists today.</p>
+          </div>
+        </div>
+
+        <div class="prod-item">
+          <div class="prod-item-head"><h4>Inventory reservation — the prototype can oversell without limit</h4><span class="badge prod">production</span></div>
+          <p class="today"><b>Today:</b> checkout never decrements stock. <code>stockCount</code> is set by hand in the admin Inventory screen and read for display only. Two customers can buy the same last unit; a hundred can.</p>
+          <div class="howto">
+            <span class="howto-label">How production apps actually do this</span>
+            <p>Dark-store operators run tight real-time counts because a mis-picked order costs a redelivery. The standard shape is a <b>short-lived reservation</b>: at checkout, atomically decrement available stock and write a <code>stock_reservations</code> row with a TTL of 10–15 minutes; confirm it when payment captures, and release it via a sweeper when it expires or the customer abandons. The decrement must be atomic in the database — <code>UPDATE store_inventory SET available = available - :qty WHERE … AND available &gt;= :qty</code> and check the affected row count, or <code>SELECT … FOR UPDATE</code> inside the checkout transaction. Read-then-write in application code is the bug this is designed to prevent.</p>
+            <p>At high contention on a hot SKU, row locks on a single Postgres row become the bottleneck. The usual escape is to move that counter into Redis with a Lua compare-and-decrement (atomic, single-threaded) and reconcile back to Postgres asynchronously — but only when measurement says you need it, since it trades away Postgres's transactional guarantee.</p>
+            <p>Two related requirements that fall out of this: the substitution flow becomes an inventory operation (releasing the original line's reservation and taking one on the replacement), and picking should decrement against physical rather than logical stock, which is where a real store's cycle-count process comes in.</p>
+          </div>
+        </div>
+
+        <div class="prod-item">
+          <div class="prod-item-head"><h4>GST-compliant invoicing &amp; tax audit trail</h4><span class="badge prod">production</span></div>
+          <p class="today"><b>Today:</b> <code>invoiceNo</code> is <code>genId("INV-")</code> — a random five-digit number, so invoices are neither sequential nor collision-free. The HSN code on each line is fabricated from the product id. What the prototype <i>does</i> get right is <code>taxSnapshot</code>: the rate, name and inclusive/exclusive mode are frozen onto the order, so changing GST settings later never rewrites a past invoice. Keep that exactly as it is.</p>
+          <div class="howto">
+            <span class="howto-label">How production apps actually do this</span>
+            <p><b>Sequential, gap-free numbering per tenant per financial year</b>, allocated from a database sequence inside the order transaction — tax authorities in both jurisdictions treat gaps as a red flag. Invoices are immutable once issued; a correction is a <b>credit note</b> referencing the original, never an edit. Retain for the statutory period (five years for IRAS in Singapore).</p>
+            <p>Singapore: GST registration number and full company particulars on the tax invoice, which <code>business_settings.company_profile</code> already models. India: GSTIN, a real HSN/SAC per line from product master data, place of supply, and the CGST/SGST/IGST split — plus e-invoicing with an IRN from the IRP above the turnover threshold, which is an API integration, not a template change. Multi-tenant makes this harder, not easier: each tenant has its own registration, its own number series and potentially its own filing calendar.</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="prod-sub" id="prod-realtime">
+        <h3>Real-time tracking &amp; communications</h3>
+
+        <div class="prod-item">
+          <div class="prod-item-head"><h4>Live order tracking and rider GPS</h4><span class="badge prod">production</span></div>
+          <p class="today"><b>Today:</b> the status timeline is real and complete (new → confirmed → picking → packing → ready_for_rider → picked_up → delivered, with cancelled/returned as terminals) but it only moves when someone re-renders the page. There is no rider location at all.</p>
+          <div class="howto">
+            <span class="howto-label">How production apps actually do this</span>
+            <p><b>Status:</b> a WebSocket (or SSE, which is simpler and sufficient for one-way status) fan-out from Redis pub/sub on a channel keyed <code>tenant:order:{id}</code>, so the WebSocket nodes stay stateless and need no sticky sessions. Push (FCM/APNs) is the fallback when the app is backgrounded — and the primary channel for the moments that matter: order confirmed, rider assigned, arriving, delivered.</p>
+            <p><b>Rider GPS:</b> the rider app posts location every 5–10 seconds, adaptively (faster while approaching, slower while idle) and batched to save battery. Write it to Redis with a short TTL and broadcast to the order's channel — <i>not</i> to Postgres, which at 5-second intervals is roughly 17,000 rows per rider per day of write amplification for data nobody queries after the delivery. Persist only a decimated breadcrumb trail per completed delivery, for dispute resolution and proof of delivery. Show the customer an ETA from the routing engine rather than a raw distance.</p>
+          </div>
+        </div>
+
+        <div class="prod-item">
+          <div class="prod-item-head"><h4>Transactional notifications across the lifecycle</h4><span class="badge prod">production</span></div>
+          <p class="today"><b>Today:</b> <code>pushNotice()</code> appends to an in-memory array trimmed to the last five entries. Order confirmation reaches the customer only if they're looking at the screen. The one real outbound channel is the "Send order on WhatsApp" button, which opens a share link.</p>
+          <div class="howto">
+            <span class="howto-label">How production apps actually do this</span>
+            <p>A dedicated notification service consuming the order-lifecycle events above, with a per-tenant template registry (each retailer wants its own voice and sender ID), a provider abstraction per channel (SMS: Twilio/MSG91; email: SES/SendGrid; push: FCM/APNs; WhatsApp Business API, which is the default order channel in India and needs pre-approved templates), and per-customer channel preferences with quiet hours. Deduplicate on <code>(event_id, channel, recipient)</code> so a redelivered event never double-sends. Retry with backoff into a DLQ, and track delivery receipts — an undelivered "rider is outside" SMS is a failed delivery.</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="prod-sub" id="prod-scale">
+        <h3>Scale &amp; hardening</h3>
+
+        <div class="prod-item">
+          <div class="prod-item-head"><h4>Catalog search beyond <code>array.filter</code></h4><span class="badge prod">production</span></div>
+          <p class="today"><b>Today:</b> <code>itemMatchesQuery</code> tokenizes the query and substring-matches a concatenated haystack of name, brand, category and tags across 86 seeded products, in the browser, on every keystroke. Perfectly adequate at this size.</p>
+          <div class="howto">
+            <span class="howto-label">How production apps actually do this</span>
+            <p>It stops being adequate at a few thousand SKUs per tenant, or the first time someone types "brinjal" and expects eggplant. There's a genuine middle step before a search cluster: <b>Postgres full-text search plus <code>pg_trgm</code></b> handles stemming and fuzzy matching well into the tens of thousands of SKUs on infrastructure you already run. Move to Elasticsearch/OpenSearch (or Typesense/Algolia if you'd rather buy it) when you need typo tolerance with per-tenant synonym dictionaries, relevance tuning, faceting across many attributes at once, or sub-50ms autocomplete at volume.</p>
+            <p>Two multi-tenant specifics: index per tenant, or a shared index with a mandatory tenant filter and routing key — never rely on a query-time filter alone to keep tenants apart. And availability has to influence ranking, because showing an out-of-stock item first is the fastest way to lose a basket; either denormalize per-store availability into the index and accept staleness, or rank in the index and post-filter against live stock in Redis.</p>
+          </div>
+        </div>
+
+        <div class="prod-item">
+          <div class="prod-item-head"><h4>Caching layer</h4><span class="badge prod">production</span></div>
+          <p>Redis, with every key namespaced by tenant — cross-tenant cache bleed is the multi-tenant bug that is both easiest to write and worst to ship. Cache the catalog, category tree and composed home-screen payload (TTL plus event-driven invalidation when a product or section is published), sessions and the JWT denylist, the cart (write-through to Postgres), the rider ready-queue and live GPS, rate-limit counters, and hot stock counters. Put HTTP caching in front of the truly static parts — product images through a CDN, catalog responses with ETags.</p>
+        </div>
+
+        <div class="prod-item">
+          <div class="prod-item-head"><h4>Rate limiting, fraud &amp; abuse, admin audit logging</h4><span class="badge prod">production</span></div>
+          <p><b>Rate limiting</b> at the gateway: sliding-window limits per IP, per token and per tenant, with much tighter limits on OTP send/verify (SMS costs real money and pumping is an active attack), login, coupon application and search.</p>
+          <p><b>Fraud and abuse:</b> velocity checks on new-account-plus-COD, device fingerprint and address reuse across "different" accounts, and coupon-abuse detection — the prototype's <code>WELCOME15</code> has no first-order check, so it's currently infinite. Watch the refund path specifically: the out-of-stock wallet credit pays back <b>1.1×</b> the item price as a goodwill bonus, which is a straightforwardly farmable loop once accounts are free to create. Cap goodwill credits per customer per period and score refund frequency.</p>
+          <p><b>Admin audit logging</b> is the item most often deferred and most regretted. Append-only <code>audit_events</code> (§03) for every write on Users, Roles, Business Settings, catalog price changes and order cancellations — actor, action, entity, before/after, IP, timestamp. The prototype already forces a reason on admin cancellation and stores it in <code>statusHistory</code>; that's the seed of the right instinct, generalized to every privileged action. In a multi-tenant platform this is also what lets you answer a tenant's "who changed our delivery fee" without giving anyone a database session.</p>
+        </div>
+
+        <div class="prod-item">
+          <div class="prod-item-head"><h4>Backups, DR and horizontal scalability</h4><span class="badge prod">production</span></div>
+          <p><b>Backups:</b> Postgres point-in-time recovery via WAL archiving plus daily base backups, a cross-region replica, and — the part people skip — a <b>restore that has actually been tested</b>. An untested backup is a hypothesis. Start from RPO ≤ 5 minutes and RTO ≤ 1 hour and adjust once you know what an hour of downtime costs a tenant.</p>
+          <p><b>Scale:</b> keep the application tier stateless so it scales horizontally behind a load balancer (which the session-in-JWT and cart-in-Postgres decisions above already enable). Read replicas for catalog and reporting traffic, PgBouncer in front of Postgres because connection count is the first ceiling you'll hit, and range-partition <code>orders</code> and <code>order_items</code> by <code>created_at</code> (monthly) once volume justifies it — retention and archival get much cheaper when old partitions can simply be detached.</p>
+        </div>
+      </div>
+
+      <div class="prod-sub" id="prod-saas">
+        <h3>SaaS operations</h3>
+        <p class="sub-note">Consequences of selling this as a product to retailer tenants rather than running it for one org.</p>
+
+        <div class="prod-item">
+          <div class="prod-item-head"><h4>Tenant billing, subscription lifecycle &amp; usage metering</h4><span class="badge prod">production</span></div>
+          <p>The <code>tenants.status</code> ladder in §03 — <b>trial → active → past_due → suspended → cancelled</b> — has to be a real state machine with real consequences, not a label. A failed charge moves a tenant to <code>past_due</code> and starts dunning (a retry schedule plus an email sequence), a grace period follows, and only then does suspension take effect. <b>Suspension is a degradation, not a deletion</b>: the storefront goes dark and the admin becomes read-only so the tenant can still export their data and pay to reactivate. That requirement is precisely why <code>tenants</code>, <code>stores</code>, <code>users</code>, <code>customers</code> and <code>products</code> are soft-deleted.</p>
+          <p>Don't build a billing engine. Stripe Billing or Chargebee handles proration, tax on your own invoices, dunning and card updates; you keep <code>tenant_subscriptions</code> as the local projection and reconcile it from their webhooks. Meter what the plan limits — orders per month, active stores, active users, SKU count, notification volume — with a nightly rollup into <code>tenant_usage_daily</code>, and enforce it as a soft warning at 80% and 100% before any hard cap. A tenant discovering a limit by having checkout fail during their Saturday peak is a churn event.</p>
+        </div>
+
+        <div class="prod-item">
+          <div class="prod-item-head"><h4>Tenant onboarding &amp; data lifecycle</h4><span class="badge prod">production</span></div>
+          <p>Onboarding a tenant is a seeded transaction, not a manual insert: create the tenant, its default roles from the system templates, its first Tenant Admin, a starter <code>business_settings</code> row and default home sections — essentially what the <code>SEED_*</code> constants do today, promoted into a provisioning routine. Give each tenant a self-serve data export (their catalog, customers and orders) — several jurisdictions require it, and a tenant who knows they <i>can</i> leave is more willing to commit. Deletion on cancellation is a scheduled, reversible-for-N-days pipeline with a documented retention policy, not a cascade.</p>
+        </div>
+      </div>
+    </section>
+
+    <footer>
+      <p>Reference only — not a migration plan or final schema. Compiled by inspecting this project directly. Anything marked <span class="badge proposed" style="vertical-align:1px;">proposed</span> is drafted from the brief, not the code, and should be confirmed with the team before implementation begins. Anything marked <span class="badge prod" style="vertical-align:1px;">production</span> is an engineering requirement rather than a scope question — the sequencing is negotiable, the need generally isn't.</p>
+    </footer>
+  </main>
+</div>
+
+<script>
+/* Sidebar scrollspy — highlights the TOC entry for the section currently in
+   view. Targets are read out of the TOC itself, so extending the sidebar with
+   new links (or new anchors in the body) needs no change here. */
+(function () {
+  var LINE = 100; // activation line, px below the top of the viewport
+
+  var links = Array.prototype.slice.call(document.querySelectorAll('.toc a[href^="#"]'));
+  var byId = Object.create(null);
+  var targets = [];
+
+  links.forEach(function (a) {
+    var id = decodeURIComponent(a.getAttribute("href").slice(1));
+    var el = id && document.getElementById(id);
+    if (!el) return;          // a nav link with no matching anchor is skipped, not fatal
+    byId[id] = a;
+    targets.push(el);
+  });
+  if (!targets.length) return;
+
+  // Document order, so "the last anchor we've scrolled past" is just the last
+  // match in this array — which is also what makes nesting work: #access-model
+  // sits inside #roles and, being later, correctly wins once it's reached.
+  targets.sort(function (a, b) {
+    return a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1;
+  });
+
+  var current = null;
+  function setActive(id) {
+    if (id === current) return;
+    if (current && byId[current]) byId[current].classList.remove("active");
+    current = id;
+    if (id && byId[id]) byId[id].classList.add("active");
+  }
+
+  function recompute() {
+    var doc = document.documentElement;
+    // At the very bottom of the page the final section may never reach the
+    // activation line, so pin it explicitly instead of leaving the previous
+    // link stuck on.
+    if (window.innerHeight + window.pageYOffset >= doc.scrollHeight - 4) {
+      setActive(targets[targets.length - 1].id);
+      return;
+    }
+    var best = null;
+    for (var i = 0; i < targets.length; i++) {
+      if (targets[i].getBoundingClientRect().top <= LINE) best = targets[i];
+    }
+    // Above the first anchor, keep the first link lit rather than clearing it.
+    setActive((best || targets[0]).id);
+  }
+
+  var queued = false;
+  function schedule() {
+    if (queued) return;
+    queued = true;
+    window.requestAnimationFrame(function () { queued = false; recompute(); });
+  }
+
+  // IntersectionObserver is the trigger; the decision above is geometric, so
+  // the exact margins only affect how often we recompute, never the answer.
+  if (window.IntersectionObserver) {
+    var io = new IntersectionObserver(schedule, {
+      rootMargin: "-" + LINE + "px 0px -70% 0px",
+      threshold: 0,
+    });
+    targets.forEach(function (t) { io.observe(t); });
+  }
+
+  // Safety net for cases IO won't fire on: short final sections, resizes, and
+  // browsers without IntersectionObserver.
+  window.addEventListener("scroll", schedule, { passive: true });
+  window.addEventListener("resize", schedule);
+  window.addEventListener("hashchange", schedule);
+
+  // Light the clicked link immediately rather than waiting for the scroll.
+  links.forEach(function (a) {
+    a.addEventListener("click", function () {
+      setActive(decodeURIComponent(a.getAttribute("href").slice(1)));
+    });
+  });
+
+  recompute();
+})();
+</script>
+
+</body>
+</html>
