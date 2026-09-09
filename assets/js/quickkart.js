@@ -810,7 +810,13 @@ const State = {
   orders: loadLS("orders", seedOrders).map((o) => ({ ...o, status: normaliseOrderStatus(o.status) })),
   cart: loadLS("cart", {}),
   wallet: loadLS("wallet", 0),
-  profile: loadLS("profile", { addresses: [] }),
+  profile: loadLS("profile", () => ({
+    addresses: [
+      { id: 1, label: "Home", name: "Test User", mobile: "91234567", line1: "18 Bedok North Ave 4", line2: "#07-112", city: "Singapore", postal: "460018", isDefault: true },
+      { id: 2, label: "Office", name: "Test User", mobile: "91234567", line1: "1 Raffles Place", line2: "#32-01", city: "Singapore", postal: "048616", isDefault: false },
+      { id: 3, label: "Other", name: "Test User", mobile: "91234567", line1: "5 Toa Payoh Central", line2: "#04-25", city: "Singapore", postal: "310005", isDefault: false },
+    ],
+  })),
   categories: loadLS("categories", () => SEED_CATEGORIES),
   brands: loadLS("brands", () => SEED_BRANDS),
   homeSections: loadLS("homeSections", () => SEED_HOME_SECTIONS).map(backfillSectionContent),
@@ -1284,18 +1290,7 @@ function viewLogin() {
             <div class="notice notice-warn">${ic("alert")}<span>No active admin users yet.</span></div>
           `}
         ` : `
-          <label class="field">
-            <span class="field-label">Full name</span>
-            <input class="input" name="name" placeholder="e.g. Deepak Kumar" autocomplete="name" />
-          </label>
-          <label class="field">
-            <span class="field-label">Phone or email</span>
-            <input class="input" name="contact" placeholder="9123 4567" autocomplete="username" />
-          </label>
-          <label class="field">
-            <span class="field-label">Password</span>
-            <input class="input" type="password" name="password" placeholder="••••••••" autocomplete="current-password" />
-          </label>
+          <div class="qk-muted small">No account needed — just continue as a customer to start browsing.</div>
         `}
         <button type="submit" class="btn btn-primary btn-lg btn-block" ${(role === "delivery" && activePartners.length === 0) || (role === "admin" && activeAdminUsers.length === 0) ? "disabled" : ""}>
           Continue as ${role === "delivery" ? "Delivery Partner" : role[0].toUpperCase() + role.slice(1)}
