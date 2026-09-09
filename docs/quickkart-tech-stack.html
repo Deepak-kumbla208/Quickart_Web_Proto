@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>QuickKart Tech Stack Recommendation</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<style>
+  :root{
+    color-scheme: light dark;
+    --paper:#F5F6F8; --surface:#FFFFFF; --surface-2:#EEF1F5;
+    --ink:#121826; --ink-muted:#5B6472; --border:#DBE1E9;
+    --accent:#00569D; --accent-soft:#E4EEF8;
+    --pick:#0F8B5B; --pick-soft:#E1F4EA;
+    --warn:#9C6A0C; --warn-soft:#FBEFD9;
+    --prod:#6B33C7; --prod-soft:#EFE7FB;
+    --code-bg:#101826; --code-ink:#D6E2F0;
+    --shadow: 0 1px 2px rgba(18,24,38,.05), 0 8px 24px -12px rgba(18,24,38,.12);
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --paper:#0A0E15; --surface:#121826; --surface-2:#0D1320;
+      --ink:#E7ECF3; --ink-muted:#93A0B2; --border:#232C3C;
+      --accent:#5CA8E6; --accent-soft:#152537;
+      --pick:#4ED19A; --pick-soft:#0F2A1F;
+      --warn:#E8B657; --warn-soft:#332510;
+      --prod:#C4A6F5; --prod-soft:#241A3A;
+      --code-bg:#0A1119; --code-ink:#CBDAEC;
+      --shadow: 0 1px 2px rgba(0,0,0,.4), 0 8px 28px -14px rgba(0,0,0,.6);
+    }
+  }
+  :root[data-theme="dark"]{
+    --paper:#0A0E15; --surface:#121826; --surface-2:#0D1320;
+    --ink:#E7ECF3; --ink-muted:#93A0B2; --border:#232C3C;
+    --accent:#5CA8E6; --accent-soft:#152537;
+    --pick:#4ED19A; --pick-soft:#0F2A1F;
+    --warn:#E8B657; --warn-soft:#332510;
+    --prod:#C4A6F5; --prod-soft:#241A3A;
+    --code-bg:#0A1119; --code-ink:#CBDAEC;
+    --shadow: 0 1px 2px rgba(0,0,0,.4), 0 8px 28px -14px rgba(0,0,0,.6);
+  }
+
+  *{ box-sizing:border-box; }
+  body{
+    margin:0; background:var(--paper); color:var(--ink);
+    font-family:"IBM Plex Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+    font-size:15px; line-height:1.55; -webkit-font-smoothing:antialiased;
+  }
+  code, .mono{ font-family:"IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace; }
+  h1,h2,h3,h4{ text-wrap:balance; font-weight:600; letter-spacing:-0.01em; margin:0; }
+  a{ color:var(--accent); }
+  table{ border-collapse:collapse; width:100%; }
+
+  main{ max-width:800px; margin:0 auto; padding:48px 28px 90px; }
+
+  /* ---------- Header ---------- */
+  .eyebrow{
+    font-family:"IBM Plex Mono",monospace; font-size:12px; letter-spacing:.06em;
+    text-transform:uppercase; color:var(--accent); margin-bottom:10px; display:block;
+  }
+  .doc-head{ margin-bottom:26px; }
+  .doc-head h1{ font-size:32px; margin-bottom:12px; }
+  .doc-head .lede{ color:var(--ink-muted); font-size:15.5px; }
+  .meta{
+    display:inline-block; margin-top:14px; font-size:12.5px; color:var(--ink-muted);
+    background:var(--surface-2); border:1px solid var(--border); border-radius:6px; padding:5px 10px;
+    font-family:"IBM Plex Mono",monospace;
+  }
+
+  .callout{
+    background:var(--surface); border:1px solid var(--border); border-left:3px solid var(--accent);
+    border-radius:0 10px 10px 0; padding:16px 20px; font-size:13.5px;
+    box-shadow:var(--shadow); margin-bottom:22px;
+  }
+  .callout.warn{ border-left-color:var(--warn); }
+  .callout.pick{ border-left-color:var(--pick); }
+  .callout p{ margin:0 0 9px; }
+  .callout p:last-child{ margin-bottom:0; }
+  .callout h3{ font-size:14.5px; margin-bottom:7px; }
+
+  .section-label{
+    font-family:"IBM Plex Mono",monospace; font-size:10.5px; letter-spacing:.08em;
+    text-transform:uppercase; color:var(--ink-muted);
+    margin:38px 0 14px; display:flex; align-items:center; gap:10px;
+  }
+  .section-label::after{ content:""; flex:1; height:1px; background:var(--border); }
+
+  /* ---------- Decision cards ---------- */
+  .dec{
+    background:var(--surface); border:1px solid var(--border); border-radius:12px;
+    padding:18px 20px; box-shadow:var(--shadow); margin-bottom:16px;
+  }
+  .dec-head{ display:flex; align-items:baseline; gap:10px; flex-wrap:wrap; margin-bottom:12px; }
+  .dec-num{ font-family:"IBM Plex Mono",monospace; color:var(--accent); font-size:12.5px; font-weight:600; }
+  .dec-head h2{ font-size:16px; flex:1; min-width:180px; }
+  .rev{
+    font-family:"IBM Plex Mono",monospace; font-size:10px; letter-spacing:.03em;
+    padding:2px 8px; border-radius:99px; white-space:nowrap;
+    background:var(--surface-2); color:var(--ink-muted); border:1px solid var(--border);
+  }
+  .rev.hard{ background:var(--prod-soft); color:var(--prod); border-color:transparent; }
+  .rev.mod{ background:var(--warn-soft); color:var(--warn); border-color:transparent; }
+
+  .pick{
+    display:flex; align-items:center; gap:10px; flex-wrap:wrap;
+    background:var(--pick-soft); border-radius:8px; padding:10px 13px; margin-bottom:11px;
+  }
+  .pick-label{
+    font-family:"IBM Plex Mono",monospace; font-size:9.5px; letter-spacing:.07em;
+    text-transform:uppercase; color:var(--pick); font-weight:600; flex:none;
+  }
+  .pick b{ font-size:14.5px; color:var(--ink); }
+  .pick .sub{ color:var(--ink-muted); font-size:12.5px; }
+
+  .dec p{ margin:0 0 10px; font-size:13.5px; }
+  .dec p:last-child{ margin-bottom:0; }
+  .dec .why b{ color:var(--ink); }
+
+  .alts{ margin-top:12px; border-top:1px solid var(--border); padding-top:11px; }
+  .alts-label{
+    font-family:"IBM Plex Mono",monospace; font-size:9.5px; letter-spacing:.07em;
+    text-transform:uppercase; color:var(--ink-muted); display:block; margin-bottom:7px;
+  }
+  .alt{ font-size:12.5px; color:var(--ink-muted); margin-bottom:6px; }
+  .alt:last-child{ margin-bottom:0; }
+  .alt b{ color:var(--ink); font-weight:500; }
+
+  /* ---------- Summary table ---------- */
+  .tbl-wrap{
+    background:var(--surface); border:1px solid var(--border); border-radius:10px;
+    overflow:hidden; box-shadow:var(--shadow);
+  }
+  .table-scroll{ overflow-x:auto; }
+  .tbl-wrap table{ font-size:13px; }
+  .tbl-wrap th{
+    text-align:left; font-family:"IBM Plex Mono",monospace; font-size:10px;
+    letter-spacing:.06em; text-transform:uppercase; color:var(--ink-muted);
+    padding:9px 14px; border-bottom:1px solid var(--border); background:var(--surface-2);
+  }
+  .tbl-wrap td{ padding:9px 14px; border-bottom:1px solid var(--border); vertical-align:top; }
+  .tbl-wrap tr:last-child td{ border-bottom:none; }
+  .tbl-wrap td.layer{ color:var(--ink-muted); white-space:nowrap; }
+  .tbl-wrap td.choice{ font-weight:600; }
+  .tbl-wrap td.runner{ color:var(--ink-muted); }
+
+  footer{ margin-top:34px; padding-top:22px; border-top:1px solid var(--border); }
+  footer p{ font-size:12.5px; color:var(--ink-muted); margin:0; }
+
+  @media (max-width: 640px){
+    main{ padding:32px 18px 70px; }
+    .doc-head h1{ font-size:26px; }
+  }
+</style>
+</head>
+<body>
+
+<main>
+
+  <div class="doc-head">
+    <span class="eyebrow">Decision memo</span>
+    <h1>QuickKart Tech Stack Recommendation</h1>
+    <p class="lede">Ten concrete technology choices for the production build, each with the alternatives actually considered. A recommendation to review and challenge — not a locked decision.</p>
+    <span class="meta">Companion to quickkart-backend-reference.html — architecture there, technologies here</span>
+  </div>
+
+  <div class="callout">
+    <h3>What this memo assumes</h3>
+    <p>A <b>small team</b> (roughly 2–5 engineers) shipping a <b>first production version</b>, Singapore-primary with India as a named second market. Every choice below is sized for that. If those assumptions are wrong, several answers change — see the closing note.</p>
+    <p>The architecture is already settled in the companion document: a <b>modular monolith first</b> with named extraction boundaries, REST + OpenAPI, PostgreSQL with row-level security, a Postgres transactional outbox rather than Kafka, and PostGIS for service zones. This memo does not revisit any of that. It only picks the products that implement it.</p>
+  </div>
+
+  <div class="callout warn">
+    <h3>On "don't rewrite the app" — read this before decision 01</h3>
+    <p>The constraint is that there is <b>no separate native mobile app</b>: one responsive website serves desktop and mobile, and that same website becomes the Play Store listing. Nothing below breaks that. There is no React Native, no Flutter, no second codebase, no native Android UI anywhere in this memo.</p>
+    <p>That is a different question from whether the <i>web</i> codebase changes. Decision 01 does recommend moving off the current single-file vanilla build — but into another single responsive web app that still <i>is</i> the Play Store app. The prototype has done its job: it is now the working specification for what to build, not throwaway work.</p>
+  </div>
+
+  <div class="section-label">Client &amp; packaging</div>
+
+  <article class="dec">
+    <div class="dec-head"><span class="dec-num">01</span><h2>Client / frontend framework</h2><span class="rev hard">hard to reverse</span></div>
+    <div class="pick"><span class="pick-label">Recommended</span><b>SvelteKit</b><span class="sub">one codebase, three route groups</span></div>
+    <p class="why">The current vanilla build does not survive contact with the Play Store, and the reason is concrete rather than stylistic. <code>quickkart.js</code> contains <b>zero</b> history-API calls — routing is a <code>UI.route</code> variable and <code>render()</code> rebuilds <code>innerHTML</code>. In a Trusted Web Activity, Android's Back gesture maps to browser history, so with no history entries <b>the first Back press exits the app</b> — from the cart, from mid-checkout, from anywhere. That is a lost order, and it is not a bug you can patch around without real routing.</p>
+    <p>The same root cause produces the rest: no deep links (so a push notification cannot open an order), no code splitting (all three portals ship to every customer), and full-innerHTML re-rendering that already needed a manual <code>scrollTop</code> workaround to stop losing the reader's place. Add multi-tenant theming and 15 permissioned admin screens and the ceiling is obvious.</p>
+    <p>SvelteKit is chosen over the React option for three reasons that matter <i>here</i>: it is the smallest conceptual step from hand-written DOM code (no virtual DOM, no hook rules, no server/client component split), it produces the smallest bundles — which is what a TWA's launch feel actually is on a mid-range Android — and its service-worker and adapter support is first-party rather than a plugin. Budget to hold it to: <b>under ~150&nbsp;KB of gzipped JS on the storefront route</b>.</p>
+    <p><b>Sequence the port; do not go dark.</b> Move the customer storefront first — it is what ships to Play — then rider, then admin. The existing build stays running as both the reference and the fallback until each portal lands.</p>
+    <div class="alts">
+      <span class="alts-label">Also considered</span>
+      <div class="alt"><b>Next.js / React</b> — the safest hiring answer and a much deeper component ecosystem for the admin dashboard. Rejected as the primary only on bundle weight and on PWA support being a third-party plugin. This is the runner-up, and the closing note says exactly when it wins instead.</div>
+      <div class="alt"><b>Keep vanilla JS</b> — rejected. It cannot produce history entries, deep links or per-portal bundles without effectively becoming a framework you now also maintain.</div>
+    </div>
+  </article>
+
+  <article class="dec">
+    <div class="dec-head"><span class="dec-num">02</span><h2>Play Store packaging</h2><span class="rev mod">moderate</span></div>
+    <div class="pick"><span class="pick-label">Recommended</span><b>PWA + Trusted Web Activity</b><span class="sub">built with Bubblewrap</span></div>
+    <p class="why">A TWA is the literal expression of "the website is the app": Play ships a thin native shell that opens your verified origin full-screen in Chrome, with no browser UI. There is no second codebase, no bridge layer, and a web deploy updates the app instantly without a Play review. Capacitor would bundle a copy of the web assets into the APK, which reintroduces exactly the store-review release cycle this approach exists to avoid.</p>
+    <p><b>What has to be true</b> — per the PWA installability checklist: HTTPS; a <code>manifest.json</code> with <code>name</code>, <code>short_name</code>, <code>start_url</code>, <code>display:&nbsp;standalone</code>, <code>theme_color</code>, and 192&nbsp;px + 512&nbsp;px icons marked <code>purpose:&nbsp;"any maskable"</code>; a registered service worker; and an <code>offline.html</code> fallback. Then a <code>assetlinks.json</code> at <code>/.well-known/</code> binding your domain to the app's signing certificate.</p>
+    <p><b>The failure mode to guard.</b> If Digital Asset Links verification fails, the TWA does not error — it silently falls back to showing a Chrome address bar, and the app simply looks broken. Note that <b>Play App Signing re-signs your app</b>, so the SHA-256 fingerprint you publish must be Play's, not your local upload key. This catches almost everyone once.</p>
+    <p><b>Whose app is it?</b> This is white-label multi-tenant, and a TWA points at one <code>start_url</code> — so one shared listing would force customers to pick a retailer on launch. Give each tenant its own subdomain, its own manifest and asset-links, and its own Play listing, all generated from the same codebase and the same build pipeline. The store listing is per tenant; the code is not.</p>
+    <p><b>Service worker scope, deliberately narrow.</b> Cache the app shell, CSS, JS, fonts and icons. <b>Never cache stock, cart, orders or auth</b> — a grocery app that serves a cached "in stock" is worse than one that is briefly offline. Static assets cache-first, navigation network-first with the offline fallback, live data network-only.</p>
+    <div class="alts">
+      <span class="alts-label">Also considered</span>
+      <div class="alt"><b>Capacitor</b> — the right answer the day you need a native capability the web platform lacks (background geolocation for the rider app is the realistic trigger). It also keeps the single web codebase, so this is a cheap switch later, not a rewrite.</div>
+      <div class="alt"><b>Cordova</b> — effectively legacy; Capacitor supersedes it. No reason to start here.</div>
+    </div>
+  </article>
+
+  <div class="section-label">Backend &amp; data</div>
+
+  <article class="dec">
+    <div class="dec-head"><span class="dec-num">03</span><h2>Backend language &amp; framework</h2><span class="rev hard">hard to reverse</span></div>
+    <div class="pick"><span class="pick-label">Recommended</span><b>NestJS on Node.js</b><span class="sub">TypeScript</span></div>
+    <p class="why">The architecture calls for a modular monolith whose internal boundaries are enforced rather than aspirational. NestJS modules <i>are</i> that pattern in the framework itself — each bounded context (identity, catalog, inventory, orders, payments, dispatch, notifications) is a module with an explicit public surface, so a cross-module reach shows up as an import you have to write on purpose. When a module is later extracted, the seam already exists.</p>
+    <p>It also gives one language across the whole stack with a TypeScript frontend: shared types generated from the OpenAPI document, one toolchain, one set of hiring criteria for a team this size. <code>@nestjs/swagger</code> emits the OpenAPI&nbsp;3.1 contract the companion doc requires as the source of truth.</p>
+    <div class="alts">
+      <span class="alts-label">Also considered</span>
+      <div class="alt"><b>FastAPI (Python)</b> — excellent contract-first ergonomics and the better choice if the team is genuinely Python-strong. Rejected only because a second language is real overhead at this size.</div>
+      <div class="alt"><b>Go</b> — the best runtime efficiency and the right answer for the dispatch service if it is ever extracted under load. Rejected as the primary: slowest to write the CRUD-heavy admin surface that is most of the near-term work.</div>
+    </div>
+  </article>
+
+  <article class="dec">
+    <div class="dec-head"><span class="dec-num">04</span><h2>Database &amp; hosting</h2><span class="rev hard">hard to reverse</span></div>
+    <div class="pick"><span class="pick-label">Recommended</span><b>PostgreSQL on AWS RDS</b><span class="sub">ap-southeast-1</span></div>
+    <p class="why">PostgreSQL is not really in question — the schema is built on row-level security, <code>tenant_id</code> policies, composite foreign keys and PostGIS service zones, all of which are Postgres features the design already depends on. The decision is where it runs.</p>
+    <p>RDS wins on fit rather than flash: first-party PITR and read replicas, PostGIS available as an extension, a Singapore region for PDPA and data residency, and no BaaS layer to pay for. That last point rules out the obvious alternative — Supabase's value is its auth, auto-generated API and realtime, and this design deliberately uses none of them, so it would mean buying a platform to bypass it.</p>
+    <p><b>One hard requirement on whatever pooling you run.</b> Tenant isolation sets <code>app.tenant_id</code> as a session variable, and that silently breaks under transaction-mode pooling, where connections are handed to different requests mid-session. It must be <code>SET LOCAL</code> inside an explicit transaction, with the whole request in that transaction. Get this wrong and RLS either fails closed everywhere or, far worse, leaks across tenants. Use RDS Proxy or PgBouncer and test it deliberately.</p>
+    <div class="alts">
+      <span class="alts-label">Also considered</span>
+      <div class="alt"><b>Neon</b> — serverless Postgres with per-branch databases, genuinely excellent for CI (a real database per pull request). Worth adopting for preview environments even if production stays on RDS.</div>
+      <div class="alt"><b>Supabase</b> — the fastest start and its RLS tooling is first-rate, but the pieces that justify it are the ones this architecture replaces.</div>
+    </div>
+  </article>
+
+  <article class="dec">
+    <div class="dec-head"><span class="dec-num">05</span><h2>Authentication</h2><span class="rev mod">moderate</span></div>
+    <div class="pick"><span class="pick-label">Recommended</span><b>Own the identity tables, buy the OTP</b><span class="sub">Twilio Verify + your own JWTs</span></div>
+    <p class="why">One constraint decides this: customers are unique <b>per tenant</b>, not globally — <code>(tenant_id, mobile)</code>. The same person can legitimately be a customer of two different retailers on the platform with the same phone number. Hosted identity providers assume a globally unique identity per project, so this either forces one provider tenant per retailer (unmanageable) or a mapping layer that recreates the model you were trying to avoid buying.</p>
+    <p>Two further pulls in the same direction: authorization is already modelled in Postgres — roles, per-screen permissions, per-user overrides and store scope — because RLS policies need it in the database; and RLS needs the tenant on the connection, which means the session must be derived server-side anyway.</p>
+    <p><b>This is not rolling your own crypto.</b> Buy the parts that are commodities and dangerous to get wrong: <b>Twilio Verify</b> (or MSG91 for India) for OTP delivery, expiry, attempt limiting and SMS-pumping fraud; <b>argon2id</b> from a maintained library for admin passwords; a maintained JWT library; a standard TOTP library for admin MFA. What you own is the users table you were always going to own.</p>
+    <div class="alts">
+      <span class="alts-label">Also considered</span>
+      <div class="alt"><b>Auth0 with Organizations</b> — genuinely models multi-tenant identity and would work. Rejected on cost at consumer scale and on adding a network hop plus a second source of truth for authorization.</div>
+      <div class="alt"><b>Supabase Auth / Firebase Auth</b> — both assume globally unique phone identity per project, which is the exact constraint that fails here.</div>
+    </div>
+  </article>
+
+  <article class="dec">
+    <div class="dec-head"><span class="dec-num">06</span><h2>API layer &amp; gateway</h2><span class="rev">easy to reverse</span></div>
+    <div class="pick"><span class="pick-label">Recommended</span><b>REST + OpenAPI, gateway in-app</b><span class="sub">ALB in front, no gateway product yet</span></div>
+    <p class="why">REST with an OpenAPI 3.1 contract, <code>/api/v1</code> URL versioning, cursor pagination and idempotency keys is already settled in the companion doc, and GraphQL was already rejected there — three first-party clients do not have the field-shaping problem it solves. Nothing here reopens that.</p>
+    <p>What is a genuine choice is <i>where the gateway functions live now</i>. Those functions — TLS, JWT verification, per-portal scopes (<code>customer:*</code>, <code>admin:*</code>, <code>rider:*</code>), rate limiting, request IDs — are all required. In front of a single monolith, a dedicated gateway product is a second system to operate for no isolation benefit: put TLS and routing on an <b>Application Load Balancer</b> and the rest in a NestJS middleware and guard layer. Extract it into Kong or API Gateway on the day the first service actually splits out, which is the same day it starts earning its keep.</p>
+    <p>The one BFF the companion doc allows — customer home-screen aggregation — comes free: a SvelteKit server route <i>is</i> that BFF, composing sections, rails and live stock into one cacheable response instead of the fan-out the prototype does client-side.</p>
+    <div class="alts">
+      <span class="alts-label">Also considered</span>
+      <div class="alt"><b>Kong / AWS API Gateway from day one</b> — correct at multi-service scale, premature at one. Deferred, not dismissed.</div>
+      <div class="alt"><b>GraphQL BFF</b> — revisit only if the customer app develops a real over-fetching problem; it layers over these services rather than replacing them.</div>
+    </div>
+  </article>
+
+  <div class="section-label">Runtime services</div>
+
+  <article class="dec">
+    <div class="dec-head"><span class="dec-num">07</span><h2>Real-time &amp; push notifications</h2><span class="rev">easy to reverse</span></div>
+    <div class="pick"><span class="pick-label">Recommended</span><b>SSE + WebSocket over Redis; Web Push (VAPID)</b></div>
+    <p class="why">Split by direction. <b>Order status</b> is one-way, so Server-Sent Events over a Redis pub/sub channel is the simpler mechanism and reconnects natively. <b>Rider GPS</b> is bidirectional and frequent, so a WebSocket with the Redis adapter, keeping the nodes stateless so no sticky sessions are needed.</p>
+    <p><b>Android push from a TWA is standard Web Push with VAPID keys</b> — handled by the service worker you already need for installability, delivered as real Android system notifications. Chrome routes it over Firebase infrastructure internally, but you do not take an FCM SDK dependency to use it. This refines rather than contradicts the companion doc's "FCM/APNs" line: the transport is the same, the integration is the web-standard one, which is the only one available inside a TWA.</p>
+    <p>Two practical notes: Android 13+ requires a <b>runtime notification permission</b>, so ask for it after a real order rather than on first launch, and Play requires a privacy policy for apps that request it. iOS Safari supports Web Push only for home-screen-installed PWAs, which does not affect the Play Store target but does shape any later iOS plan.</p>
+    <div class="alts">
+      <span class="alts-label">Also considered</span>
+      <div class="alt"><b>FCM SDK directly</b> — needed only under Capacitor or a native shell. Adds a Firebase dependency that buys nothing in a TWA.</div>
+      <div class="alt"><b>Pusher / Ably</b> — removes the socket-scaling work; costs per-connection money for something Redis pub/sub already does at this scale.</div>
+    </div>
+  </article>
+
+  <article class="dec">
+    <div class="dec-head"><span class="dec-num">08</span><h2>Payments</h2><span class="rev mod">moderate</span></div>
+    <div class="pick"><span class="pick-label">Recommended</span><b>Stripe, with Connect</b><span class="sub">verify local wallet coverage first</span></div>
+    <p class="why">Two problems have to be solved at once, and Stripe is the only candidate that solves both with one integration. First, <b>per-tenant settlement</b>: this is a platform taking payments on behalf of retailer tenants, so money must land in each tenant's account, not a pooled one — that is precisely Stripe Connect. Second, the platform's own SaaS subscriptions, which the companion doc already routes to Stripe Billing. One vendor, one webhook model, one reconciliation story.</p>
+    <p>It also matches the security posture already committed to: hosted fields keep card data browser-to-Stripe so you stay in <b>PCI-DSS SAQ-A</b>, and Stripe's webhook signing and idempotency keys are exactly the "webhook is the source of truth" model the architecture assumes.</p>
+    <p><b>Verify before signing.</b> Cards and PayNow in Singapore are well covered. Confirm current <b>GrabPay</b> availability and, specifically, whether each method is supported under your Connect charge type — payment-method coverage on platform accounts is narrower than on standalone ones and does change. If a wallet the prototype offers turns out to be unsupported, that is a reason to reconsider, not a detail.</p>
+    <div class="alts">
+      <span class="alts-label">Also considered</span>
+      <div class="alt"><b>Adyen</b> — stronger APAC local-method coverage and a real platform model; heavier commercial onboarding, better suited once volume justifies it.</div>
+      <div class="alt"><b>HitPay</b> — Singapore-local, PayNow/GrabPay-first and cheaper on SGD fees; thinner platform and API tooling for multi-tenant settlement.</div>
+    </div>
+  </article>
+
+  <div class="section-label">Infrastructure</div>
+
+  <article class="dec">
+    <div class="dec-head"><span class="dec-num">09</span><h2>Hosting &amp; CI/CD</h2><span class="rev mod">moderate</span></div>
+    <div class="pick"><span class="pick-label">Recommended</span><b>AWS ECS Fargate + GitHub Actions</b><span class="sub">no Kubernetes</span></div>
+    <p class="why">Fargate runs containers without a cluster to operate — no control plane, no node pools, no upgrades — while keeping the app in the same VPC and region as RDS and ElastiCache, which matters for both latency and data residency. <b>Kubernetes is explicitly rejected</b>: at one monolith and a small team it is a full-time operational commitment bought before there is anything to orchestrate.</p>
+    <p>GitHub Actions for CI/CD, AWS CDK in TypeScript for infrastructure so it is the same language as everything else. Migrations run as a one-off task before the service updates, not on container boot, so a rolling deploy cannot run them twice.</p>
+    <p><b>An honest caveat:</b> "no Kubernetes" is not "no setup". You still own a VPC, subnets, security groups, an ALB, task definitions and secrets. Budget a real week for it. If that is a week the team does not have, <b>Fly.io or AWS App Runner</b> will get you to production faster, at the cost of some control and, for Fly, splitting your database and app across providers. Start Fargate single-service and RDS single-AZ; go Multi-AZ at launch, not before — this stack costs money from day one and the starting size should reflect having no customers yet.</p>
+    <div class="alts">
+      <span class="alts-label">Also considered</span>
+      <div class="alt"><b>Fly.io / Render / Railway</b> — meaningfully simpler and the right call for a team of two. Weaker data-residency and enterprise-procurement story when selling to retailer tenants.</div>
+      <div class="alt"><b>EKS or any managed Kubernetes</b> — rejected outright at this stage. Revisit only when multiple services genuinely need independent scaling.</div>
+    </div>
+  </article>
+
+  <article class="dec">
+    <div class="dec-head"><span class="dec-num">10</span><h2>Supporting infrastructure</h2><span class="rev">easy to reverse</span></div>
+    <div class="pick"><span class="pick-label">Recommended</span><b>S3 + CloudFront · ElastiCache · Postgres FTS · Sentry + Grafana Cloud</b></div>
+    <p class="why"><b>Assets &amp; CDN — S3 + CloudFront.</b> Product imagery is the bulk of storefront bytes; serve it resized and in modern formats from the edge. Cloudflare R2 is worth a look purely on egress cost if image traffic grows.</p>
+    <p><b>Cache — ElastiCache for Redis</b>, in the same VPC. It is doing four jobs already named in the architecture: catalog and home-screen caching, the rider ready-queue, live GPS, and rate-limit counters. Namespace every key by tenant — cross-tenant cache bleed is the easiest multi-tenant bug to write. Upstash is the lower-ops, lower-cost alternative at v1 volume.</p>
+    <p><b>Search — Postgres full-text + <code>pg_trgm</code></b>, per the companion doc, which carries you well past the prototype's 86 SKUs. Move to Typesense or OpenSearch when you need per-tenant synonyms and sub-50&nbsp;ms autocomplete, not before.</p>
+    <p><b>Observability — Sentry for errors, Grafana Cloud for OpenTelemetry</b> traces, metrics and logs. Sentry is what the team will actually open every day; Grafana Cloud is where the tenant-tagged traces the architecture calls for land, on a free tier that suits this stage. Datadog is better and materially more expensive.</p>
+  </article>
+
+  <div class="section-label">Recommended stack at a glance</div>
+
+  <div class="tbl-wrap table-scroll"><table>
+    <tr><th style="width:20%">Layer</th><th style="width:36%">Recommended</th><th>Runner-up</th></tr>
+    <tr><td class="layer">Frontend</td><td class="choice">SvelteKit — one app, three route groups</td><td class="runner">Next.js / React, if hiring decides it</td></tr>
+    <tr><td class="layer">Play Store</td><td class="choice">PWA + Trusted Web Activity (Bubblewrap), per-tenant listings</td><td class="runner">Capacitor, when a native capability is needed</td></tr>
+    <tr><td class="layer">Backend</td><td class="choice">NestJS on Node.js (TypeScript)</td><td class="runner">FastAPI, if the team is Python-strong</td></tr>
+    <tr><td class="layer">Database</td><td class="choice">PostgreSQL on AWS RDS, ap-southeast-1</td><td class="runner">Neon (and use it for CI branches regardless)</td></tr>
+    <tr><td class="layer">Auth</td><td class="choice">Own identity tables + Twilio Verify OTP + own JWTs</td><td class="runner">Auth0 with Organizations</td></tr>
+    <tr><td class="layer">API</td><td class="choice">REST + OpenAPI 3.1; ALB + in-app gateway layer</td><td class="runner">Kong / AWS API Gateway, once services split</td></tr>
+    <tr><td class="layer">Real-time</td><td class="choice">SSE (status) + WebSocket (GPS) over Redis pub/sub</td><td class="runner">Pusher / Ably</td></tr>
+    <tr><td class="layer">Push</td><td class="choice">Web Push with VAPID, via the service worker</td><td class="runner">FCM SDK, only under Capacitor</td></tr>
+    <tr><td class="layer">Payments</td><td class="choice">Stripe + Connect (+ Stripe Billing for tenants)</td><td class="runner">Adyen at scale; HitPay for SGD fees</td></tr>
+    <tr><td class="layer">Hosting</td><td class="choice">AWS ECS Fargate + ALB, CDK, GitHub Actions</td><td class="runner">Fly.io / App Runner for a smaller team</td></tr>
+    <tr><td class="layer">Assets</td><td class="choice">S3 + CloudFront</td><td class="runner">Cloudflare R2 on egress cost</td></tr>
+    <tr><td class="layer">Cache</td><td class="choice">ElastiCache for Redis</td><td class="runner">Upstash</td></tr>
+    <tr><td class="layer">Search</td><td class="choice">Postgres FTS + pg_trgm</td><td class="runner">Typesense / OpenSearch later</td></tr>
+    <tr><td class="layer">Observability</td><td class="choice">Sentry + Grafana Cloud (OpenTelemetry)</td><td class="runner">Datadog</td></tr>
+  </table></div>
+
+  <div class="callout pick" style="margin-top:26px;">
+    <h3>What would change this</h3>
+    <p><b>Hiring is the single biggest variable</b>, and it only touches decision 01: if the team you can actually recruit is React-shaped, switch to Next.js and accept the heavier bundle — a framework nobody can maintain is worse than a slower one they can, and every other row in the table survives that swap untouched. <b>Team size cuts both ways</b>: at two engineers, drop Fargate for Fly.io and ElastiCache for Upstash, because a week of AWS plumbing is better spent on the product; past roughly eight, the reasoning inverts and a dedicated gateway, extracted services and managed Kubernetes start paying for themselves. <b>Short runway</b> means shipping the storefront on the TWA path first and leaving the admin portal on the existing build longer than feels comfortable — it is internal, and no customer sees it. The one thing that would force a re-plan rather than a substitution is payment coverage: if PayNow or GrabPay is not supported under Stripe Connect's charge model, decision 08 has to be settled before anything else is built on top of it.</p>
+  </div>
+
+  <footer>
+    <p>Recommendation for review, not a locked decision. Architecture, schema and production requirements live in <a href="quickkart-backend-reference.html">quickkart-backend-reference.html</a>; this memo only selects technologies to implement what is decided there. Vendor claims — particularly payment-method and Connect coverage — should be confirmed directly before commitment.</p>
+  </footer>
+
+</main>
+
+</body>
+</html>
