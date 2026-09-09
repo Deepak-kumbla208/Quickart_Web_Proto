@@ -1947,10 +1947,12 @@ function hasAdvancedFilters() {
 function advancedFilterCount() {
   return (UI.priceRange ? 1 : 0) + (UI.discountFilter ? 1 : 0) + (UI.inStockOnly ? 1 : 0) + UI.brandFilter.length;
 }
-function anyFilterActive() {
-  return UI.tagFilter || UI.cat !== ALL_CATEGORIES || hasAdvancedFilters();
-}
 function activeFilterChipsHTML() {
+  // Browsing a category alone (from the catnav pill) isn't "a filter" from
+  // the user's point of view — only show this summary once they've actually
+  // picked something from the Filter sheet or a quick-filter tag, matching
+  // emptyResultsHTML()'s existing "filtered" definition below.
+  if (!hasAdvancedFilters() && !UI.tagFilter) return "";
   const chips = [];
   if (UI.cat !== ALL_CATEGORIES) chips.push({ kind: "cat", label: esc(UI.cat) });
   if (UI.tagFilter) chips.push({ kind: "tag", label: tagLabel(UI.tagFilter) });
@@ -2041,7 +2043,6 @@ function viewShop() {
             <option value="newest" ${UI.shopSort === "newest" ? "selected" : ""}>Newest</option>
           </select>
         </label>
-        ${anyFilterActive() ? `<button class="link-btn" data-action="clear-shop-filters">Clear filters</button>` : ""}
       </div>
       ${activeFilterChipsHTML()}
       <div id="productGrid" class="product-grid">

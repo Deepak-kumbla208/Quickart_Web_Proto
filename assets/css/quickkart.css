@@ -886,7 +886,7 @@ select.input { appearance: none; background-image: url("data:image/svg+xml;chars
 }
 
 @media (max-width: 600px) {
-  .container { padding: 0 14px; }
+  .container { padding-left: 14px; padding-right: 14px; }
   .hero-slide { height: 220px; padding: 0 24px; }
   .hero-slide-copy h1 { font-size: 22px; }
   .hero-slide-copy p { font-size: 13px; }
