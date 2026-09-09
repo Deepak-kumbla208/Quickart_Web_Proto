@@ -85,7 +85,9 @@ function img(id, w) {
   return `https://images.unsplash.com/${id}?w=${w || 600}&q=80&auto=format&fit=crop`;
 }
 
-const COMPANY = {
+// Business Settings ▸ Company Profile — see docs. Default/seed values only;
+// the live values customers and Admin see are State.companyProfile.
+const DEFAULT_COMPANY_PROFILE = {
   name: "Prabhas Trading Pte Ltd",
   tradingAs: "QuickKart",
   address1: "Blk 1093 Lower Delta Road, #03-21",
@@ -95,13 +97,32 @@ const COMPANY = {
   sfaLicence: "NEXXXXXXXXX",
   email: "support@prabhastrading.sg",
   phone: "+65 6123 4567",
+  supportHours: "Daily, 8am – 10pm",
   website: "www.prabhastrading.sg",
 };
 
+// Business Settings ▸ Delivery & Payments — default/seed values; live values
+// are State.deliverySettings.
+const DEFAULT_DELIVERY_SETTINGS = {
+  deliveryFee: 4.9,
+  freeDeliveryThreshold: 30,
+  paymentMethods: [
+    { name: "PayNow", enabled: true },
+    { name: "GrabPay", enabled: true },
+    { name: "Credit / Debit Card", enabled: true },
+    { name: "Cash on Delivery", enabled: true },
+  ],
+  // "day" is a relative label ("Today"/"Tomorrow"), not a real date — this is
+  // a demo, so slots aren't regenerated against the calendar.
+  slotGroups: [
+    { day: "Today", slots: ["6:00 PM – 7:00 PM", "7:00 PM – 8:00 PM", "8:00 PM – 9:00 PM"] },
+    { day: "Tomorrow", slots: ["9:00 AM – 10:00 AM", "10:00 AM – 11:00 AM", "6:00 PM – 7:00 PM", "7:00 PM – 8:00 PM"] },
+  ],
+};
+function enabledPaymentMethods() { return State.deliverySettings.paymentMethods.filter((m) => m.enabled).map((m) => m.name); }
+
 const TAX_DEFAULT = { name: "Singapore GST", rate: 9, inclusive: true };
 const RIDER_FLAT_FEE = 5.0;
-const FREE_DELIVERY_THRESHOLD = 30;
-const DELIVERY_FEE = 4.9;
 
 // ---------- Combo & BOGO promotions ----------
 // Combo bundles live on the "deals" home section (State.homeSections,
@@ -194,7 +215,6 @@ const ADDRESS_TYPES = [
 
 const VEHICLE_TYPES = ["Motorcycle", "Bicycle", "Car", "Van", "On foot"];
 
-const PAYMENT_METHODS = ["PayNow", "GrabPay", "Credit / Debit Card", "Cash on Delivery"];
 const PAY_METHOD_META = {
   "PayNow": { icon: "phone", color: "#E21622" },
   "GrabPay": { icon: "wallet", color: "#00B14F" },
@@ -203,20 +223,16 @@ const PAY_METHOD_META = {
 };
 const DELIVERY_INSTRUCTION_PRESETS = ["Leave at reception", "Call me when you arrive", "Leave at door", "Deliver to security desk"];
 
-// ---------- Scheduled delivery slots (demo — regenerated relative to "today") ----------
-function deliverySlotGroups() {
-  return [
-    { day: "Today", slots: ["6:00 PM – 7:00 PM", "7:00 PM – 8:00 PM", "8:00 PM – 9:00 PM"] },
-    { day: "Tomorrow", slots: ["9:00 AM – 10:00 AM", "10:00 AM – 11:00 AM", "6:00 PM – 7:00 PM", "7:00 PM – 8:00 PM"] },
-  ];
-}
+// ---------- Scheduled delivery slots ----------
+// Editable at Admin ▸ Business Settings ▸ Delivery & Payments. "day" stays a
+// relative label ("Today"/"Tomorrow") — this is a demo, not calendar-driven.
+function deliverySlotGroups() { return State.deliverySettings.slotGroups; }
 
 // ---------- Pickup / takeaway ----------
-const PICKUP_STORES = [
-  { id: "store-tampines", name: "QuickKart Tampines Hub", address: "10 Tampines Central 1, #01-05, Singapore 529536", hours: "8am – 10pm daily" },
-  { id: "store-jurong", name: "QuickKart Jurong Point", address: "1 Jurong West Central 2, #02-18, Singapore 648886", hours: "8am – 10pm daily" },
-];
-function findPickupStore(id) { return PICKUP_STORES.find((s) => s.id === id) || PICKUP_STORES[0]; }
+// Pickup locations are branches with pickupAvailable set (Admin ▸ Stores) —
+// there is no separate pickup-location list to keep in sync.
+function pickupBranches() { return State.branches.filter((b) => b.pickupAvailable && b.active); }
+function findPickupBranch(id) { const list = pickupBranches(); return list.find((b) => b.id === id) || list[0] || null; }
 
 // ---------- Categories ----------
 const SEED_CATEGORIES = [
@@ -573,9 +589,9 @@ function findServiceableBranch(postal, branches) {
 
 // ---------- Branches (stores) ----------
 const SEED_BRANCHES = [
-  { id: 1, name: "QuickKart Tampines", area: "Tampines / Bedok", lat: 1.3496, lng: 103.9568, radiusKm: 6, hoursOpen: "07:00", hoursClose: "23:00", active: true },
-  { id: 2, name: "QuickKart Jurong West", area: "Jurong West / Clementi", lat: 1.3404, lng: 103.7090, radiusKm: 6, hoursOpen: "07:00", hoursClose: "23:00", active: true },
-  { id: 3, name: "QuickKart Ang Mo Kio", area: "Ang Mo Kio / Bishan", lat: 1.3691, lng: 103.8454, radiusKm: 6, hoursOpen: "07:00", hoursClose: "23:00", active: true },
+  { id: 1, name: "QuickKart Tampines", area: "Tampines / Bedok", lat: 1.3496, lng: 103.9568, radiusKm: 6, hoursOpen: "07:00", hoursClose: "23:00", active: true, pickupAvailable: true, pickupAddress: "10 Tampines Central 1, #01-05, Singapore 529536" },
+  { id: 2, name: "QuickKart Jurong West", area: "Jurong West / Clementi", lat: 1.3404, lng: 103.7090, radiusKm: 6, hoursOpen: "07:00", hoursClose: "23:00", active: true, pickupAvailable: true, pickupAddress: "1 Jurong West Central 2, #02-18, Singapore 648886" },
+  { id: 3, name: "QuickKart Ang Mo Kio", area: "Ang Mo Kio / Bishan", lat: 1.3691, lng: 103.8454, radiusKm: 6, hoursOpen: "07:00", hoursClose: "23:00", active: true, pickupAvailable: false, pickupAddress: "" },
 ];
 
 // ---------- Delivery partners ----------
@@ -607,7 +623,7 @@ const PERMISSION_SCREENS = [
   { key: "homeScreen", label: "Home Screen", icon: "sparkle", editable: true },
   { key: "inventory", label: "Inventory", icon: "boxes", editable: true },
   { key: "partners", label: "Partners", icon: "truck", editable: true },
-  { key: "tax", label: "Tax", icon: "receipt", editable: true },
+  { key: "tax", label: "Business Settings", icon: "receipt", editable: true },
   { key: "promotions", label: "Promotions", icon: "megaphone", editable: true },
   { key: "coupons", label: "Coupons", icon: "tag", editable: true },
 ];
@@ -656,7 +672,7 @@ function seedOrders() {
     const picked = [...SEED_ITEMS].sort(() => 0.5 - Math.random()).slice(0, pickCount)
       .map((it) => ({ id: it.id, name: it.name, unit: it.unit, price: it.price, eta: it.eta, qty: 1 + Math.floor(Math.random() * 3), delivered: null }));
     const total = picked.reduce((s, i) => s + i.price * i.qty, 0);
-    const deliveryFee = total < FREE_DELIVERY_THRESHOLD ? DELIVERY_FEE : 0;
+    const deliveryFee = total < DEFAULT_DELIVERY_SETTINGS.freeDeliveryThreshold ? DEFAULT_DELIVERY_SETTINGS.deliveryFee : 0;
     const r = Math.random();
     let status;
     if (daysAgo === 0 && r < 0.5) {
@@ -683,7 +699,7 @@ function seedOrders() {
       deliveryFee,
       walletApplied: 0,
       discount: 0,
-      paymentMethod: PAYMENT_METHODS[i % PAYMENT_METHODS.length],
+      paymentMethod: DEFAULT_DELIVERY_SETTINGS.paymentMethods[i % DEFAULT_DELIVERY_SETTINGS.paymentMethods.length].name,
       status,
       deliveryPartnerId: partner ? partner.id : null,
       rating: status === "delivered" && Math.random() < 0.7 ? 3 + Math.floor(Math.random() * 3) : null,
@@ -737,6 +753,7 @@ function fmtMobile(m) {
   const d = String(m || "").replace(/[^\d]/g, "");
   return d.length === 8 ? `+65 ${d.slice(0, 4)} ${d.slice(4)}` : (m || "—");
 }
+function telHref(phone) { return `tel:${String(phone || "").replace(/[^\d+]/g, "")}`; }
 
 /* ---------------- Icons (inline SVG, no emoji) ---------------- */
 const Icon = {
@@ -821,6 +838,10 @@ const State = {
   brands: loadLS("brands", () => SEED_BRANDS),
   homeSections: loadLS("homeSections", () => SEED_HOME_SECTIONS).map(backfillSectionContent),
   siteCustomization: loadLS("siteCustomization", () => deepClone(DEFAULT_SITE_CUSTOMIZATION)),
+  companyProfile: loadLS("companyProfile", () => ({ ...DEFAULT_COMPANY_PROFILE })),
+  // Older saved settings predate scheduled slots — backfill so checkout's
+  // slot picker isn't left empty after this update.
+  deliverySettings: { ...deepClone(DEFAULT_DELIVERY_SETTINGS), ...loadLS("deliverySettings", () => deepClone(DEFAULT_DELIVERY_SETTINGS)) },
   // Older saved partner records predate branches and won't have a branchId —
   // fall back to the first branch so they aren't silently invisible everywhere.
   partners: loadLS("partners", () => SEED_PARTNERS).map((p) => ({ ...p, branchId: p.branchId != null ? p.branchId : (SEED_BRANCHES[0] && SEED_BRANCHES[0].id) || null })),
@@ -829,7 +850,9 @@ const State = {
   coupons: loadLS("coupons", () => SEED_COUPONS),
   recentlyViewed: loadLS("recentlyViewed", []),
   wishlist: loadLS("wishlist", []),
-  branches: loadLS("branches", () => SEED_BRANCHES),
+  // Older saved branch records predate pickup support — backfill so they
+  // don't crash the pickup toggle/form on first load after this update.
+  branches: loadLS("branches", () => SEED_BRANCHES).map((b) => ({ pickupAvailable: false, pickupAddress: "", ...b })),
   users: loadLS("users", () => SEED_USERS),
   roles: loadLS("roles", () => SEED_ROLES),
   // { [branchId]: [partnerId, ...] } — FIFO round-robin pool of riders who have
@@ -845,7 +868,7 @@ const State = {
   branchStock: loadLS("branchStock", {}),
   notices: [],
 };
-const PERSIST_KEYS = ["session", "items", "orders", "cart", "wallet", "profile", "categories", "brands", "homeSections", "siteCustomization", "partners", "tax", "promotions", "coupons", "recentlyViewed", "wishlist", "branches", "users", "roles", "readyQueue", "branchStock", "shiftStart"];
+const PERSIST_KEYS = ["session", "items", "orders", "cart", "wallet", "profile", "categories", "brands", "homeSections", "siteCustomization", "companyProfile", "deliverySettings", "partners", "tax", "promotions", "coupons", "recentlyViewed", "wishlist", "branches", "users", "roles", "readyQueue", "branchStock", "shiftStart"];
 function persist(key) { saveLS(key, State[key]); }
 // Write the migrated orders/items/homeSections straight back so each fix
 // sticks — otherwise every future load re-runs the same migration against
@@ -870,7 +893,7 @@ const UI = {
   deliverySpeed: "express",
   scheduledSlot: null,
   fulfillment: "delivery",
-  pickupStoreId: PICKUP_STORES[0].id,
+  pickupStoreId: null,
   couponCode: "",
   appliedCoupon: null,
   couponError: null,
@@ -913,6 +936,7 @@ const UI = {
   draggingTileId: null,
   draggingComboId: null,
   homeScreenTab: "sections", // "sections" | "theme" — Admin ▸ Home Screen sub-tabs
+  businessSettingsTab: "company", // "company" | "tax" | "delivery" — Admin ▸ Business Settings sub-tabs
   themeDraft: null, // in-progress clone of State.siteCustomization while editing; null when untouched
   adminOrderFilter: "all",
   adminOrderQuery: "",
@@ -957,7 +981,7 @@ function cartTotals() {
   const couponFreeShip = couponValid && appliedCoupon.type === "freeship";
   const couponDiscount = couponValid && !couponFreeShip ? couponDiscountAmount(appliedCoupon, totalPrice) : 0;
   const priceAfterCoupon = Math.max(totalPrice - couponDiscount, 0);
-  const deliveryFee = UI.fulfillment === "pickup" || couponFreeShip ? 0 : (priceAfterCoupon > 0 && priceAfterCoupon < FREE_DELIVERY_THRESHOLD ? DELIVERY_FEE : 0);
+  const deliveryFee = UI.fulfillment === "pickup" || couponFreeShip ? 0 : (priceAfterCoupon > 0 && priceAfterCoupon < State.deliverySettings.freeDeliveryThreshold ? State.deliverySettings.deliveryFee : 0);
   const gst = gstAmount(priceAfterCoupon, State.tax);
   // Inclusive: gst is just the already-included portion, so it never touches
   // the total. Exclusive: it's added on top of the discounted subtotal here,
@@ -1444,7 +1468,7 @@ function siteFooter() {
         <span class="brand-tile"><img src="${State.siteCustomization.branding.logoUrl}" alt="" /></span>
         <div>
           <div class="footer-brand-name">QuickKart</div>
-          <div class="footer-brand-sub">by ${esc(COMPANY.name)}</div>
+          <div class="footer-brand-sub">by ${esc(State.companyProfile.name)}</div>
         </div>
       </div>
       <button type="button" class="footer-info-toggle" data-action="toggle-footer-info" aria-expanded="${UI.footerInfoOpen}">
@@ -1453,19 +1477,19 @@ function siteFooter() {
       <div class="footer-info-cols ${UI.footerInfoOpen ? "open" : ""}">
         <div class="footer-col">
           <div class="footer-col-title">Company</div>
-          <div class="footer-line">${esc(COMPANY.address1)}</div>
-          <div class="footer-line">${esc(COMPANY.address2)}</div>
-          <div class="footer-line">UEN ${esc(COMPANY.uen)} · GST Reg. ${esc(COMPANY.gstReg)}</div>
+          <div class="footer-line">${esc(State.companyProfile.address1)}</div>
+          <div class="footer-line">${esc(State.companyProfile.address2)}</div>
+          <div class="footer-line">UEN ${esc(State.companyProfile.uen)} · GST Reg. ${esc(State.companyProfile.gstReg)}</div>
         </div>
         <div class="footer-col">
           <div class="footer-col-title">Support</div>
-          <div class="footer-line">${ic("phone")} ${esc(COMPANY.phone)}</div>
-          <div class="footer-line">${esc(COMPANY.email)}</div>
-          <div class="footer-line">Daily, 8am – 10pm</div>
+          <div class="footer-line">${ic("phone")} ${esc(State.companyProfile.phone)}</div>
+          <div class="footer-line">${esc(State.companyProfile.email)}</div>
+          <div class="footer-line">${esc(State.companyProfile.supportHours)}</div>
         </div>
         <div class="footer-col">
           <div class="footer-col-title">Delivering across</div>
-          <div class="footer-line">All of Singapore — free above S$${FREE_DELIVERY_THRESHOLD}</div>
+          <div class="footer-line">All of Singapore — free above S$${State.deliverySettings.freeDeliveryThreshold}</div>
         </div>
       </div>
     </div>
@@ -2237,7 +2261,7 @@ function viewCart() {
     <div class="container section">
       <div class="empty-state empty-wide">
         <div class="empty-title">Your cart is empty</div>
-        <div class="empty-hint">Browse the shop and add a few things — free delivery over ${money(FREE_DELIVERY_THRESHOLD)}.</div>
+        <div class="empty-hint">Browse the shop and add a few things — free delivery over ${money(State.deliverySettings.freeDeliveryThreshold)}.</div>
         <button class="btn btn-primary" data-action="go" data-route="shop">Start shopping</button>
       </div>
     </div>`;
@@ -2278,8 +2302,8 @@ function viewCart() {
     <aside class="cart-summary-col">
       ${t.deliveryFee > 0 ? `
         <div class="free-delivery-nudge">
-          <div>Add ${money(FREE_DELIVERY_THRESHOLD - t.priceAfterCoupon)} more for FREE delivery</div>
-          <div class="progress-track"><div class="progress-fill" style="width:${Math.min(100, (t.priceAfterCoupon / FREE_DELIVERY_THRESHOLD) * 100)}%"></div></div>
+          <div>Add ${money(State.deliverySettings.freeDeliveryThreshold - t.priceAfterCoupon)} more for FREE delivery</div>
+          <div class="progress-track"><div class="progress-fill" style="width:${Math.min(100, (t.priceAfterCoupon / State.deliverySettings.freeDeliveryThreshold) * 100)}%"></div></div>
         </div>` : ""}
       <div class="summary-card">
         <div class="summary-card-title">Delivery address</div>
@@ -2329,8 +2353,9 @@ function viewCheckout() {
   const t = cartTotals();
   const addr = getSelectedAddress();
   const isPickup = UI.fulfillment === "pickup";
-  const store = findPickupStore(UI.pickupStoreId);
-  const canPay = (isPickup || !!addr) && (isPickup || UI.deliverySpeed !== "scheduled" || !!UI.scheduledSlot);
+  const pickupOptions = pickupBranches();
+  const store = isPickup ? findPickupBranch(UI.pickupStoreId) : null;
+  const canPay = (isPickup ? !!store : !!addr) && (isPickup || UI.deliverySpeed !== "scheduled" || !!UI.scheduledSlot);
   return `
   <div class="container section checkout-layout">
     <div class="checkout-main">
@@ -2341,17 +2366,19 @@ function viewCheckout() {
             <button type="button" class="filter-pill ${isPickup ? "active" : ""}" data-action="set-fulfillment" data-mode="pickup">${ic("store")} Pickup / Takeaway</button>
           </div>
         </div>
-        ${isPickup ? `
+        ${isPickup ? (pickupOptions.length ? `
           <div class="filter-pill-row" style="margin:10px 0">
-            ${PICKUP_STORES.map((s) => `<button type="button" class="filter-pill ${UI.pickupStoreId === s.id ? "active" : ""}" data-action="set-pickup-store" data-id="${s.id}">${esc(s.name)}</button>`).join("")}
+            ${pickupOptions.map((b) => `<button type="button" class="filter-pill ${UI.pickupStoreId === b.id ? "active" : ""}" data-action="set-pickup-store" data-id="${b.id}">${esc(b.name)}</button>`).join("")}
           </div>
           <div class="addr-mini">
             <div class="addr-mini-label">${esc(store.name)}</div>
-            <div class="qk-muted">${esc(store.address)}</div>
-            <div class="qk-muted">Store hours: ${esc(store.hours)}</div>
+            <div class="qk-muted">${esc(store.pickupAddress)}</div>
+            <div class="qk-muted">Store hours: ${esc(store.hoursOpen)} – ${esc(store.hoursClose)}</div>
           </div>
           <div class="qk-muted small" style="margin-top:8px">${ic("clock")} We'll notify you as soon as it's packed and waiting at the counter.</div>
         ` : `
+          <div class="notice notice-warn" style="margin-top:10px">${ic("alert")}<span>No stores currently offer pickup — please choose delivery instead.</span></div>
+        `) : `
           <div class="addr-mini" style="margin-top:10px">
             ${addr ? `<div class="addr-mini-label">${esc(addr.label)}</div><div class="qk-muted">${esc(addr.name)} · ${fmtMobile(addr.mobile)}</div><div class="qk-muted">${esc(addr.line1)}${addr.line2 ? ", " + esc(addr.line2) : ""}, ${esc(addr.city)} ${esc(addr.postal)}</div>` : `<div class="qk-muted">No address on file</div>`}
           </div>
@@ -2401,9 +2428,12 @@ function viewCheckout() {
       ${!canPay ? `<div class="checkout-warn">${ic("alert")} ${!isPickup && !addr ? "Add a delivery address to continue" : "Pick a delivery time slot to continue"}</div>` : ""}
       <div id="payMethodsSection">
         <div class="summary-card-title" style="margin:2px 0 10px">Payment Options</div>
-        ${t.grandTotal > 0 ? `
+        ${t.grandTotal > 0 ? (() => {
+          const methods = enabledPaymentMethods();
+          if (!methods.length) return `<div class="notice notice-danger">${ic("alert")}<span>No payment methods are available right now — please contact support to complete your order.</span></div>`;
+          return `
           <div class="pay-methods">
-            ${PAYMENT_METHODS.map((m) => {
+            ${methods.map((m) => {
               const meta = PAY_METHOD_META[m] || { icon: "wallet", color: "var(--primary)" };
               return `
               <button class="pay-method" data-action="handle-pay" data-method="${esc(m)}" ${canPay ? "" : "disabled"}>
@@ -2412,7 +2442,8 @@ function viewCheckout() {
                 ${ic("chevronRight")}
               </button>`;
             }).join("")}
-          </div>` : `
+          </div>`;
+        })() : `
           <button class="btn btn-primary btn-lg btn-block" data-action="handle-pay" data-method="QuickKart Wallet" ${canPay ? "" : "disabled"}>${ic("wallet")} Confirm order — fully covered by wallet</button>`}
       </div>
       <div class="qk-muted small" style="margin-top:10px">Prototype only — wired to a real payment gateway (Stripe/HitPay) at build time.</div>
@@ -2798,7 +2829,7 @@ function orderDetailHTML(order) {
     </div>` : ""}
   ${productRatingsHTML(order)}
   <div class="order-actions">
-    <a href="tel:+6561234567" class="btn btn-primary">${ic("phone")} Call support</a>
+    <a href="${telHref(State.companyProfile.phone)}" class="btn btn-primary">${ic("phone")} Call support</a>
     ${canCancel ? `<button class="btn btn-outline-danger" data-action="open-cancel-return" data-id="${order.id}" data-kind="cancel">${ic("close")} Cancel</button>` : ""}
     ${canReturn ? `<button class="btn btn-outline" data-action="open-cancel-return" data-id="${order.id}" data-kind="return">Return / Replace</button>` : ""}
   </div>
@@ -2915,7 +2946,7 @@ function payDiffModal() {
       <div class="dialog-body">
         <div class="qk-muted small">Swapping ${it.qty} × ${esc(it.name)} for ${esc(altItem.name)} costs ${money(diff)} more. Choose how to pay it:</div>
         <div class="pay-methods">
-          ${PAYMENT_METHODS.map((m) => `<button class="pay-method" data-action="pay-diff-method" data-method="${esc(m)}"><span>${esc(m)}</span>${ic("chevronRight")}</button>`).join("")}
+          ${enabledPaymentMethods().map((m) => `<button class="pay-method" data-action="pay-diff-method" data-method="${esc(m)}"><span>${esc(m)}</span>${ic("chevronRight")}</button>`).join("")}
         </div>
       </div>
     </div>
@@ -3040,18 +3071,18 @@ function invoiceHTML(order) {
       <div class="inv-seller">
         <img src="${State.siteCustomization.branding.logoUrl}" alt="" />
         <div>
-          <div class="inv-company">${esc(COMPANY.name)}</div>
-          <div>Trading as ${esc(COMPANY.tradingAs)}</div>
-          <div>${esc(COMPANY.address1)}</div>
-          <div>${esc(COMPANY.address2)}</div>
-          <div>UEN: ${esc(COMPANY.uen)} · GST Reg. No: ${esc(COMPANY.gstReg)}</div>
-          <div>SFA Licence No: ${esc(COMPANY.sfaLicence)}</div>
+          <div class="inv-company">${esc(State.companyProfile.name)}</div>
+          <div>Trading as ${esc(State.companyProfile.tradingAs)}</div>
+          <div>${esc(State.companyProfile.address1)}</div>
+          <div>${esc(State.companyProfile.address2)}</div>
+          <div>UEN: ${esc(State.companyProfile.uen)} · GST Reg. No: ${esc(State.companyProfile.gstReg)}</div>
+          <div>SFA Licence No: ${esc(State.companyProfile.sfaLicence)}</div>
         </div>
       </div>
       <div class="inv-title">
         <div class="inv-title-main">TAX INVOICE</div>
-        <div>${esc(COMPANY.phone)}</div>
-        <div>${esc(COMPANY.email)}</div>
+        <div>${esc(State.companyProfile.phone)}</div>
+        <div>${esc(State.companyProfile.email)}</div>
       </div>
     </div>
     <div class="inv-meta">
@@ -3088,12 +3119,12 @@ function invoiceHTML(order) {
     </div>
     <div class="inv-bottom">
       <div><div class="inv-col-title">Payment</div><div>Method: ${esc(order.paymentMethod)}</div><div>Status: ${paidStatus}</div><div>Order status: ${STATUS_META[order.status].label}</div></div>
-      <div><div class="inv-col-title">Fulfilment</div><div>Delivered by: ${esc(COMPANY.name)}</div>${partner ? `<div>Delivery partner: ${esc(partner.name)} (${esc(partner.code)})</div>` : ""}<div>Order placed: ${fmtDateTime(order.createdAt)}</div></div>
+      <div><div class="inv-col-title">Fulfilment</div><div>Delivered by: ${esc(State.companyProfile.name)}</div>${partner ? `<div>Delivery partner: ${esc(partner.name)} (${esc(partner.code)})</div>` : ""}<div>Order placed: ${fmtDateTime(order.createdAt)}</div></div>
     </div>
     <div class="inv-legal">
       <div>All prices are quoted in Singapore Dollars and are ${inclusive ? `inclusive of ${tax.rate}% GST` : `exclusive of GST — ${tax.rate}% GST is added at checkout`}, as required under the Goods and Services Tax Act.</div>
       <div>This is a computer-generated invoice and does not require a signature.</div>
-      <div>Questions about this invoice? Contact ${esc(COMPANY.email)} or ${esc(COMPANY.phone)}.</div>
+      <div>Questions about this invoice? Contact ${esc(State.companyProfile.email)} or ${esc(State.companyProfile.phone)}.</div>
       <div class="italic">Prototype invoice — company registration numbers shown are placeholders.</div>
     </div>
   </div>`;
@@ -3102,7 +3133,7 @@ function invoiceHTML(order) {
 function printInvoiceNow(order) {
   const node = document.getElementById("qk-invoice");
   if (!node) return;
-  const title = `Invoice ${order.invoiceNo || order.id} — ${COMPANY.name}`;
+  const title = `Invoice ${order.invoiceNo || order.id} — ${State.companyProfile.name}`;
   const css = `
     body{font-family:Arial,Helvetica,sans-serif;font-size:11px;color:#000;margin:28px;line-height:1.4;}
     *{box-sizing:border-box;}
@@ -3247,7 +3278,7 @@ function adminTabContent(user) {
     case "orders": return adminOrders();
     case "reports": return adminReports();
     case "partners": return adminPartners();
-    case "tax": return adminTax();
+    case "tax": return adminBusinessSettings();
     case "promotions": return adminPromotions();
     case "coupons": return adminCoupons();
     case "inventory": return adminInventory();
@@ -3379,9 +3410,11 @@ function adminBranches() {
               <div class="qk-muted small">${esc(b.area)}</div>
               <div class="qk-muted small">Radius ${b.radiusKm} km · ${esc(b.hoursOpen)}–${esc(b.hoursClose)}</div>
               <div class="qk-muted small">${ic("user")} ${managers.length ? `Manager${managers.length > 1 ? "s" : ""}: ${managers.map((m) => esc(m.name)).join(", ")}` : "No manager assigned"}</div>
+              ${b.pickupAvailable ? `<div class="qk-muted small">${ic("store")} Pickup: ${esc(b.pickupAddress || "No pickup address set")}</div>` : ""}
             </div>
             <div class="partner-card-actions">
               <span class="badge badge-${b.active ? "green" : "red"}">${b.active ? "Active" : "Inactive"}</span>
+              ${b.pickupAvailable ? `<span class="badge badge-blue-soft">Pickup</span>` : ""}
               <button class="icon-btn" data-action="edit-branch" data-id="${b.id}">${ic("edit")}</button>
               <button class="icon-btn icon-btn-danger" data-action="delete-branch" data-id="${b.id}">${ic("trash")}</button>
             </div>
@@ -3598,6 +3631,8 @@ function customerRow(c) {
     </button>
     ${open ? `
     <div class="admin-order-body">
+      <div class="row"><span>Wallet balance</span><span class="qk-num">${money(State.wallet)}</span></div>
+      <div class="qk-muted small" style="margin:-4px 0 10px">View-only. This prototype tracks one demo wallet per browser, not a separate balance per customer.</div>
       <div class="qk-muted small" style="margin-bottom:2px">Order history</div>
       ${c.orders.map((o) => `
         <div class="row"><span>#${o.id} · ${fmtDate(o.createdAt)} <span class="badge badge-${STATUS_META[o.status].tone}-soft">${STATUS_META[o.status].label}</span></span><span class="qk-num">${money(o.total)}</span></div>
@@ -3841,6 +3876,24 @@ function adminOrdersRows() {
   return `${visible.map((order) => adminOrderRow(order, editable)).join("")}${visible.length === 0 ? `<div class="empty-state"><div class="empty-title">No orders here.</div></div>` : ""}`;
 }
 
+// Per-item star ratings + written feedback a customer leaves from their
+// Orders page (see productRatingsHTML) — captured on order.itemRatings but,
+// until now, never surfaced anywhere in Admin. Read-only, same precedent as
+// the view-only Customers screen.
+function adminOrderRatingsHTML(order) {
+  const ratings = order.itemRatings || {};
+  const rated = Object.keys(ratings).filter((id) => ratings[id] && (ratings[id].rating || ratings[id].feedback));
+  if (!rated.length) return "";
+  return `
+  <div class="admin-order-ratings">
+    <div class="qk-muted small" style="font-weight:700;margin-top:6px">Item feedback</div>
+    ${rated.map((id) => {
+      const it = order.items.find((x) => String(x.id) === String(id));
+      const r = ratings[id];
+      return `<div class="qk-muted small">${esc(it ? it.name : `Item #${id}`)}${r.rating ? ` — ${"★".repeat(r.rating)}${"☆".repeat(5 - r.rating)}` : ""}${r.feedback ? ` — "${esc(r.feedback)}"` : ""}</div>`;
+    }).join("")}
+  </div>`;
+}
 function adminOrderRow(order, editable) {
   const meta = STATUS_META[order.status];
   const open = UI.openOrderId === order.id;
@@ -3863,6 +3916,7 @@ function adminOrderRow(order, editable) {
         ${order.fulfillment !== "pickup" ? `<div class="qk-muted small">Serving branch: ${branch ? esc(branch.name) : "None — outside every branch's delivery radius"}</div>` : ""}
         <div class="qk-muted small">Payment: ${esc(order.paymentMethod)}</div>
         ${order.rating ? `<div class="qk-muted small">Rating: ${"★".repeat(order.rating)}${"☆".repeat(5 - order.rating)}</div>` : ""}
+        ${adminOrderRatingsHTML(order)}
         ${order.returnRequest ? `<div class="qk-muted small">${order.returnRequest.resolution === "replacement" ? "Replacement" : "Refund"} request: ${esc(RETURN_STEPS.find((s) => s.key === returnRequestCurrentKey(order.returnRequest)).label)} (${esc(order.returnRequest.reason)})</div>` : ""}
         ${!editable ? "" : order.fulfillment === "pickup" ? "" : DISPATCH_STATUSES.includes(order.status) ? `
         <label class="field"><span class="field-label">Delivery partner ${branch ? `(${esc(branch.name)} riders only — auto-assigned by round robin, override if needed)` : ""}</span>
@@ -3996,8 +4050,40 @@ function partnerOrdersPanel(p, theirs) {
   </div>`;
 }
 
-function adminTax() {
+function adminBusinessSettings() {
   const editable = canEdit(currentUser(), "tax");
+  return `
+  <div class="filter-pill-row" style="margin-bottom:16px">
+    <button type="button" class="filter-pill ${UI.businessSettingsTab === "company" ? "active" : ""}" data-action="set-business-tab" data-tab="company">Company Profile</button>
+    <button type="button" class="filter-pill ${UI.businessSettingsTab === "tax" ? "active" : ""}" data-action="set-business-tab" data-tab="tax">Tax</button>
+    <button type="button" class="filter-pill ${UI.businessSettingsTab === "delivery" ? "active" : ""}" data-action="set-business-tab" data-tab="delivery">Delivery &amp; Payments</button>
+  </div>
+  ${UI.businessSettingsTab === "tax" ? adminTaxPanel(editable) : UI.businessSettingsTab === "delivery" ? adminDeliveryPanel(editable) : adminCompanyProfilePanel(editable)}`;
+}
+function adminCompanyProfilePanel(editable) {
+  const c = State.companyProfile;
+  return `
+  <div class="summary-card" style="max-width:480px">
+    <div class="summary-card-title">Company Profile</div>
+    <div class="qk-muted small">Shown on the customer site footer, the tax invoice, and the login page.</div>
+    <label class="field"><span class="field-label">Legal company name</span><input class="input" id="cpName" value="${esc(c.name)}" ${editable ? "" : "disabled"} /></label>
+    <label class="field"><span class="field-label">Trading as</span><input class="input" id="cpTradingAs" value="${esc(c.tradingAs)}" ${editable ? "" : "disabled"} /></label>
+    <label class="field"><span class="field-label">Address line 1</span><input class="input" id="cpAddress1" value="${esc(c.address1)}" ${editable ? "" : "disabled"} /></label>
+    <label class="field"><span class="field-label">Address line 2</span><input class="input" id="cpAddress2" value="${esc(c.address2)}" ${editable ? "" : "disabled"} /></label>
+    <div class="field-grid-2">
+      <label class="field"><span class="field-label">UEN</span><input class="input" id="cpUen" value="${esc(c.uen)}" ${editable ? "" : "disabled"} /></label>
+      <label class="field"><span class="field-label">GST Reg. No.</span><input class="input" id="cpGstReg" value="${esc(c.gstReg)}" ${editable ? "" : "disabled"} /></label>
+    </div>
+    <label class="field"><span class="field-label">SFA Licence No.</span><input class="input" id="cpSfaLicence" value="${esc(c.sfaLicence)}" ${editable ? "" : "disabled"} /></label>
+    <div class="field-grid-2">
+      <label class="field"><span class="field-label">Support email</span><input class="input" id="cpEmail" type="email" value="${esc(c.email)}" ${editable ? "" : "disabled"} /></label>
+      <label class="field"><span class="field-label">Support phone</span><input class="input" id="cpPhone" value="${esc(c.phone)}" ${editable ? "" : "disabled"} /></label>
+    </div>
+    <label class="field"><span class="field-label">Support hours</span><input class="input" id="cpSupportHours" value="${esc(c.supportHours)}" ${editable ? "" : "disabled"} /></label>
+    ${editable ? `<button class="btn btn-primary btn-block" data-action="save-company-profile">Save</button>` : ""}
+  </div>`;
+}
+function adminTaxPanel(editable) {
   const inclusive = State.tax.inclusive !== false;
   return `
   <div class="summary-card" style="max-width:420px">
@@ -4014,6 +4100,40 @@ function adminTax() {
       </select>
     </label>
     ${editable ? `<button class="btn btn-primary btn-block" data-action="save-tax">Save</button>` : ""}
+  </div>`;
+}
+function adminDeliveryPanel(editable) {
+  const d = State.deliverySettings;
+  const allDisabled = d.paymentMethods.every((m) => !m.enabled);
+  return `
+  <div class="summary-card" style="max-width:420px">
+    <div class="summary-card-title">Delivery Fee</div>
+    <div class="qk-muted small">Charged on delivery orders below the free-delivery threshold. Pickup orders are never charged a delivery fee.</div>
+    <label class="field"><span class="field-label">Delivery fee (S$)</span><input class="input" id="deliveryFeeInput" type="number" min="0" step="0.1" value="${d.deliveryFee}" ${editable ? "" : "disabled"} /></label>
+    <label class="field"><span class="field-label">Free delivery above (S$)</span><input class="input" id="freeDeliveryThresholdInput" type="number" min="0" step="1" value="${d.freeDeliveryThreshold}" ${editable ? "" : "disabled"} /></label>
+    ${editable ? `<button class="btn btn-primary btn-block" data-action="save-delivery-fee">Save</button>` : ""}
+  </div>
+  <div class="summary-card" style="max-width:420px; margin-top:16px">
+    <div class="summary-card-title">Payment Methods</div>
+    <div class="qk-muted small">Turn a method off to hide it from checkout — this doesn't change how payments are processed.</div>
+    <div class="admin-table" style="margin-top:10px">
+      ${d.paymentMethods.map((m) => `
+        <div class="admin-row">
+          <div class="admin-row-info"><div class="admin-row-name">${esc(m.name)}</div></div>
+          <span class="badge badge-${m.enabled ? "green" : "yellow"}">${m.enabled ? "Enabled" : "Disabled"}</span>
+          ${editable ? `<button class="btn btn-sm ${m.enabled ? "btn-outline-danger" : "btn-primary-soft"}" data-action="toggle-payment-method" data-name="${esc(m.name)}">${m.enabled ? "Disable" : "Enable"}</button>` : ""}
+        </div>`).join("")}
+    </div>
+    ${allDisabled ? `<div class="notice notice-warn" style="margin-top:10px">${ic("alert")}<span>All payment methods are disabled — customers with anything left to pay won't be able to check out.</span></div>` : ""}
+  </div>
+  <div class="summary-card" style="max-width:420px; margin-top:16px">
+    <div class="summary-card-title">Scheduled Delivery Slots</div>
+    <div class="qk-muted small">Time windows customers can pick when scheduling a delivery instead of "as soon as possible". Enter as a comma-separated list.</div>
+    ${d.slotGroups.map((g, i) => `
+      <label class="field"><span class="field-label">${esc(g.day)}</span><input class="input" id="slotGroup${i}" value="${esc(g.slots.join(", "))}" ${editable ? "" : "disabled"} /></label>
+    `).join("")}
+    ${editable ? `<button class="btn btn-primary btn-block" data-action="save-delivery-slots">Save</button>` : ""}
+    ${d.slotGroups.every((g) => !g.slots.length) ? `<div class="notice notice-warn" style="margin-top:10px">${ic("alert")}<span>No time slots are configured — customers won't be able to schedule a delivery.</span></div>` : ""}
   </div>`;
 }
 
@@ -4144,6 +4264,14 @@ function itemFormModal() {
         <label class="field"><span class="field-label">Stock count (optional)</span><input class="input" type="number" name="stockCount" value="${f.stockCount == null ? "" : f.stockCount}" placeholder="Leave blank for unlimited" /></label>
         <label class="stock-toggle-lg"><input type="checkbox" name="stock" ${f.stock ? "checked" : ""} /><span>In stock — visible to customers</span></label>
         <label class="stock-toggle-lg"><input type="checkbox" name="bogo" ${f.bogo ? "checked" : ""} /><span>Buy 1 Get 1 Free — shown in the Deals &amp; Combos home section</span></label>
+        <label class="field"><span class="field-label">Tags <span class="qk-muted small" style="font-weight:400">(controls which home-page rails &amp; shop quick-filters this item appears in)</span></span></label>
+        <div class="sidebar-checklist" style="margin:-4px 0 14px">
+          ${TILE_TAG_OPTIONS.map((t) => `
+            <label class="checklist-item">
+              <input type="checkbox" name="tags" value="${t.key}" ${(f.tags || []).includes(t.key) ? "checked" : ""} />
+              <span>${esc(t.label)}</span>
+            </label>`).join("")}
+        </div>
         <div class="form-actions">
           <button type="button" class="btn btn-outline btn-block" data-action="close-modal">Cancel</button>
           <button type="submit" class="btn btn-primary btn-block">Save item</button>
@@ -4465,6 +4593,9 @@ function branchFormModal() {
           <label class="field"><span class="field-label">Closes</span><input class="input" type="time" name="hoursClose" value="${esc(f.hoursClose)}" /></label>
         </div>
         <label class="stock-toggle-lg"><input type="checkbox" name="active" ${f.active ? "checked" : ""} /><span>Active — can be assigned orders and shown to customers</span></label>
+        <label class="stock-toggle-lg"><input type="checkbox" name="pickupAvailable" ${f.pickupAvailable ? "checked" : ""} /><span>Pickup available — customers can choose this store at checkout for Pickup / Takeaway</span></label>
+        <label class="field"><span class="field-label">Pickup address</span><input class="input ${err.pickupAddress ? "invalid" : ""}" name="pickupAddress" value="${esc(f.pickupAddress || "")}" placeholder="Shown to customers picking up from this store" /></label>
+        ${err.pickupAddress ? `<div class="field-error">${esc(err.pickupAddress)}</div>` : ""}
         <div class="form-actions">
           <button type="button" class="btn btn-outline btn-block" data-action="close-modal">Cancel</button>
           <button type="submit" class="btn btn-primary btn-block">${f.id ? "Save changes" : "Add branch"}</button>
@@ -4790,15 +4921,16 @@ function handlePay(method) {
   if (!isPickup && !addr) return;
   if (!isPickup && UI.deliverySpeed === "scheduled" && !UI.scheduledSlot) return;
   const t = cartTotals();
-  const store = findPickupStore(UI.pickupStoreId);
+  const store = isPickup ? findPickupBranch(UI.pickupStoreId) : null;
+  if (isPickup && !store) return;
   const orderItems = t.cartItems.map((i) => ({ id: i.id, name: i.name, unit: i.unit, price: i.price, eta: i.eta, qty: i.qty, bogo: isBogo(i.id), delivered: null }));
-  const branch = isPickup ? null : resolveBranchForAddress(addr);
+  const branch = isPickup ? store : resolveBranchForAddress(addr);
   const order = {
     id: genId("QK"), invoiceNo: genId("INV-"), customerName: State.session.name,
     contactName: addr ? addr.name || State.session.name : State.session.name,
     contactMobile: addr ? addr.mobile || "" : "",
     addressType: isPickup ? "Pickup" : addr ? addr.label : null,
-    address: isPickup ? `${store.name} - ${store.address}` : addr ? [addr.label + " -", addr.line1, addr.line2, `${addr.city} ${addr.postal}`].filter(Boolean).join(", ").replace(" -,", " -") : "No address on file",
+    address: isPickup ? `${store.name} - ${store.pickupAddress}` : addr ? [addr.label + " -", addr.line1, addr.line2, `${addr.city} ${addr.postal}`].filter(Boolean).join(", ").replace(" -,", " -") : "No address on file",
     fulfillment: UI.fulfillment, pickupStoreId: isPickup ? store.id : null,
     branchId: branch ? branch.id : null,
     items: orderItems, total: t.grandTotal, itemTotal: t.totalPrice, deliveryFee: t.deliveryFee,
@@ -4977,7 +5109,7 @@ const Actions = {
   "set-delivery-speed"(el) { UI.deliverySpeed = el.dataset.speed; render(); },
   "set-scheduled-slot"(el) { UI.scheduledSlot = el.dataset.slot; render(); },
   "set-fulfillment"(el) { UI.fulfillment = el.dataset.mode; render(); },
-  "set-pickup-store"(el) { UI.pickupStoreId = el.dataset.id; render(); },
+  "set-pickup-store"(el) { UI.pickupStoreId = Number(el.dataset.id); render(); },
   "remove-coupon"() { UI.appliedCoupon = null; UI.couponError = null; UI.couponCode = ""; render(); },
   "open-whatsapp-preview"() { UI.modal = { type: "whatsapp" }; render(); },
   "handle-pay"(el) { handlePay(el.dataset.method); },
@@ -5057,7 +5189,7 @@ const Actions = {
   "admin-tab"(el) { UI.adminTab = el.dataset.tab; UI.openOrderId = null; render(); },
   "admin-branch-scope"(el) { UI.adminBranchScope = el.value; render(); },
   "users-subtab"(el) { UI.usersSubTab = el.dataset.tab; render(); },
-  "new-branch"() { UI.modal = { type: "branchForm", form: { name: "", area: "", lat: 1.3521, lng: 103.8198, radiusKm: 6, hoursOpen: "07:00", hoursClose: "23:00", active: true } }; render(); },
+  "new-branch"() { UI.modal = { type: "branchForm", form: { name: "", area: "", lat: 1.3521, lng: 103.8198, radiusKm: 6, hoursOpen: "07:00", hoursClose: "23:00", active: true, pickupAvailable: false, pickupAddress: "" } }; render(); },
   "edit-branch"(el) { const b = findBranch(Number(el.dataset.id)); UI.modal = { type: "branchForm", form: { ...b } }; render(); },
   "delete-branch"(el) {
     const b = findBranch(Number(el.dataset.id));
@@ -5106,7 +5238,7 @@ const Actions = {
     showToast(`Logged ${qty} × ${item.name} as damaged/expired — stock adjusted.`);
     render();
   },
-  "new-item"() { UI.modal = { type: "itemForm", form: { name: "", brand: "", cat: State.categories[0].name, unit: "", mrp: 0, price: 0, eta: 15, stock: true, image: null, stockCount: null, bogo: false } }; render(); },
+  "new-item"() { UI.modal = { type: "itemForm", form: { name: "", brand: "", cat: State.categories[0].name, unit: "", mrp: 0, price: 0, eta: 15, stock: true, image: null, stockCount: null, bogo: false, tags: [] } }; render(); },
   "edit-item"(el) { UI.modal = { type: "itemForm", form: { ...findItem(Number(el.dataset.id)) } }; render(); },
   "delete-item"(el) {
     const item = findItem(Number(el.dataset.id));
@@ -5344,6 +5476,38 @@ const Actions = {
     State.tax = { ...State.tax, name: name.trim() || State.tax.name, rate, inclusive };
     persist("tax"); showToast("Tax settings updated"); render();
   },
+  "set-business-tab"(el) { UI.businessSettingsTab = el.dataset.tab; render(); },
+  "save-company-profile"() {
+    const val = (id) => document.getElementById(id).value.trim();
+    State.companyProfile = {
+      ...State.companyProfile,
+      name: val("cpName") || State.companyProfile.name,
+      tradingAs: val("cpTradingAs") || State.companyProfile.tradingAs,
+      address1: val("cpAddress1"), address2: val("cpAddress2"),
+      uen: val("cpUen"), gstReg: val("cpGstReg"), sfaLicence: val("cpSfaLicence"),
+      email: val("cpEmail"), phone: val("cpPhone"), supportHours: val("cpSupportHours"),
+    };
+    persist("companyProfile"); showToast("Company profile updated"); render();
+  },
+  "save-delivery-fee"() {
+    const fee = Math.max(0, Number(document.getElementById("deliveryFeeInput").value) || 0);
+    const threshold = Math.max(0, Number(document.getElementById("freeDeliveryThresholdInput").value) || 0);
+    State.deliverySettings = { ...State.deliverySettings, deliveryFee: fee, freeDeliveryThreshold: threshold };
+    persist("deliverySettings"); showToast("Delivery settings updated"); render();
+  },
+  "toggle-payment-method"(el) {
+    const name = el.dataset.name;
+    State.deliverySettings = { ...State.deliverySettings, paymentMethods: State.deliverySettings.paymentMethods.map((m) => m.name === name ? { ...m, enabled: !m.enabled } : m) };
+    persist("deliverySettings"); render();
+  },
+  "save-delivery-slots"() {
+    const slotGroups = State.deliverySettings.slotGroups.map((g, i) => ({
+      day: g.day,
+      slots: document.getElementById(`slotGroup${i}`).value.split(",").map((s) => s.trim()).filter(Boolean),
+    }));
+    State.deliverySettings = { ...State.deliverySettings, slotGroups };
+    persist("deliverySettings"); showToast("Delivery slots updated"); render();
+  },
   "new-promo"() { UI.modal = { type: "promoForm", form: { title: "", subtitle: "" } }; render(); },
   "edit-promo"(el) { const p = State.promotions.find((x) => x.id === Number(el.dataset.id)); UI.modal = { type: "promoForm", form: { ...p } }; render(); },
   "delete-promo"(el) {
@@ -5522,7 +5686,7 @@ const Submits = {
       name, brand: (fd.get("brand") || "").trim(), cat: fd.get("cat"), unit: fd.get("unit"), mrp: Number(fd.get("mrp")) || 0, price: Number(fd.get("price")) || 0,
       eta: Number(fd.get("eta")) || 10, stock: fd.get("stock") === "on",
       image: fd.get("image") || f.image, stockCount: fd.get("stockCount") ? Number(fd.get("stockCount")) : null,
-      bogo: fd.get("bogo") === "on",
+      bogo: fd.get("bogo") === "on", tags: fd.getAll("tags"),
     };
     if (data.brand && !State.brands.some((b) => b.name.toLowerCase() === data.brand.toLowerCase())) {
       const brandId = State.brands.length ? Math.max(...State.brands.map((b) => b.id)) + 1 : 1;
@@ -5534,7 +5698,7 @@ const Submits = {
       showToast(`${name} updated`);
     } else {
       const id = State.items.length ? Math.max(...State.items.map((i) => i.id)) + 1 : 1;
-      State.items.push({ ...data, id, tags: [] });
+      State.items.push({ ...data, id });
       showToast(`${name} added`);
     }
     persist("items");
@@ -5717,11 +5881,14 @@ const Submits = {
     const f = UI.modal.form;
     const name = (fd.get("name") || "").trim();
     const radiusKm = Number(fd.get("radiusKm"));
+    const pickupAvailable = fd.get("pickupAvailable") === "on";
+    const pickupAddress = (fd.get("pickupAddress") || "").trim();
     const errors = {};
     if (!name) errors.name = "Branch name is required";
     if (!(radiusKm > 0)) errors.radiusKm = "Enter a radius greater than 0";
-    if (Object.keys(errors).length) { UI.modal.errors = errors; UI.modal.form = { ...f, name, area: fd.get("area"), lat: Number(fd.get("lat")), lng: Number(fd.get("lng")), radiusKm, hoursOpen: fd.get("hoursOpen"), hoursClose: fd.get("hoursClose"), active: fd.get("active") === "on" }; render(); return; }
-    const data = { name, area: (fd.get("area") || "").trim(), lat: Number(fd.get("lat")), lng: Number(fd.get("lng")), radiusKm, hoursOpen: fd.get("hoursOpen"), hoursClose: fd.get("hoursClose"), active: fd.get("active") === "on" };
+    if (pickupAvailable && !pickupAddress) errors.pickupAddress = "Add a pickup address, or turn pickup off for this store";
+    if (Object.keys(errors).length) { UI.modal.errors = errors; UI.modal.form = { ...f, name, area: fd.get("area"), lat: Number(fd.get("lat")), lng: Number(fd.get("lng")), radiusKm, hoursOpen: fd.get("hoursOpen"), hoursClose: fd.get("hoursClose"), active: fd.get("active") === "on", pickupAvailable, pickupAddress }; render(); return; }
+    const data = { name, area: (fd.get("area") || "").trim(), lat: Number(fd.get("lat")), lng: Number(fd.get("lng")), radiusKm, hoursOpen: fd.get("hoursOpen"), hoursClose: fd.get("hoursClose"), active: fd.get("active") === "on", pickupAvailable, pickupAddress };
     if (f.id) {
       State.branches = State.branches.map((b) => b.id === f.id ? { ...b, ...data } : b);
       showToast(`${name} updated`);
