@@ -2,6 +2,15 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
+<script>
+  // Applied before first paint so a saved preference doesn't flash the wrong theme.
+  (function(){
+    try {
+      var saved = localStorage.getItem("quickkart-doc-theme");
+      if (saved === "light" || saved === "dark") document.documentElement.setAttribute("data-theme", saved);
+    } catch (e) {}
+  })();
+</script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>QuickKart Tech Stack Recommendation</title>
 <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -40,6 +49,25 @@
     --prod:#C4A6F5; --prod-soft:#241A3A;
     --code-bg:#0A1119; --code-ink:#CBDAEC;
     --shadow: 0 1px 2px rgba(0,0,0,.4), 0 8px 28px -14px rgba(0,0,0,.6);
+  }
+
+  /* ---------- Theme toggle ---------- */
+  .theme-toggle{
+    position:fixed; top:16px; right:16px; z-index:100;
+    width:38px; height:38px; border-radius:10px; padding:0;
+    background:var(--surface); border:1px solid var(--border); box-shadow:var(--shadow);
+    display:flex; align-items:center; justify-content:center; cursor:pointer;
+    color:var(--ink-muted); transition:color .15s, border-color .15s;
+  }
+  .theme-toggle:hover{ color:var(--accent); border-color:var(--accent); }
+  .theme-toggle svg{ width:18px; height:18px; display:block; }
+  .theme-toggle .icon-sun{ display:flex; }
+  .theme-toggle .icon-moon{ display:none; }
+  :root[data-theme="dark"] .theme-toggle .icon-sun{ display:none; }
+  :root[data-theme="dark"] .theme-toggle .icon-moon{ display:flex; }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]) .theme-toggle .icon-sun{ display:none; }
+    :root:not([data-theme="light"]) .theme-toggle .icon-moon{ display:flex; }
   }
 
   *{ box-sizing:border-box; }
@@ -155,6 +183,27 @@
 </style>
 </head>
 <body>
+
+<button class="theme-toggle" id="themeToggle" type="button" aria-label="Toggle dark mode" title="Toggle dark mode">
+  <span class="icon-sun" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg></span>
+  <span class="icon-moon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg></span>
+</button>
+<script>
+  (function(){
+    function currentTheme(){
+      var attr = document.documentElement.getAttribute("data-theme");
+      if (attr === "light" || attr === "dark") return attr;
+      return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+    }
+    function setTheme(t){
+      document.documentElement.setAttribute("data-theme", t);
+      try { localStorage.setItem("quickkart-doc-theme", t); } catch (e) {}
+    }
+    document.getElementById("themeToggle").addEventListener("click", function(){
+      setTheme(currentTheme() === "dark" ? "light" : "dark");
+    });
+  })();
+</script>
 
 <main>
 
