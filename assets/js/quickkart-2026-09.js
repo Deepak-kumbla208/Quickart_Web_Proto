@@ -12,18 +12,63 @@
    lists every change in plain language — see whatsNewModal() below.
    ==================================================================== */
 
-/* ---------------- 1. Sidebar screens & role defaults ---------------- */
-(function reorderAdminScreens() {
+/* ---------------- 1. Sidebar: screens, names and groups ---------------- */
+function reorderAdminScreens() {
   const byKey = Object.fromEntries(PERMISSION_SCREENS.map((s) => [s.key, s]));
   byKey.users.label = "Users & Roles";
+  byKey.catalog.label = "Catalogue";
+  byKey.inventory.label = "Stock";
+  byKey.partners.label = "Delivery Partners";
   byKey.suppliers = { key: "suppliers", label: "Suppliers", icon: "package", editable: true };
   byKey.slots = { key: "slots", label: "Delivery Slots", icon: "clock", editable: true };
-  byKey.routes = { key: "routes", label: "Routes · to discuss", icon: "truck", editable: true };
+  byKey.routes = { key: "routes", label: "Routes · to discuss", icon: "pin", editable: true };
   byKey.notifications = { key: "notifications", label: "Notifications", icon: "bell", editable: true };
-  const order = ["dashboard", "stores", "users", "customers", "orders", "reports", "catalog", "categories", "brands", "inventory", "suppliers", "homeScreen", "slots", "routes", "partners", "notifications", "tax", "promotions", "coupons"];
+  // Same order as the sidebar, so the permission grid on roles/users reads the same way.
+  const order = ADMIN_NAV.flatMap((n) => n.keys || [n.key]);
   PERMISSION_SCREENS.splice(0, PERMISSION_SCREENS.length, ...order.map((k) => byKey[k]).filter(Boolean));
   BRANCH_SCOPED_TABS.push("slots");
-})();
+}
+// Sidebar layout (Round 2): daily screens on top, the rest in groups that open
+// and close. Permissions stay per screen; a group shows only if the user can
+// see at least one screen in it.
+Icon.settings = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>';
+const ADMIN_NAV = [
+  { key: "dashboard" },
+  { key: "orders" },
+  { key: "reports" },
+  { group: "masters", label: "Masters", icon: "boxes", keys: ["catalog", "categories", "brands", "inventory", "suppliers", "customers"] },
+  { group: "delivery", label: "Delivery Masters", icon: "truck", keys: ["slots", "partners", "routes"] },
+  { group: "marketing", label: "Marketing", icon: "megaphone", keys: ["promotions", "coupons", "homeScreen"] },
+  { group: "setup", label: "Setup", icon: "settings", keys: ["tax", "stores", "users", "notifications"] },
+];
+reorderAdminScreens();
+function adminNavGroupOf(key) { return ADMIN_NAV.find((n) => n.keys && n.keys.includes(key)) || null; }
+function adminPageTitle(key) {
+  const screen = PERMISSION_SCREENS.find((t) => t.key === key);
+  const g = adminNavGroupOf(key);
+  return `${g ? `<span class="crumb">${esc(g.label)} ›</span> ` : ""}${esc(screen ? screen.label : "Admin")}`;
+}
+function adminNavHTML(visibleTabs) {
+  const can = new Set(visibleTabs.map((t) => t.key));
+  const item = (key, sub) => {
+    const t = PERMISSION_SCREENS.find((x) => x.key === key);
+    return `<button class="dash-nav-item ${sub ? "dash-nav-sub" : ""} ${UI.adminTab === key ? "active" : ""}" data-action="admin-tab" data-tab="${key}">${ic(t.icon)}<span>${esc(t.label)}</span></button>`;
+  };
+  const openState = UI.navOpen || {};
+  return ADMIN_NAV.map((n) => {
+    if (!n.keys) return can.has(n.key) ? item(n.key, false) : "";
+    const keys = n.keys.filter((k) => can.has(k));
+    if (!keys.length) return "";
+    const holdsActive = keys.includes(UI.adminTab);
+    const open = openState[n.group] != null ? openState[n.group] || holdsActive : holdsActive;
+    return `
+    <div class="dash-nav-group ${open ? "open" : ""} ${holdsActive ? "has-active" : ""}">
+      <button class="dash-nav-item dash-nav-group-head" data-action="toggle-nav-group" data-group="${n.group}" aria-expanded="${open}">${ic(n.icon)}<span>${esc(n.label)}</span><span class="dash-nav-chev">${ic("chevronDown")}</span></button>
+      ${open ? `<div class="dash-nav-group-items">${keys.map((k) => item(k, true)).join("")}</div>` : ""}
+    </div>`;
+  }).join("");
+}
+
 // What a Store Manager gets on the new screens unless a Super Admin changes it.
 const STORE_MANAGER_NEW_SCREEN_DEFAULTS = { suppliers: "view", slots: "edit", routes: "view", notifications: "none" };
 
@@ -87,14 +132,6 @@ const DEFAULT_NOTIFICATION_TEMPLATES = [
   { key: "low_stock", name: "Low stock alert", audience: "Staff", channels: { email: true, sms: false, push: false }, subject: "Low stock at {{storeName}}", body: "{{itemName}} is below its reorder level at {{storeName}}." },
   { key: "admin_password_reset", name: "Admin password reset", audience: "Staff", channels: { email: true, sms: false, push: false }, locked: ["email"], subject: "Reset your {{businessName}} admin password", body: "Use the link in this email to reset your password. It expires in 30 minutes." },
 ];
-const SEED_PLATFORM_TENANTS = [
-  { id: 1, name: "Prabhas Trading Pte Ltd", slug: "prabhas", plan: "Growth", status: "active", stores: 3, isDemo: true, charge: { enabled: true, type: "percent", value: 2 } },
-  { id: 2, name: "FreshMart SG Pte Ltd", slug: "freshmart", plan: "Starter", status: "active", stores: 1, monthOrders: 412, monthGmv: 18640.5, charge: { enabled: false, type: "percent", value: 2 } },
-  { id: 3, name: "Little India Grocers", slug: "littleindia", plan: "Growth", status: "active", stores: 2, monthOrders: 1288, monthGmv: 51230.2, charge: { enabled: true, type: "fixed", value: 0.3 } },
-  { id: 4, name: "Orchard Gourmet Market", slug: "orchardgourmet", plan: "Enterprise", status: "trial", stores: 4, monthOrders: 96, monthGmv: 7420, charge: { enabled: false, type: "percent", value: 1.5 } },
-];
-const DEFAULT_PLATFORM_CHARGE = { enabled: true, type: "percent", value: 2 };
-
 /* ---------------- 3. State for the new areas + one-time migration ---------------- */
 Object.assign(State, {
   suppliers: loadLS("suppliers", () => deepClone(SEED_SUPPLIERS)),
@@ -104,10 +141,9 @@ Object.assign(State, {
   peakSections: loadLS("peakSections", () => deepClone(DEFAULT_PEAK_SECTIONS)),
   notificationConfig: loadLS("notificationConfig", () => deepClone(DEFAULT_NOTIFICATION_CONFIG)),
   notificationTemplates: loadLS("notificationTemplates", () => deepClone(DEFAULT_NOTIFICATION_TEMPLATES)),
-  platformTenants: loadLS("platformTenants", () => deepClone(SEED_PLATFORM_TENANTS)),
-  platformDefaultCharge: loadLS("platformDefaultCharge", () => ({ ...DEFAULT_PLATFORM_CHARGE })),
+
 });
-PERSIST_KEYS.push("suppliers", "stockMoves", "slotSettings", "slotBookings", "peakSections", "notificationConfig", "notificationTemplates", "platformTenants", "platformDefaultCharge");
+PERSIST_KEYS.push("suppliers", "stockMoves", "slotSettings", "slotBookings", "peakSections", "notificationConfig", "notificationTemplates");
 
 // Demo quantity per store: mostly healthy, some low, a few at zero.
 function seedStoreQty(itemId, branchId) { const n = (itemId * 37 + branchId * 91) % 61; return n < 4 ? 0 : n; }
@@ -1049,107 +1085,27 @@ function adminRoutesTBD() {
   </div>`;
 }
 
-/* ---------------- 17. QuickKart Platform portal (Tenant Control) ---------------- */
-function tenantMonthStats(t) {
-  if (!t.isDemo) return { orders: t.monthOrders || 0, gmv: t.monthGmv || 0 };
-  const now = new Date();
-  const start = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
-  const list = State.orders.filter((o) => o.createdAt >= start && !["cancelled", "returned"].includes(o.status));
-  return { orders: list.length, gmv: list.reduce((s, o) => s + o.total, 0) };
-}
-function platformChargeAmount(t, stats) {
-  if (!t.charge.enabled) return 0;
-  return t.charge.type === "percent" ? stats.gmv * (Number(t.charge.value) || 0) / 100 : stats.orders * (Number(t.charge.value) || 0);
-}
-function chargeLabel(c) { return !c.enabled ? "Off" : c.type === "percent" ? `${c.value}% of order value` : `${money(Number(c.value))} per order`; }
-function viewPlatformShell() {
-  const tab = UI.platformTab || "tenants";
-  const tabs = [{ key: "tenants", label: "Businesses", icon: "store" }, { key: "charges", label: "Platform Charges", icon: "receipt" }];
-  return `
-  <div class="dash-shell">
-    <aside class="dash-sidebar">
-      <div class="dash-brand"><span class="brand-tile"><img src="${State.siteCustomization.branding.logoUrl}" alt="" /></span><span class="brand-word">QuickKart</span></div>
-      <div class="dash-eyebrow">QuickKart Platform · Tenant Control</div>
-      <nav class="dash-nav">
-        ${tabs.map((t) => `<button class="dash-nav-item ${tab === t.key ? "active" : ""}" data-action="platform-tab" data-tab="${t.key}">${ic(t.icon)}<span>${t.label}</span></button>`).join("")}
-      </nav>
-      <button class="dash-nav-item" data-action="open-whats-new">${ic("sparkle")}<span>What's changed</span></button>
-      <button class="dash-logout" data-action="logout">${ic("logout")}<span>Logout</span></button>
-    </aside>
-    <div class="dash-content">
-      <div class="dash-topbar"><h1>${tabs.find((t) => t.key === tab).label}</h1></div>
-      <div class="dash-body">${tab === "charges" ? platformChargesHTML() : platformTenantsHTML()}</div>
-    </div>
-  </div>
-  ${modalLayer()}
-  <div id="toastHolder" class="toast-holder"></div>`;
-}
-function platformTenantsHTML() {
-  return `
-  <div class="qk-muted small" style="margin-bottom:12px">Every business (tenant) on QuickKart. This is the QuickKart company's own portal — shops never see it.</div>
-  <div class="admin-table">
-    ${State.platformTenants.map((t) => {
-      const st = tenantMonthStats(t);
-      return `<div class="admin-row">
-        <div class="admin-row-info"><div class="admin-row-name">${esc(t.name)} ${t.isDemo ? `<span class="badge badge-blue-soft">This demo</span>` : ""}</div><div class="qk-muted small">${esc(t.slug)} · ${t.stores} store(s) · ${esc(t.plan)} plan · ${st.orders} orders / ${money(st.gmv)} this month</div></div>
-        <span class="badge badge-${t.status === "active" ? "green" : "yellow"}-soft">${esc(t.status)}</span>
-        <span class="badge badge-${t.charge.enabled ? "blue" : "gray"}-soft">Platform charge: ${chargeLabel(t.charge)}</span>
-      </div>`;
-    }).join("")}
-  </div>`;
-}
-function platformChargesHTML() {
-  const d = State.platformDefaultCharge;
-  return `
-  <div class="admin-toolbar">
-    <div class="qk-muted small">What QuickKart bills each business, on a monthly platform invoice. It is <b>never shown on the customer's bill</b>.</div>
-    ${exportButtonsHTML("platformCharges")}
-  </div>
-  <div class="notif-grid">
-    ${State.platformTenants.map((t) => {
-      const st = tenantMonthStats(t);
-      return `
-      <form class="summary-card" data-action="save-tenant-charge" data-id="${t.id}">
-        <div class="notif-card-head"><div class="summary-card-title" style="margin:0">${esc(t.name)}</div>
-          <label class="stock-toggle"><input type="checkbox" name="enabled" ${t.charge.enabled ? "checked" : ""} /><span>${t.charge.enabled ? "On" : "Off"}</span></label></div>
-        <div class="field-grid-2">
-          <label class="field"><span class="field-label">Charge type</span><select class="input" name="type"><option value="percent" ${t.charge.type === "percent" ? "selected" : ""}>% of order value</option><option value="fixed" ${t.charge.type === "fixed" ? "selected" : ""}>Fixed S$ per order</option></select></label>
-          <label class="field"><span class="field-label">Value</span><input class="input" type="number" min="0" step="0.01" name="value" value="${t.charge.value}" /></label>
-        </div>
-        <div class="row small"><span>This month so far</span><span>${st.orders} orders · ${money(st.gmv)}</span></div>
-        <div class="row"><span><b>Platform charge this month</b></span><span class="qk-num"><b>${money(platformChargeAmount(t, st))}</b></span></div>
-        <button type="submit" class="btn btn-primary btn-block" style="margin-top:10px">Save</button>
-      </form>`;
-    }).join("")}
-    <form class="summary-card" data-action="save-default-charge">
-      <div class="summary-card-title">Default for new businesses</div>
-      <label class="stock-toggle-lg"><input type="checkbox" name="enabled" ${d.enabled ? "checked" : ""} /><span>Platform charge on by default</span></label>
-      <div class="field-grid-2">
-        <label class="field"><span class="field-label">Charge type</span><select class="input" name="type"><option value="percent" ${d.type === "percent" ? "selected" : ""}>% of order value</option><option value="fixed" ${d.type === "fixed" ? "selected" : ""}>Fixed S$ per order</option></select></label>
-        <label class="field"><span class="field-label">Value</span><input class="input" type="number" min="0" step="0.01" name="value" value="${d.value}" /></label>
-      </div>
-      <button type="submit" class="btn btn-outline btn-block">Save default</button>
-    </form>
-  </div>`;
-}
-
 /* ---------------- 18. What's changed (for the frontend team) ---------------- */
 const WHATS_NEW = [
+  { area: "Admin panel — sidebar (round 2)", items: [
+    ["Grouped sidebar", "Dashboard, Orders and Reports stay on top. Everything else sits in groups that open and close: Masters (Catalogue, Categories, Brands, Stock, Suppliers, Customers), Delivery Masters (Delivery Slots, Delivery Partners, Routes), Marketing (Promotions, Coupons, Home Screen) and Setup (Business Settings, Stores, Users & Roles, Notifications). The group of the open screen opens by itself; the page title shows the path, e.g. Masters › Stock. A group only appears if the user can see a screen in it."],
+    ["Renamed", "Inventory → Stock · Catalog → Catalogue · Partners → Delivery Partners · Business Settings tab 'Inventory & Stock' → 'Stock Rules'."],
+  ] },
   { area: "Admin panel", items: [
     ["Users & Roles", "Change a user's role straight from the Users list (role dropdown on each row) and filter users by role. Create custom roles (e.g. Picker / Packer, Inventory Manager) under Roles & Permissions, rename or delete them."],
-    ["Dashboard", "New Sales insights block: Top selling categories (tap one to see its top items) and Peak hours — orders per hour plus admin-defined time sections (Edit time sections). Range: today / 7 / 30 days. Exportable."],
+    ["Dashboard", "Sales insights block: Top selling categories (tap one to see its top items) and Peak hours — orders per hour plus admin-defined time sections (Edit time sections). Range: today / 7 / 30 days. Exportable."],
     ["Orders", "Every status tab shows its count, e.g. All (120), New (15). Counts follow the store scope. Export to Excel/CSV follows the current filters."],
-    ["Delivery Slots (new screen)", "Slot times with a capacity (orders per slot per store), days bookable ahead and an order cut-off. Per store and day: booked/capacity with a fill bar, override one day's capacity, close/reopen a slot, add a one-off slot, see and move the orders in a slot."],
-    ["Routes", "Sidebar entry marked 'to discuss' — records the directors' ask (multi-order vehicle routes with a delivery sequence inside a slot) and the open questions. Not designed yet."],
+    ["Delivery Masters ▸ Delivery Slots", "Slot times with a capacity (orders per slot per store), days bookable ahead and an order cut-off. Per store and day: booked/capacity with a fill bar, override one day's capacity, close/reopen a slot, add a one-off slot, see and move the orders in a slot."],
+    ["Delivery Masters ▸ Routes", "Marked 'to discuss' — records the directors' ask (multi-order vehicle routes with a delivery sequence inside a slot) and the open questions. Not designed yet."],
     ["Store serviceability", "No geofencing: a store delivers inside its radius (unchanged). Checkout is blocked when no store's radius covers the address."],
-    ["Express Delivery", "Business Settings ▸ Delivery & Payments: switch Express on/off and set its charge."],
-    ["Inventory & Stock rule", "Business Settings ▸ Inventory & Stock: allow or block negative stock (default: blocked)."],
-    ["Inventory (reworked)", "Category → Product → per-store stock. Stock changes only through Receive (with supplier, unit cost, delivery order no.), Adjust (stock take / damaged / expired / correction) and Transfer between stores; every change is in Stock history. Low stock uses each product's reorder level. Stock value at cost."],
-    ["Catalog", "Products now carry SKU, barcode, cost price (with margin), supplier and reorder level. Quantities are no longer typed on the product — new products start at 0 in every store."],
-    ["Suppliers (new screen)", "Supplier list with code, contact, UEN, payment terms, lead time; used when receiving stock."],
-    ["Bulk import", "Import Categories, Products, Inventory (stock counts per store) and Suppliers from Excel or CSV: download the template, upload, preview every row (new / update / error), then confirm. Products match by SKU."],
-    ["Export", "Excel and CSV export on Orders, Customers, Catalog, Categories, Brands, Inventory, Stock history, Suppliers, Users, Partners, Coupons, Delivery Slots and the Dashboard insights."],
-    ["Notifications (new screen)", "Business-wide (all stores) channel settings: Email (SMTP), SMS (provider, keys, sender ID), Push (FCM). Each channel on/off, shared QuickKart provider or own account, send test. Secrets are write-only. Message templates per event with channel choice, wording, placeholders and preview."],
+    ["Express Delivery", "Setup ▸ Business Settings ▸ Delivery & Payments: switch Express on/off and set its charge."],
+    ["Stock Rules", "Setup ▸ Business Settings ▸ Stock Rules: allow or block negative stock (default: blocked)."],
+    ["Masters ▸ Stock (reworked)", "Category → Product → per-store stock. Stock changes only through Receive (with supplier, unit cost, delivery order no.), Adjust (stock take / damaged / expired / correction) and Transfer between stores; every change is in Stock history. Low stock uses each product's reorder level. Stock value at cost."],
+    ["Masters ▸ Catalogue", "Products now carry SKU, barcode, cost price (with margin), supplier and reorder level. Quantities are no longer typed on the product — new products start at 0 in every store."],
+    ["Masters ▸ Suppliers (new)", "Supplier list with code, contact, UEN, payment terms, lead time; used when receiving stock."],
+    ["Bulk import", "Import Categories, Products, Stock (counts per store) and Suppliers from Excel or CSV: download the template, upload, preview every row (new / update / error), then confirm. Products match by SKU."],
+    ["Export", "Excel and CSV export on Orders, Customers, Catalogue, Categories, Brands, Stock, Stock history, Suppliers, Users, Delivery Partners, Coupons, Delivery Slots and the Dashboard insights."],
+    ["Setup ▸ Notifications (new)", "Business-wide (all stores) channel settings: Email (SMTP), SMS (provider, keys, sender ID), Push (FCM). Each channel on/off, shared QuickKart provider or own account, send test. Secrets are write-only. Message templates per event with channel choice, wording, placeholders and preview."],
   ] },
   { area: "Customer app", items: [
     ["Checkout — Express", "'Deliver at your convenience' is now 'Express delivery' with its charge shown on the button and as its own bill line. Hidden when the business switches it off."],
@@ -1158,10 +1114,6 @@ const WHATS_NEW = [
     ["Cart", "The 'Send order on WhatsApp' button is removed."],
     ["Bill & invoice", "New 'Express delivery charge' line on the cart, checkout and tax invoice."],
   ] },
-  { area: "QuickKart Platform portal (new login tab)", items: [
-    ["Businesses", "List of businesses (tenants) with plan, stores and this month's orders."],
-    ["Platform Charges", "Per business: on/off, % of order value or fixed S$ per order, and this month's amount. A default for new businesses. Billed to the business — never on the customer's bill."],
-  ] },
 ];
 function whatsNewModal() {
   return `
@@ -1169,7 +1121,7 @@ function whatsNewModal() {
     <div class="dialog dialog-static dialog-invoice" role="dialog" aria-modal="true" data-action="noop">
       <div class="dialog-head"><span>What's changed — September 2026</span><button class="dialog-close" data-action="close-modal">${ic("close")}</button></div>
       <div class="dialog-body whats-new">
-        <div class="qk-muted small" style="margin-bottom:12px">Changes asked for by the directors. Log in as Admin, Customer or QuickKart Platform to try each one.</div>
+        <div class="qk-muted small" style="margin-bottom:12px">Changes asked for by the directors. Log in as Admin or Customer to try each one.</div>
         ${WHATS_NEW.map((g) => `
           <h3>${esc(g.area)}</h3>
           ${g.items.map(([t, d]) => `<div class="wn-item"><b>${esc(t)}</b><div class="qk-muted small">${esc(d)}</div></div>`).join("")}`).join("")}
@@ -1276,8 +1228,6 @@ const EXPORTS = {
     for (let h = 0; h < 24; h++) { const list = orders.filter((o) => new Date(o.createdAt).getHours() === h); rows.push(["Hour", `${fmtHour(h)}–${fmtHour(h + 1)}`, "", list.length, round2(list.reduce((s, o) => s + o.total, 0))]); }
     return { name: "sales-insights", columns: ["Type", "Name", "Category", "Qty / orders", "Sales"], rows };
   },
-  platformCharges: () => ({ name: "platform-charges", columns: ["Business", "Plan", "Status", "Charge on", "Type", "Value", "Orders this month", "Sales this month", "Charge this month"],
-    rows: State.platformTenants.map((t) => { const st = tenantMonthStats(t); return [t.name, t.plan, t.status, t.charge.enabled ? "yes" : "no", t.charge.type, t.charge.value, st.orders, round2(st.gmv), round2(platformChargeAmount(t, st))]; }) }),
 };
 function exportData(key, format) {
   const def = EXPORTS[key] && EXPORTS[key]();
@@ -1363,7 +1313,7 @@ const IMPORT_DEFS = {
         if (!store) errs.push(storeName ? `store "${storeName}" not found` : "store is required");
         if (!item) errs.push(sku ? `SKU "${sku}" not found — import products first` : "sku is required");
         if (qty == null || Number.isNaN(qty) || !Number.isInteger(qty)) errs.push("quantity must be a whole number");
-        else if (qty < 0 && !allowNegativeStock()) errs.push("negative quantity isn't allowed (Business Settings ▸ Inventory & Stock)");
+        else if (qty < 0 && !allowNegativeStock()) errs.push("negative quantity isn't allowed (Setup ▸ Business Settings ▸ Stock Rules)");
         if (Number.isNaN(cost)) errs.push("unit_cost must be a number");
         const k = `${storeName}|${sku}`.toLowerCase();
         if (seen.has(k)) errs.push("same store and SKU twice in the file");
@@ -1610,8 +1560,9 @@ Object.assign(Actions, {
     State.deliverySettings = { ...State.deliverySettings, allowNegativeStock: !!picked && picked.value === "on" };
     persist("deliverySettings"); showToast(allowNegativeStock() ? "Negative stock allowed" : "Negative stock blocked — products sell out at zero"); render();
   },
-  // Platform portal
-  "platform-tab"(el) { UI.platformTab = el.dataset.tab; render(); },
+  // Sidebar groups
+  "toggle-nav-group"(el) { const g = el.dataset.group; const holdsActive = (adminNavGroupOf(UI.adminTab) || {}).group === g; const isOpen = (UI.navOpen || {})[g] != null ? UI.navOpen[g] || holdsActive : holdsActive; UI.navOpen = { ...(UI.navOpen || {}), [g]: !isOpen }; render(); },
+
   // Import
   "open-import"(el) { UI.modal = { type: "bulkImport", entity: el.dataset.entity || "products" }; render(); },
   "import-entity"(el) { UI.modal = { type: "bulkImport", entity: el.value }; render(); },
@@ -1763,17 +1714,5 @@ Object.assign(Submits, {
     if (err) { UI.modal.form = { ...t, body, subject, channels }; UI.modal.error = err; render(); return; }
     State.notificationTemplates = State.notificationTemplates.map((x) => x.key === t.key ? { ...x, body, subject, channels } : x);
     persist("notificationTemplates"); UI.modal = null; showToast(`${t.name} saved`); render();
-  },
-  "save-tenant-charge"(form) {
-    const fd = new FormData(form);
-    const id = Number(form.dataset.id);
-    const charge = { enabled: fd.get("enabled") === "on", type: fd.get("type"), value: Math.max(0, Number(fd.get("value")) || 0) };
-    State.platformTenants = State.platformTenants.map((t) => t.id === id ? { ...t, charge } : t);
-    persist("platformTenants"); showToast(`Platform charge saved — ${chargeLabel(charge)}`); render();
-  },
-  "save-default-charge"(form) {
-    const fd = new FormData(form);
-    State.platformDefaultCharge = { enabled: fd.get("enabled") === "on", type: fd.get("type"), value: Math.max(0, Number(fd.get("value")) || 0) };
-    persist("platformDefaultCharge"); showToast("Default saved for new businesses"); render();
   },
 });

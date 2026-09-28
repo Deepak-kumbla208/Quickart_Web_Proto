@@ -132,3 +132,15 @@
   .slot-pill { min-width: calc(50% - 4px); }
   .slot-tpl-head, .slot-tpl-row { grid-template-columns: 1fr 1fr 70px 34px; }
 }
+
+/* Round 2 — grouped admin sidebar */
+.dash-nav { overflow-y: auto; min-height: 0; }
+.dash-nav-group-head { width: 100%; }
+.dash-nav-chev { margin-left: auto; display: inline-flex; transition: transform .15s; opacity: .8; }
+.dash-nav-chev .ic { width: 14px; height: 14px; }
+.dash-nav-group.open .dash-nav-chev { transform: rotate(180deg); }
+.dash-nav-group.has-active > .dash-nav-group-head { color: #fff; }
+.dash-nav-group-items { display: flex; flex-direction: column; gap: 2px; margin: 2px 0 6px 14px; padding-left: 8px; border-left: 1px solid rgba(255,255,255,.18); }
+.dash-nav-sub { padding: 8px 10px; font-size: 13px; }
+.dash-nav-sub .ic { width: 14px; height: 14px; }
+.dash-topbar h1 .crumb { color: var(--muted); font-weight: 600; font-size: .75em; }

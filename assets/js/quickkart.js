@@ -1202,8 +1202,6 @@ function render() {
   }
   if (State.session.role === "admin") {
     root.innerHTML = viewAdminShell();
-  } else if (State.session.role === "platform") {
-    root.innerHTML = viewPlatformShell();
   } else if (State.session.role === "delivery") {
     // Backfills a shift start for riders already in the ready queue from
     // before shift tracking existed, so "On shift since" and "End shift"
@@ -1272,8 +1270,7 @@ function viewLogin() {
     { key: "customer", label: "Customer", icon: "user" },
     { key: "admin", label: "Admin", icon: "check" },
     { key: "delivery", label: "Delivery Partner", icon: "truck" },
-    // 2026-09: the QuickKart company's own portal (Tenant Control).
-    { key: "platform", label: "QuickKart Platform", icon: "sparkle" },
+
   ];
   return `
   <div class="login-page">
@@ -1313,7 +1310,7 @@ function viewLogin() {
               </select>
             </label>
           ` : `
-            <div class="notice notice-warn">${ic("alert")}<span>No active delivery partners yet — an admin needs to add one under Admin ▸ Partners.</span></div>
+            <div class="notice notice-warn">${ic("alert")}<span>No active delivery partners yet — an admin needs to add one under Delivery Masters ▸ Delivery Partners.</span></div>
           `}
         ` : role === "admin" ? `
           ${activeAdminUsers.length ? `
@@ -1332,13 +1329,12 @@ function viewLogin() {
           ` : `
             <div class="notice notice-warn">${ic("alert")}<span>No active admin users yet.</span></div>
           `}
-        ` : role === "platform" ? `
-          <div class="qk-muted small">The QuickKart company's portal: every business on the platform and the platform charge each one pays. Shops never see it.</div>
+
         ` : `
           <div class="qk-muted small">No account needed — just continue as a customer to start browsing.</div>
         `}
         <button type="submit" class="btn btn-primary btn-lg btn-block" ${(role === "delivery" && activePartners.length === 0) || (role === "admin" && activeAdminUsers.length === 0) ? "disabled" : ""}>
-          Continue as ${role === "delivery" ? "Delivery Partner" : role === "platform" ? "QuickKart Platform" : role[0].toUpperCase() + role.slice(1)}
+          Continue as ${role === "delivery" ? "Delivery Partner" : role[0].toUpperCase() + role.slice(1)}
         </button>
         <button type="button" class="btn btn-outline btn-block whats-new-btn" data-action="open-whats-new">${ic("sparkle")} What's changed — September 2026</button>
         <div class="login-footer">
@@ -3275,15 +3271,12 @@ function viewAdminShell() {
     <aside class="dash-sidebar">
       <div class="dash-brand"><span class="brand-tile"><img src="${State.siteCustomization.branding.logoUrl}" alt="" /></span><span class="brand-word">QuickKart</span></div>
       <div class="dash-eyebrow">${esc(eyebrow)}</div>
-      <nav class="dash-nav">
-        ${tabs.map((t) => `<button class="dash-nav-item ${UI.adminTab === t.key ? "active" : ""}" data-action="admin-tab" data-tab="${t.key}">${ic(t.icon)}<span>${t.label}</span></button>`).join("")}
-      </nav>
-      <button class="dash-nav-item" data-action="open-whats-new">${ic("sparkle")}<span>What's changed</span></button>
+      <nav class="dash-nav">${adminNavHTML(tabs)}</nav>
       <button class="dash-logout" data-action="logout">${ic("logout")}<span>Logout</span></button>
     </aside>
     <div class="dash-content">
       <div class="dash-topbar">
-        <h1>${UI.adminTab ? ADMIN_TABS.find((t) => t.key === UI.adminTab).label : "Admin"}</h1>
+        <h1>${UI.adminTab ? adminPageTitle(UI.adminTab) : "Admin"}</h1>
         ${showScopeSwitcher ? `
           <label class="branch-scope"><span class="field-label">Viewing</span>
             <select class="input" data-action="admin-branch-scope">
@@ -3404,7 +3397,7 @@ function adminDashboard() {
         <div class="row"><span>Total assigned</span><span>${riders.length}</span></div>
       </div>
       <div class="summary-card">
-        <div class="summary-card-title">Inventory</div>
+        <div class="summary-card-title">Stock</div>
         <div class="row"><span>Low stock</span><span class="badge badge-${lowStock ? "yellow-soft" : "green-soft"}">${lowStock}</span></div>
         <div class="row"><span>Out of stock</span><span class="badge badge-${outOfStock ? "red-soft" : "green-soft"}">${outOfStock}</span></div>
       </div>
@@ -3587,7 +3580,7 @@ function adminCatalog() {
       ${exportButtonsHTML("catalog")}
     </div>
   </div>
-  <div class="qk-muted small" style="margin:-4px 0 10px">The product master, shared by every store. Quantities live per store in Inventory.</div>
+  <div class="qk-muted small" style="margin:-4px 0 10px">The product master, shared by every store. Quantities live per store in Masters ▸ Stock.</div>
   <div class="pill-row">
     <button class="pill ${UI.adminCatFilter === "All" ? "active" : ""}" data-action="admin-cat-filter" data-cat="All">All</button>
     ${State.categories.map((c) => `<button class="pill ${UI.adminCatFilter === c.name ? "active" : ""}" data-action="admin-cat-filter" data-cat="${esc(c.name)}">${esc(c.name)}</button>`).join("")}
@@ -3707,7 +3700,7 @@ function adminBrands() {
     <div class="search-box"><span>${ic("search")}</span><input class="input" value="${esc(UI.adminBrandQuery || "")}" oninput="onAdminBrandSearch(this.value)" placeholder="Search brands..." /></div>
     <div class="filter-pill-row">${editable ? `<button class="btn btn-primary btn-sm" data-action="new-brand">${ic("plus")} Add brand</button>` : ""}${exportButtonsHTML("brands")}</div>
   </div>
-  <div class="qk-muted small" style="margin:0 0 12px">Brands shown here populate the Brand field when adding or editing a catalog item.</div>
+  <div class="qk-muted small" style="margin:0 0 12px">Brands shown here populate the Brand field when adding or editing a product in the Catalogue.</div>
   <div id="adminBrandList" class="admin-table">${adminBrandRows(brands, countFor, editable)}</div>`;
 }
 function adminBrandRows(brands, countFor, editable) {
@@ -4118,7 +4111,7 @@ function adminBusinessSettings() {
     <button type="button" class="filter-pill ${UI.businessSettingsTab === "company" ? "active" : ""}" data-action="set-business-tab" data-tab="company">Company Profile</button>
     <button type="button" class="filter-pill ${UI.businessSettingsTab === "tax" ? "active" : ""}" data-action="set-business-tab" data-tab="tax">Tax</button>
     <button type="button" class="filter-pill ${UI.businessSettingsTab === "delivery" ? "active" : ""}" data-action="set-business-tab" data-tab="delivery">Delivery &amp; Payments</button>
-    <button type="button" class="filter-pill ${UI.businessSettingsTab === "stock" ? "active" : ""}" data-action="set-business-tab" data-tab="stock">Inventory &amp; Stock</button>
+    <button type="button" class="filter-pill ${UI.businessSettingsTab === "stock" ? "active" : ""}" data-action="set-business-tab" data-tab="stock">Stock Rules</button>
   </div>
   ${UI.businessSettingsTab === "tax" ? adminTaxPanel(editable) : UI.businessSettingsTab === "delivery" ? adminDeliveryPanel(editable) : UI.businessSettingsTab === "stock" ? adminStockRulesPanel(editable) : adminCompanyProfilePanel(editable)}`;
 }
@@ -4327,7 +4320,7 @@ function itemFormModal() {
           <label class="field"><span class="field-label">Reorder level</span><input class="input" type="number" min="0" name="reorderLevel" value="${f.reorderLevel == null ? 10 : f.reorderLevel}" /></label>
           <label class="field"><span class="field-label">ETA (min)</span><input class="input" type="number" name="eta" value="${f.eta}" /></label>
         </div>
-        <div class="qk-muted small" style="margin:-4px 0 10px">Quantities are kept per store — ${f.id ? "change them in Inventory (receive, adjust, transfer)." : "a new product starts at 0 in every store; receive stock in Inventory."} Cost price updates automatically when you receive stock.</div>
+        <div class="qk-muted small" style="margin:-4px 0 10px">Quantities are kept per store — ${f.id ? "change them in Masters ▸ Stock (receive, adjust, transfer)." : "a new product starts at 0 in every store; receive stock in Masters ▸ Stock."} Cost price updates automatically when you receive stock.</div>
         <label class="stock-toggle-lg"><input type="checkbox" name="stock" ${f.stock ? "checked" : ""} /><span>Selling — visible to customers (switch off to hide it everywhere)</span></label>
         <label class="stock-toggle-lg"><input type="checkbox" name="bogo" ${f.bogo ? "checked" : ""} /><span>Buy 1 Get 1 Free — shown in the Deals &amp; Combos home section</span></label>
         <label class="field"><span class="field-label">Tags <span class="qk-muted small" style="font-weight:400">(controls which home-page rails &amp; shop quick-filters this item appears in)</span></span></label>
@@ -4492,7 +4485,7 @@ function comboListEditorModal() {
     <div class="dialog dialog-static dialog-promo" role="dialog" aria-modal="true" data-action="noop">
       <div class="dialog-head"><span>Deals & Combos</span><button class="dialog-close" data-action="close-modal">${ic("close")}</button></div>
       <div class="dialog-body">
-        <div class="qk-muted small" style="margin:0 0 10px">"Buy 1 Get 1" items are managed on the product itself, in Catalog — this list is just the multi-item combo bundles.</div>
+        <div class="qk-muted small" style="margin:0 0 10px">"Buy 1 Get 1" items are managed on the product itself, in the Catalogue — this list is just the multi-item combo bundles.</div>
         <button class="btn btn-primary" data-action="admin-add-combo" data-section="${section.id}">${ic("plus")} Add combo</button>
         <div class="admin-table" style="margin-top:12px">
           ${combos.length === 0 ? `<div class="empty-state"><div class="empty-title">No combo bundles yet</div></div>` : combos.map((c) => comboRowHTML(section, c)).join("")}
@@ -5716,9 +5709,6 @@ const Submits = {
       if (!user || user.active === false) return;
       State.session = { role, name: user.name, userId: user.id };
       UI.adminTab = "dashboard";
-    } else if (role === "platform") {
-      State.session = { role, name: "QuickKart Platform Admin" };
-      UI.platformTab = "tenants";
     } else {
       const name = (fd.get("name") || "").trim() || "Customer";
       State.session = { role, name };
@@ -5811,7 +5801,7 @@ const Submits = {
       State.items.push({ ...data, id });
       State.branches.forEach((b) => setStoreQty(b.id, id, 0));
       persist("branchStock");
-      showToast(`${name} added — receive stock in Inventory`);
+      showToast(`${name} added — receive stock in Masters ▸ Stock`);
     }
     persist("items");
     UI.modal = null; render();
