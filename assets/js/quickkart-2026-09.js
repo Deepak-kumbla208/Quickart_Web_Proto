@@ -1073,37 +1073,12 @@ function adminStockRulesPanel(editable) {
 
 /* ---------------- 16. Admin ▸ Routes (pending team discussion) ---------------- */
 function adminRoutesTBD() {
+  // Routes are pending a team discussion — nothing is designed yet.
   return `
-  <div class="notice notice-warn" style="margin-bottom:14px">${ic("alert")}<span><b>To be discussed with the team.</b> Nothing on this screen is final or built yet — it records what the directors asked for and the questions to settle first.</span></div>
-  <div class="dash-grid-2">
-    <div class="summary-card">
-      <div class="summary-card-title">What the directors asked for</div>
-      <ul class="plain-list">
-        <li>One vehicle (bike, car, van or truck) carries <b>several orders together</b>.</li>
-        <li>Admin sets the <b>delivery sequence</b> — which order is delivered first, second, …</li>
-        <li>The sequence works <b>inside a delivery time slot</b>.</li>
-      </ul>
-    </div>
-    <div class="summary-card">
-      <div class="summary-card-title">Questions to settle</div>
-      <ol class="plain-list">
-        <li>Are vehicles their own list (e.g. "Van SGX1234, holds 20 orders"), or just the rider's vehicle type?</li>
-        <li>Is the sequence set by hand, or optimised automatically? (Google route optimisation is a paid API.) Suggested: by hand, plus a free "suggest order by distance" button.</li>
-        <li>Is one route always one store and one slot?</li>
-        <li>What does the rider app show — a trip with numbered stops? (Changes the rider app.)</li>
-        <li>What happens when one stop fails — skip and continue, or return?</li>
-      </ol>
-    </div>
-  </div>
-  <div class="summary-card" style="margin-top:16px">
-    <div class="summary-card-title">Illustration only — one possible shape</div>
-    <div class="route-mock">
-      <div class="row"><span><b>Route R-014</b> · Van SGX 1234 · Rider Wei Ming Tan</span><span class="badge badge-blue-soft">Tomorrow · 9:00 AM – 11:00 AM · QuickKart Ang Mo Kio</span></div>
-      ${["#QK4821 · Blk 230 AMK Ave 3", "#QK4825 · Blk 405 AMK Ave 10", "#QK4830 · 5 Bishan St 21", "#QK4833 · Blk 120 Bishan St 12"].map((s, i) => `<div class="route-stop"><span class="route-stop-n">${i + 1}</span><span>${s}</span><span class="qk-muted small">drag to reorder</span></div>`).join("")}
-    </div>
+  <div class="empty-state">
+    <div class="empty-title">Need to be discussed</div>
   </div>`;
 }
-
 /* ---------------- 18. What's changed (for the frontend team) ---------------- */
 const WHATS_NEW = [
   { area: "Admin panel — sidebar (round 2)", items: [
@@ -1115,7 +1090,7 @@ const WHATS_NEW = [
     ["Dashboard", "Sales insights block: Top selling categories (tap one to see its top items) and Peak hours — orders per hour plus admin-defined time sections (Edit time sections). Range: today / 7 / 30 days. Exportable."],
     ["Orders", "Every status tab shows its count, e.g. All (120), New (15). Counts follow the store scope. Export to Excel/CSV follows the current filters."],
     ["Delivery Masters ▸ Delivery Slots", "Slot times with a capacity (orders per slot per store), days bookable ahead and an order cut-off. Per store and day: booked/capacity with a fill bar, override one day's capacity, close/reopen a slot, add a one-off slot, see and move the orders in a slot."],
-    ["Delivery Masters ▸ Routes", "Marked 'to discuss' — records the directors' ask (multi-order vehicle routes with a delivery sequence inside a slot) and the open questions. Not designed yet."],
+    ["Delivery Masters ▸ Routes", "Placeholder only — needs to be discussed with the team. Nothing is designed yet."],
     ["Store serviceability", "No geofencing: a store delivers inside its radius (unchanged). Checkout is blocked when no store's radius covers the address."],
     ["Express Delivery", "Setup ▸ Business Settings ▸ Delivery & Payments: switch Express on/off and set its charge."],
     ["Stock Rules", "Setup ▸ Business Settings ▸ Stock Rules: allow or block negative stock (default: blocked)."],
