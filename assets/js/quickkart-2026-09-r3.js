@@ -284,89 +284,250 @@ function ordersBase() {
   });
 }
 function sortOrders(list) {
-  const s = F("orders").sort || "newest";
+  const s = F("orders").sort || "urgent";
   const slotStart = (o) => { const w = orderSlotWindow(o); return w ? w.startMs : Infinity; };
+  // Most urgent: open orders by how far over their stage target they are; finished orders last, newest first.
+  const urgency = (o) => { const sla = orderSla(o); if (!sla) return -1; const t = orderTiming(o); return sla.ratio + (t && t.late ? 1 : 0); };
+  if (s === "urgent") return list.slice().sort((a, b) => urgency(b) - urgency(a) || b.createdAt - a.createdAt);
   return list.slice().sort((a, b) => s === "oldest" ? a.createdAt - b.createdAt : s === "amount" ? b.total - a.total : s === "slot" ? slotStart(a) - slotStart(b) : b.createdAt - a.createdAt);
 }
 function ordersFiltered() {
   const tab = UI.adminOrderFilter || "action";
   const base = ordersBase();
-  const list = tab === "all" ? base : tab === "action" ? base.filter(needsAction) : base.filter((o) => o.status === tab);
+  const f = F("orders");
+  const today = startOfToday();
+  // "Delivered" in the pipeline means delivered today, unless a date filter is set.
+  const list = tab === "all" ? base : tab === "action" ? base.filter(needsAction)
+    : tab === "delivered" && !f.date ? base.filter((o) => o.status === "delivered" && (statusAt(o, "delivered") || o.createdAt) >= today)
+    : base.filter((o) => o.status === tab);
   return sortOrders(list);
+}
+/* Live operations console — built like the store-ops screens quick-commerce
+   dark stores use: every order races a stage target (accept → pick → pack →
+   dispatch), so the page is organised around what's late, what's next and
+   who's free. Targets are minutes per stage; a per-business setting later. */
+const STAGE_SLA_MIN = { new: 3, confirmed: 5, picking: 8, packing: 5, ready_for_rider: 10, picked_up: 30 };
+const COLD_CATS = ["Dairy & Eggs", "Meat & Seafood", "Frozen Foods"];
+const PIPELINE = [["new", "New"], ["confirmed", "Confirmed"], ["picking", "Picking"], ["packing", "Packing"], ["ready_for_rider", "Ready to dispatch"], ["picked_up", "Out for delivery"], ["delivered", "Delivered"]];
+function fmtDur(mins) {
+  const m = Math.max(0, Math.round(mins));
+  if (m < 60) return `${m}m`;
+  if (m < 1440) return `${Math.floor(m / 60)}h ${m % 60}m`;
+  return `${Math.floor(m / 1440)}d`;
+}
+function stageEnteredAt(o) {
+  const h = (o.statusHistory || []).filter((x) => x.status === o.status);
+  return h.length ? h[h.length - 1].at : o.createdAt;
+}
+function statusAt(o, status) { const h = (o.statusHistory || []).find((x) => x.status === status); return h ? h.at : null; }
+function orderSla(o) {
+  if (TERMINAL_STATUSES.includes(o.status)) return null;
+  const mins = (Date.now() - stageEnteredAt(o)) / 60000;
+  const target = STAGE_SLA_MIN[o.status] || 10;
+  const ratio = mins / target;
+  return { mins, target, ratio, state: ratio >= 1 ? "breach" : ratio >= 0.75 ? "risk" : "ok" };
+}
+function isCold(o) { return o.items.some((i) => COLD_CATS.includes((findItem(i.id) || {}).cat)); }
+function orderUnits(o) { return o.items.reduce((n, i) => n + i.qty, 0); }
+function postalOf(o) { const m = String(o.address || "").match(/\b(\d{6})\b/); return m ? m[1] : ""; }
+function stageLabel(status) { return (PIPELINE.find(([k]) => k === status) || [status, (STATUS_META[status] || {}).label || status])[1]; }
+function itemThumb(id) { const it = findItem(id); return it && it.image ? it.image.replace(/w=\d+/, "w=120") : ""; }
+function slaRingHTML(o) {
+  const s = orderSla(o);
+  if (!s) {
+    const ok = o.status === "delivered";
+    return `<div class="sla-ring sla-${ok ? "done" : "void"}" title="${esc(STATUS_META[o.status].label)}">${ic(ok ? "check" : "close")}</div>`;
+  }
+  return `<div class="sla-ring sla-${s.state}" style="--p:${Math.min(100, s.ratio * 100).toFixed(0)}" title="${esc(stageLabel(o.status))} for ${fmtDur(s.mins)} — target ${s.target}m" aria-label="${esc(stageLabel(o.status))} for ${fmtDur(s.mins)}, target ${s.target} minutes"><span>${fmtDur(s.mins)}</span></div>`;
+}
+function opsRowHTML(o) {
+  const editable = canEdit(currentUser(), "orders");
+  const s = orderSla(o);
+  const t = orderTiming(o);
+  const pay = orderPayStatus(o);
+  const kind = orderKind(o);
+  const next = boardNextStep(o);
+  const rider = findPartner(o.deliveryPartnerId);
+  const iss = orderIssues(o);
+  const slotText = kind === "scheduled" ? ((o.slotKey && slotLabelFromKey(o.slotKey)) || o.scheduledSlot || "Scheduled") : KIND_META[kind].label;
+  const thumbs = o.items.slice(0, 3).map((it) => `<img src="${itemThumb(it.id)}" alt="" loading="lazy" />`).join("") + (o.items.length > 3 ? `<span class="thumb-more">+${o.items.length - 3}</span>` : "");
+  return `
+  <div class="ops-row edge-${s ? s.state : o.status === "delivered" ? "done" : "void"} ${UI.orderDrawerId === o.id ? "is-open" : ""}" data-action="open-order" data-id="${o.id}" role="button" tabindex="0" aria-label="Order ${esc(o.id)}">
+    ${slaRingHTML(o)}
+    <div class="ops-id">
+      <div class="ops-line1"><b>#${esc(o.id)}</b><span class="stage-chip st-${o.status}">${esc(stageLabel(o.status))}</span></div>
+      <div class="ops-line2"><span class="kind-dot kind-${kind}"></span>${esc(slotText)}${t && t.late ? ` · <span class="tone-red"><b>${esc(t.label)}</b></span>` : ""}</div>
+    </div>
+    <div class="ops-cust">
+      <b>${esc(o.customerName)}</b>
+      <span class="qk-muted small">${postalOf(o) ? `S(${postalOf(o).slice(0, 2)}) ${postalOf(o)} · ` : ""}${timeAgo(o.createdAt)}</span>
+      <span class="qk-muted small">${kind === "pickup" ? "Customer collects" : rider ? `${ic("truck")} ${esc(rider.name)}` : DISPATCH_STATUSES.includes(o.status) ? `<span class="tone-yellow">No rider yet</span>` : ""}</span>
+    </div>
+    <div class="ops-items">
+      <div class="thumbs">${thumbs}</div>
+      <span class="small">${o.items.length} items · ${orderUnits(o)} units</span>
+      <span class="ops-tags">${isCold(o) ? `<span class="tag tag-cold">${ic("sparkle")} Chilled</span>` : ""}${iss.unavailable ? `<span class="tag tag-warn">Item unavailable</span>` : ""}${iss.returnReq ? `<span class="tag tag-warn">Return</span>` : ""}</span>
+    </div>
+    <div class="ops-amt">
+      <b class="qk-num">${money(o.total)}</b>
+      <span class="small ${pay.key === "collect" ? "tag tag-cash" : "tone-" + pay.tone}">${pay.key === "collect" ? `Collect ${money(o.total)}` : esc(pay.label)}</span>
+    </div>
+    <div class="ops-act">${editable && next ? `<button type="button" class="btn btn-sm btn-primary" data-action="set-order-status" data-id="${o.id}" data-status="${next.status}">${esc(next.label)}</button>` : ""}</div>
+  </div>`;
+}
+function opsKpisHTML(inScope) {
+  const today = startOfToday();
+  const yStart = today - 86400000, nowOffset = Date.now() - today;
+  const todays = inScope.filter((o) => o.createdAt >= today);
+  const ySame = inScope.filter((o) => o.createdAt >= yStart && o.createdAt < yStart + nowOffset).length;
+  const open = inScope.filter((o) => !TERMINAL_STATUSES.includes(o.status));
+  const atRisk = open.filter((o) => { const s = orderSla(o); const t = orderTiming(o); return (s && s.state !== "ok") || (t && t.late); });
+  const packTimes = todays.map((o) => { const r = statusAt(o, "ready_for_rider") || (o.fulfillment === "pickup" ? statusAt(o, "delivered") : null); return r ? (r - o.createdAt) / 60000 : null; }).filter((x) => x != null);
+  const avgPack = packTimes.length ? packTimes.reduce((a, b) => a + b, 0) / packTimes.length : null;
+  const packTarget = STAGE_SLA_MIN.new + STAGE_SLA_MIN.confirmed + STAGE_SLA_MIN.picking + STAGE_SLA_MIN.packing;
+  const deliveredToday = inScope.filter((o) => o.status === "delivered" && (statusAt(o, "delivered") || o.createdAt) >= today);
+  const onTime = deliveredToday.filter((o) => {
+    const at = statusAt(o, "delivered") || o.createdAt;
+    const w = orderSlotWindow(o);
+    if (w) return at <= w.endMs;
+    if (orderKind(o) === "express") return at <= o.createdAt + (Math.max(...o.items.map((i) => i.eta || 20), 20) + 15) * 60000;
+    return true;
+  }).length;
+  const cod = open.filter((o) => orderPayStatus(o).key === "collect");
+  const riders = State.partners.filter((p) => { const ids = scopedBranchIds(); return p.active !== false && (!ids || ids.includes(p.branchId)); });
+  const tile = (icon, label, value, sub, tone) => `<div class="kpi ${tone ? "kpi-" + tone : ""}"><span class="kpi-ic">${ic(icon)}</span><div><div class="kpi-label">${label}</div><div class="kpi-value">${value}</div><div class="kpi-sub">${sub}</div></div></div>`;
+  return `<div class="kpi-strip">
+    ${tile("package", "Orders today", todays.length, `${ySame} by this time yesterday`)}
+    ${tile("clock", "Live now", open.length, `${open.filter((o) => o.status === "new").length} waiting to be accepted`)}
+    ${tile("alert", "At risk / late", atRisk.length, atRisk.length ? "Over or near their stage target" : "Everything on track", atRisk.length ? "red" : "green")}
+    ${tile("boxes", "Avg time to pack", avgPack == null ? "—" : fmtDur(avgPack), `Target ${packTarget}m, order to packed`, avgPack != null && avgPack > packTarget ? "yellow" : "")}
+    ${tile("check", "Delivered on time", deliveredToday.length ? pct((onTime / deliveredToday.length) * 100) : "—", `${onTime} of ${deliveredToday.length} today`)}
+    ${tile("wallet", "Cash to collect", money(cod.reduce((s, o) => s + o.total, 0)), `${cod.length} cash-on-delivery order${cod.length === 1 ? "" : "s"}`)}
+    ${tile("truck", "Riders", `${riders.filter((p) => riderIsReady(p.id)).length} / ${riders.length}`, `${riders.filter((p) => riderIsBusy(p.id)).length} on delivery`)}
+  </div>`;
+}
+function opsPipelineHTML(base) {
+  const cur = UI.adminOrderFilter || "action";
+  const today = startOfToday();
+  return `
+  <div class="pipeline" role="tablist" aria-label="Order stages">
+    ${PIPELINE.map(([k, label]) => {
+      const list = k === "delivered" ? base.filter((o) => o.status === "delivered" && (statusAt(o, "delivered") || o.createdAt) >= today) : base.filter((o) => o.status === k);
+      const slas = list.map(orderSla).filter(Boolean);
+      const oldest = slas.length ? Math.max(...slas.map((s) => s.mins)) : null;
+      const worst = slas.some((s) => s.state === "breach") ? "breach" : slas.some((s) => s.state === "risk") ? "risk" : "ok";
+      return `<button type="button" class="pipe-step ${cur === k ? "active" : ""} ${list.length && k !== "delivered" ? "has-" + worst : ""}" data-action="admin-order-filter" data-filter="${k}" role="tab" aria-selected="${cur === k}">
+        <span class="pipe-label">${label}</span>
+        <span class="pipe-count">${list.length}</span>
+        <span class="pipe-sub">${k === "delivered" ? "today" : oldest != null ? `oldest ${fmtDur(oldest)}` : "—"}</span>
+      </button>`;
+    }).join("")}
+  </div>
+  <div class="pipe-tabs">
+    ${[["action", "Needs action", base.filter(needsAction).length], ["all", "All orders", base.length], ["cancelled", "Cancelled", base.filter((o) => o.status === "cancelled").length], ["returned", "Returned", base.filter((o) => o.status === "returned").length]].map(([k, l, n]) => `<button type="button" class="pipe-tab ${cur === k ? "active" : ""} ${k === "action" && n ? "urgent" : ""}" data-action="admin-order-filter" data-filter="${k}">${l}<span class="pill-count">${n}</span></button>`).join("")}
+  </div>`;
+}
+function opsRailHTML(inScope) {
+  const ids = scopedBranchIds();
+  const riders = State.partners.filter((p) => p.active !== false && (!ids || ids.includes(p.branchId)));
+  const today = startOfToday();
+  const todays = inScope.filter((o) => o.createdAt >= today);
+  const avgBetween = (a, b) => {
+    const d = todays.map((o) => { const x = a === "created" ? o.createdAt : statusAt(o, a); const y = statusAt(o, b); return x && y ? (y - x) / 60000 : null; }).filter((v) => v != null);
+    return d.length ? d.reduce((s, v) => s + v, 0) / d.length : null;
+  };
+  const stageRows = [
+    ["Accept", avgBetween("created", "confirmed"), STAGE_SLA_MIN.new],
+    ["Pick", avgBetween("confirmed", "packing"), STAGE_SLA_MIN.confirmed + STAGE_SLA_MIN.picking],
+    ["Pack", avgBetween("packing", "ready_for_rider"), STAGE_SLA_MIN.packing],
+    ["Dispatch", avgBetween("ready_for_rider", "picked_up"), STAGE_SLA_MIN.ready_for_rider],
+    ["Deliver", avgBetween("picked_up", "delivered"), STAGE_SLA_MIN.picked_up],
+  ];
+  const stores = ids ? State.branches.filter((b) => ids.includes(b.id)) : State.branches;
+  const todayDate = isoDate(new Date());
+  const slotRows = State.slotSettings.templates.map((t) => {
+    let booked = 0, cap = 0, past = false;
+    stores.forEach((b) => { const inf = slotInfo(b.id, todayDate, t); booked += inf.booked; cap += inf.cap; past = inf.past; });
+    const fill = cap ? Math.min(100, (booked / cap) * 100) : 0;
+    const level = past ? "past" : booked >= cap ? "full" : fill >= 90 ? "high" : fill >= 50 ? "mid" : "low";
+    return { t, booked, cap, fill, level };
+  });
+  return `
+  <div class="rail-card">
+    <div class="rail-title">Riders <span class="qk-muted small">${riders.filter((p) => riderIsReady(p.id)).length} ready · ${riders.filter((p) => riderIsBusy(p.id)).length} out</span></div>
+    ${riders.length ? riders.map((p) => {
+      const st = partnerStatusKey(p);
+      const onOrder = State.orders.find((o) => o.deliveryPartnerId === p.id && DISPATCH_STATUSES.includes(o.status));
+      return `<div class="rider-row"><span class="avatar">${esc(p.name.split(" ").map((w) => w[0]).slice(0, 2).join(""))}</span>
+        <div class="rider-info"><b>${esc(p.name)}</b><span class="qk-muted small">${esc(p.vehicle || "")}${onOrder ? ` · <button class="link-btn small" data-action="open-order" data-id="${onOrder.id}">#${esc(onOrder.id)}</button>` : ""}</span></div>
+        <span class="rider-st rider-${st}">${{ ready: "Ready", busy: "On delivery", offline: "Offline", inactive: "Inactive" }[st]}</span></div>`;
+    }).join("") : `<div class="qk-muted small">No riders for this store.</div>`}
+  </div>
+  <div class="rail-card">
+    <div class="rail-title">Today's slots <span class="qk-muted small">${stores.length === 1 ? esc(stores[0].name) : "all stores"}</span></div>
+    ${slotRows.map((r) => `<div class="rail-slot ${r.level === "past" ? "is-past" : ""}"><span class="small">${fmtClock(r.t.start)}</span><div class="fill-track"><div class="fill-bar fill-${r.level}" style="width:${Math.max(r.fill, 2)}%"></div></div><span class="small qk-num">${r.booked}/${r.cap}</span></div>`).join("")}
+  </div>
+  <div class="rail-card">
+    <div class="rail-title">Stage times today <span class="qk-muted small">avg vs target</span></div>
+    ${stageRows.map(([label, v, target]) => `<div class="rail-stage"><span class="small">${label}</span><span class="small qk-num ${v != null && v > target ? "tone-red" : v != null ? "tone-green" : "qk-muted"}"><b>${v == null ? "—" : fmtDur(v)}</b> / ${target}m</span></div>`).join("")}
+  </div>`;
 }
 function adminOrdersV2() {
   const view = F("orders").view || "list";
   const inScope = scopedOrders();
-  const today = startOfToday();
-  const todays = inScope.filter((o) => o.createdAt >= today);
-  const open = inScope.filter((o) => !TERMINAL_STATUSES.includes(o.status));
-  const late = open.filter((o) => (orderTiming(o) || {}).late);
   const riders = State.partners.filter((p) => { const ids = scopedBranchIds(); return !ids || ids.includes(p.branchId); });
   const slotGroups = slotDays().map((d) => ({ label: d.label, options: [[`${d.date}|*`, `${d.label} — all slots`], ...State.slotSettings.templates.map((t) => [`${d.date}|${t.id}`, `${d.label} ${fmtSlotRange(t)}`])] }));
   FILTER_RESULTS.orders = ordersResultsHTML;
   return `
-  <div class="stat-grid">
-    <div class="stat-card"><div class="stat-label">Orders today</div><div class="stat-value">${todays.length}</div><div class="stat-sub"><span>${todays.filter((o) => orderKind(o) === "express").length} express · ${todays.filter((o) => orderKind(o) === "scheduled").length} scheduled · ${todays.filter((o) => orderKind(o) === "pickup").length} pickup</span></div></div>
-    <div class="stat-card"><div class="stat-label">In progress</div><div class="stat-value">${open.length}</div><div class="stat-sub"><span>${open.filter((o) => o.status === "new").length} waiting to be confirmed</span></div></div>
-    <div class="stat-card ${late.length ? "stat-alert" : ""}"><div class="stat-label">Late now</div><div class="stat-value">${late.length}</div><div class="stat-sub"><span>${late.length ? "Open the Needs action tab" : "Everything on time"}</span></div></div>
-    <div class="stat-card"><div class="stat-label">Sales today</div><div class="stat-value">${money(todays.filter((o) => o.status !== "cancelled").reduce((s, o) => s + o.total, 0))}</div><div class="stat-sub"><span>Excludes cancelled</span></div></div>
-  </div>
-  <div class="admin-toolbar">
-    <div class="seg" role="tablist" aria-label="View">
-      ${[["list", "List"], ["slot", "By slot"], ["board", "Board"]].map(([k, l]) => `<button type="button" class="seg-btn ${view === k ? "active" : ""}" data-action="set-filter-btn" data-screen="orders" data-key="view" data-value="${k}" role="tab" aria-selected="${view === k}">${l}</button>`).join("")}
+  <div class="ops-console">
+    <div class="ops-head">
+      <div class="ops-live"><span class="live-dot" aria-hidden="true"></span><b>Live</b><span class="qk-muted small">updates every 30s · last ${fmtTime(Date.now())}</span></div>
+      <div class="ops-head-actions">
+        <div class="seg" role="tablist" aria-label="View">
+          ${[["list", "Queue"], ["slot", "By slot"], ["board", "Board"]].map(([k, l]) => `<button type="button" class="seg-btn ${view === k ? "active" : ""}" data-action="set-filter-btn" data-screen="orders" data-key="view" data-value="${k}" role="tab" aria-selected="${view === k}">${l}</button>`).join("")}
+        </div>
+        ${exportButtonsHTML("orders")}
+        <button type="button" class="btn btn-sm btn-outline demo-btn" data-action="demo-live-orders" title="Prototype only — adds fresh orders so you can watch the timers">${ic("plus")} Demo: add live orders</button>
+      </div>
     </div>
-    ${exportButtonsHTML("orders")}
+    ${opsKpisHTML(inScope)}
+    ${filterBarHTML("orders", {
+      search: "Order no, customer or mobile…",
+      date: { key: "date", label: "Placed" },
+      fields: [
+        { key: "type", label: "Type", options: [["express", "Express"], ["scheduled", "Scheduled"], ["pickup", "Pickup"]] },
+        { key: "slot", label: "Slot", groups: slotGroups },
+        { key: "pay", label: "Payment", options: [...State.deliverySettings.paymentMethods.map((m) => [m.name, m.name]), ["QuickKart Wallet", "QuickKart Wallet"]] },
+        { key: "payStatus", label: "Paid?", options: [["paid", "Paid / collected"], ["collect", "Cash to collect"], ["refunded", "Refunded / void"]] },
+        { key: "rider", label: "Rider", options: [["none", "Not assigned"], ...riders.map((p) => [String(p.id), p.name])] },
+        { key: "issue", label: "Issues", options: [["late", "Late"], ["unavailable", "Item unavailable"], ["return", "Return requested"]] },
+      ],
+      sort: [["urgent", "Most urgent first"], ["newest", "Newest first"], ["oldest", "Oldest first"], ["slot", "Slot time"], ["amount", "Amount (high → low)"]],
+    })}
+    <div class="ops-grid">
+      <div id="fres-orders" class="ops-list-col">${ordersResultsHTML()}</div>
+      <aside class="ops-rail" aria-label="Store status">${opsRailHTML(inScope)}</aside>
+    </div>
   </div>
-  ${filterBarHTML("orders", {
-    search: "Order no, customer or mobile…",
-    date: { key: "date", label: "Placed" },
-    fields: [
-      { key: "type", label: "Type", options: [["express", "Express"], ["scheduled", "Scheduled"], ["pickup", "Pickup"]] },
-      { key: "slot", label: "Slot", all: "Any slot", groups: slotGroups },
-      { key: "pay", label: "Payment", options: [...State.deliverySettings.paymentMethods.map((m) => [m.name, m.name]), ["QuickKart Wallet", "QuickKart Wallet"]] },
-      { key: "payStatus", label: "Paid?", options: [["paid", "Paid / collected"], ["collect", "Cash to collect"], ["refunded", "Refunded / void"]] },
-      { key: "rider", label: "Rider", options: [["none", "Not assigned"], ...riders.map((p) => [String(p.id), p.name])] },
-      { key: "issue", label: "Issues", all: "Any", options: [["late", "Late"], ["unavailable", "Item unavailable"], ["return", "Return requested"]] },
-    ],
-    sort: [["newest", "Newest first"], ["oldest", "Oldest first"], ["slot", "Slot time"], ["amount", "Amount (high → low)"]],
-  })}
-  <div id="fres-orders">${ordersResultsHTML()}</div>
   ${UI.orderDrawerId ? orderDrawerHTML() : ""}`;
 }
 function ordersResultsHTML() {
   const view = F("orders").view || "list";
   const base = ordersBase();
-  if (view === "board") return ordersBoardHTML(sortOrders(base));
-  const tabs = ["action", "all", ...TIMELINE_STEPS, "cancelled", "returned"];
-  const countFor = (t) => t === "all" ? base.length : t === "action" ? base.filter(needsAction).length : base.filter((o) => o.status === t).length;
-  const cur = UI.adminOrderFilter || "action";
+  if (view === "board") return `${opsPipelineHTML(base)}${ordersBoardHTML(sortOrders(base))}`;
   const list = ordersFiltered();
   return `
-  <div class="pill-row">
-    ${tabs.map((t) => `<button class="pill ${cur === t ? "active" : ""} ${t === "action" ? "pill-action" : ""}" data-action="admin-order-filter" data-filter="${t}">${t === "all" ? "All" : t === "action" ? "Needs action" : STATUS_META[t].label} <span class="pill-count">${countFor(t)}</span></button>`).join("")}
-  </div>
+  ${opsPipelineHTML(base)}
   ${resultCountHTML(list.length, base.length, "orders")}
   ${view === "slot" ? ordersBySlotHTML(list) : ordersListHTML(list)}`;
 }
-function orderRowHTML(o) {
-  const kind = orderKind(o);
-  const t = orderTiming(o);
-  const pay = orderPayStatus(o);
-  const branch = findBranch(o.branchId);
-  const reason = UI.adminOrderFilter === "action" ? needsActionReason(o) : "";
-  return `
-  <button type="button" class="ord-row ${UI.orderDrawerId === o.id ? "is-open" : ""}" data-action="open-order" data-id="${o.id}">
-    <span class="ord-id"><b>#${esc(o.id)}</b><span class="qk-muted small">${fmtDateTime(o.createdAt)}</span></span>
-    <span class="ord-cust"><b>${esc(o.customerName)}</b><span class="qk-muted small">${o.contactMobile ? fmtMobile(o.contactMobile) : "—"}</span></span>
-    <span class="ord-type"><span class="badge badge-${KIND_META[kind].tone}-soft">${KIND_META[kind].label}</span><span class="qk-muted small">${kind === "scheduled" && (o.slotKey || o.scheduledSlot) ? esc((o.slotKey && slotLabelFromKey(o.slotKey)) || o.scheduledSlot) : branch ? esc(branch.name) : ""}</span></span>
-    <span class="ord-amt"><b class="qk-num">${money(o.total)}</b><span class="qk-muted small">${o.items.reduce((n, i) => n + i.qty, 0)} items · <span class="tone-${pay.tone}">${pay.label}</span></span></span>
-    <span class="ord-status"><span class="badge badge-${STATUS_META[o.status].tone}-soft">${STATUS_META[o.status].label}</span>${t ? `<span class="badge badge-${t.tone}-soft timing">${esc(t.label)}</span>` : ""}${reason && (!t || reason !== t.label) ? `<span class="small tone-red">${esc(reason)}</span>` : ""}</span>
-  </button>`;
-}
+function orderRowHTML(o) { return opsRowHTML(o); }
 function ordersListHTML(list) {
-  if (!list.length) return `<div class="empty-state"><div class="empty-title">${UI.adminOrderFilter === "action" ? "Nothing needs action" : "No orders match"}</div><div class="empty-hint">${UI.adminOrderFilter === "action" ? "New, late and problem orders show up here." : "Try another tab or clear the filters."}</div></div>`;
-  return `<div class="ord-list">${list.slice(0, 200).map(orderRowHTML).join("")}</div>`;
+  const tab = UI.adminOrderFilter || "action";
+  if (!list.length) return `<div class="ops-empty">${ic(tab === "action" ? "check" : "package")}<div class="empty-title">${tab === "action" ? "All caught up" : "No orders here"}</div><div class="empty-hint">${tab === "action" ? "New, late and problem orders appear here the moment they need someone." : "Try another stage or clear the filters."}</div></div>`;
+  return `<div class="ops-list">${list.slice(0, 200).map(opsRowHTML).join("")}</div>`;
 }
+
 // Orders grouped by the delivery window they must leave in — how a store plans its day.
 function ordersBySlotHTML(list) {
   const groups = new Map();
@@ -419,8 +580,8 @@ function ordersBoardHTML(list) {
           const next = boardNextStep(o);
           const rider = findPartner(o.deliveryPartnerId);
           return `
-          <div class="board-card ${t && t.late ? "is-late" : ""}" data-action="open-order" data-id="${o.id}" role="button" tabindex="0">
-            <div class="row"><b>#${esc(o.id)}</b><span class="qk-num">${money(o.total)}</span></div>
+          <div class="board-card edge-${(orderSla(o) || { state: "ok" }).state}" data-action="open-order" data-id="${o.id}" role="button" tabindex="0">
+            <div class="board-card-top">${slaRingHTML(o)}<div><b>#${esc(o.id)}</b><div class="qk-num small">${money(o.total)}</div></div>${isCold(o) ? `<span class="tag tag-cold">Chilled</span>` : ""}</div>
             <div class="small">${esc(o.customerName)} · ${o.items.reduce((n, i) => n + i.qty, 0)} items</div>
             <div class="board-card-tags"><span class="badge badge-${KIND_META[orderKind(o)].tone}-soft">${KIND_META[orderKind(o)].label}</span>${t ? `<span class="badge badge-${t.tone}-soft">${esc(t.label)}</span>` : ""}</div>
             ${st === "ready_for_rider" && o.fulfillment !== "pickup" ? `<div class="small qk-muted">${rider ? `Rider: ${esc(rider.name)}` : "Waiting for a rider"}</div>` : ""}
@@ -456,8 +617,11 @@ function orderDrawerHTML() {
     <div class="drawer-head">
       <div><div class="drawer-title">#${esc(o.id)} <span class="badge badge-${STATUS_META[o.status].tone}-soft">${STATUS_META[o.status].label}</span></div>
         <div class="qk-muted small">${fmtDateTime(o.createdAt)} · ${timeAgo(o.createdAt)}${t ? ` · <span class="tone-${t.tone}">${esc(t.label)}</span>` : ""}</div></div>
-      <button class="dialog-close" data-action="close-order-drawer" aria-label="Close">${ic("close")}</button>
+      <div class="drawer-head-right">${(() => { const sla = orderSla(o); return sla ? `<span class="sla-chip sla-${sla.state}" title="Target ${sla.target}m for this stage">${ic("clock")} ${esc(stageLabel(o.status))} ${fmtDur(sla.mins)} / ${sla.target}m</span>` : ""; })()}
+      <button class="dialog-close" data-action="close-order-drawer" aria-label="Close">${ic("close")}</button></div>
     </div>
+    ${opsStepperHTML(o)}
+    ${pay.key === "collect" ? `<div class="drawer-cash">${ic("wallet")} Rider collects <b>${money(o.total)}</b> in cash on delivery</div>` : ""}
     <div class="drawer-actions">
       ${editable && next ? `<button class="btn btn-primary btn-sm" data-action="set-order-status" data-id="${o.id}" data-status="${next.status}">${esc(next.label)}</button>` : ""}
       <button class="btn btn-outline btn-sm" data-action="print-pick-slip" data-id="${o.id}">${ic("package")} Picking slip</button>
@@ -466,7 +630,7 @@ function orderDrawerHTML() {
     </div>
     <div class="drawer-body">
       <section class="drawer-sec">
-        <div class="drawer-sec-title">Items ${picking ? `<span class="badge badge-${pickedCount === o.items.length ? "green" : "blue"}-soft">${pickedCount} of ${o.items.length} picked</span>` : ""}</div>
+        <div class="drawer-sec-title">Items · ${orderUnits(o)} units ${isCold(o) ? `<span class="tag tag-cold">Chilled — pick last, bag separately</span>` : ""} ${picking ? `<span class="badge badge-${pickedCount === o.items.length ? "green" : "blue"}-soft">${pickedCount} of ${o.items.length} picked</span>` : ""}</div>
         ${picking ? `<div class="qk-muted small" style="margin-bottom:6px">Tick each item as you pick it. Can't find one? Mark it unavailable — the customer then chooses a swap or a refund.</div>` : ""}
         ${o.items.map((it, idx) => {
           if (it.unavailable && !it.resolution) return adminOrderItemRow(o, it, idx, editable);
@@ -474,6 +638,7 @@ function orderDrawerHTML() {
           return `
           <div class="pick-row ${picked[idx] ? "is-picked" : ""}">
             ${picking && editable ? `<input type="checkbox" class="pick-check" ${picked[idx] ? "checked" : ""} data-action="toggle-picked" data-id="${o.id}" data-idx="${idx}" aria-label="Picked ${esc(it.name)}" />` : ""}
+            <img class="pick-img" src="${itemThumb(it.id)}" alt="" loading="lazy" />
             <span class="pick-qty">${it.qty}×</span>
             <span class="pick-name">${esc(it.name)}${it.resolution === "swap" ? " <span class='badge badge-blue-soft'>Swapped</span>" : it.resolution ? " <span class='badge badge-gray-soft'>Refunded</span>" : ""}<span class="qk-muted small">${esc(it.unit || "")}${cat ? ` · ${esc(cat)}` : ""}</span></span>
             <span class="qk-num">${money(it.price * it.qty)}</span>
@@ -526,6 +691,64 @@ function orderDrawerHTML() {
     </div>
   </aside>`;
 }
+// Horizontal stage tracker: when each stage happened and how long it took.
+function opsStepperHTML(o) {
+  if (["cancelled", "returned"].includes(o.status)) {
+    const at = statusAt(o, o.status);
+    return `<div class="stepper-void">${ic("alert")} ${esc(STATUS_META[o.status].label)}${at ? ` · ${fmtDateTime(at)}` : ""}</div>`;
+  }
+  const steps = o.fulfillment === "pickup"
+    ? [["new", "Placed"], ["confirmed", "Accepted"], ["picking", "Picking"], ["packing", "Packed"], ["delivered", "Collected"]]
+    : [["new", "Placed"], ["confirmed", "Accepted"], ["picking", "Picking"], ["packing", "Packed"], ["ready_for_rider", "Ready"], ["picked_up", "Out"], ["delivered", "Delivered"]];
+  const curIdx = steps.findIndex(([k]) => k === o.status);
+  let prevAt = null;
+  return `<ol class="stepper">${steps.map(([k, label], i) => {
+    const at = k === "new" ? o.createdAt : statusAt(o, k);
+    const state = i < curIdx || o.status === "delivered" ? "done" : i === curIdx ? "current" : "todo";
+    const took = at && prevAt ? fmtDur((at - prevAt) / 60000) : "";
+    if (at) prevAt = at;
+    const live = state === "current" && o.status !== "delivered" ? orderSla(o) : null;
+    return `<li class="step step-${state}"><span class="step-dot">${state === "done" ? ic("check") : ""}</span><span class="step-label">${label}</span><span class="step-time">${at ? fmtTime(at) : ""}${took ? ` <em>+${took}</em>` : ""}${live ? `<em class="tone-${live.state === "ok" ? "green" : "red"}">${fmtDur(live.mins)}</em>` : ""}</span></li>`;
+  }).join("")}</ol>`;
+}
+// Prototype only: fresh orders across the stages so the timers can be seen working.
+function addDemoLiveOrders() {
+  const ids = scopedBranchIds();
+  const branch = State.branches.find((b) => b.active && (!ids || ids.includes(b.id))) || State.branches[0];
+  const riders = State.partners.filter((p) => p.branchId === branch.id && p.active !== false);
+  const people = [["Aarav Mehta", "91234501", "12 Tampines St 41, #05-123, Singapore 521012"], ["Siti Nurhaliza", "82345602", "88 Bedok North Rd, #10-08, Singapore 460088"], ["Wei Jie", "93456703", "5 Jurong West Ave 1, #02-14, Singapore 640005"], ["Priya Nair", "84567804", "230 Ang Mo Kio Ave 3, #12-345, Singapore 560230"], ["Marcus Lim", "95678905", "18 Bedok North Ave 4, #07-112, Singapore 460018"], ["Farah Yusof", "86789006", "10 Tampines Central 1, #08-22, Singapore 529536"]];
+  const plan = [["new", 1, []], ["new", 4, []], ["confirmed", 6, [["confirmed", 4]]], ["picking", 9, [["confirmed", 7], ["picking", 5]]], ["packing", 13, [["confirmed", 12], ["picking", 10], ["packing", 2]]], ["ready_for_rider", 24, [["confirmed", 22], ["picking", 20], ["packing", 14], ["ready_for_rider", 12]]]];
+  const now = Date.now();
+  const today = isoDate(new Date());
+  const slot = State.slotSettings.templates.find((t) => { const [h] = t.start.split(":").map(Number); return h > new Date().getHours(); });
+  plan.forEach(([status, ageMin, hist], n) => {
+    const [name, mobile, address] = people[n];
+    const picks = [...SEED_ITEMS].sort(() => Math.random() - 0.5).slice(0, 2 + (n % 4)).map((it) => ({ id: it.id, name: it.name, unit: it.unit, price: it.price, eta: it.eta, qty: 1 + ((n + it.id) % 3), delivered: null }));
+    const itemTotal = picks.reduce((s, i) => s + i.price * i.qty, 0);
+    const fee = itemTotal < State.deliverySettings.freeDeliveryThreshold ? State.deliverySettings.deliveryFee : 0;
+    const scheduled = n === 2 && slot;
+    const created = now - ageMin * 60000;
+    const key = scheduled ? slotKey(branch.id, today, slot.id) : null;
+    State.orders.unshift({
+      id: genId("QK"), invoiceNo: genId("INV-"), customerName: name, contactName: name, contactMobile: mobile, address, branchId: branch.id,
+      items: picks, itemTotal, total: itemTotal + fee + (scheduled ? 0 : State.deliverySettings.expressEnabled !== false ? expressChargeAmount() : 0), deliveryFee: fee,
+      expressCharge: scheduled ? 0 : expressChargeAmount(), walletApplied: 0, discount: 0, paymentMethod: n % 2 ? "Cash on Delivery" : "PayNow",
+      status, deliverySpeed: scheduled ? "scheduled" : "express", slotKey: key, scheduledSlot: key ? slotLabelFromKey(key) : null,
+      deliveryPartnerId: status === "ready_for_rider" && riders[0] ? riders[0].id : null, rating: null, riderEarning: 0, createdAt: created,
+      statusHistory: [{ status: "new", at: created }, ...hist.map(([st, ago]) => ({ status: st, at: now - ago * 60000 }))],
+    });
+  });
+  persist("orders");
+}
+// Keep timers moving while the Orders console is open (skipped while typing or in a dialog).
+setInterval(() => {
+  if (!State.session || State.session.role !== "admin" || UI.adminTab !== "orders" || UI.modal || UI.openFilter) return;
+  const a = document.activeElement;
+  if (a && ["INPUT", "SELECT", "TEXTAREA"].includes(a.tagName)) return;
+  const y = window.scrollY;
+  render();
+  window.scrollTo(0, y);
+}, 30000);
 function printHtmlDocument(title, bodyHtml) {
   const css = "body{font-family:Arial,Helvetica,sans-serif;font-size:12px;color:#000;margin:24px;line-height:1.4}table{width:100%;border-collapse:collapse;margin-top:10px}th,td{padding:6px;border-bottom:1px solid #ddd;text-align:left}th{background:#f2f2f2}.box{display:inline-block;width:14px;height:14px;border:1.5px solid #000}h1{font-size:16px;margin:0 0 4px}.muted{color:#555}.note{border:1px solid #999;padding:6px;margin-top:8px}.cat td{background:#fafafa;font-weight:700}";
   const frame = document.createElement("iframe");
@@ -950,6 +1173,7 @@ Object.assign(Actions, {
     State.orders = State.orders.map((x) => x.id === id ? { ...x, items: x.items.map((it, i) => i === idx ? { ...it, unavailable: true } : it) } : x);
     persist("orders"); showToast(`${o.items[idx].name} marked unavailable — offer a swap or refund below`, "danger"); render();
   },
+  "demo-live-orders"() { addDemoLiveOrders(); UI.adminOrderFilter = "action"; showToast("Added 6 live demo orders — watch the timers"); render(); },
   "print-pick-slip"(el) { const o = State.orders.find((x) => x.id === el.dataset.id); if (o) printPickSlip(o); },
   "open-customer"(el) { UI.customerKey = el.dataset.key; UI.orderDrawerId = null; UI.adminTab = "customers"; window.scrollTo(0, 0); render(); },
   "close-customer"() { UI.customerKey = null; render(); },
@@ -1024,11 +1248,13 @@ Object.assign(EXPORTS, {
 /* ---------------- 13. What's changed ---------------- */
 WHATS_NEW.unshift({ area: "Admin panel — filters, Orders, Customers (round 3)", items: [
   ["Filter bar", "Same bar on Orders, Customers, Catalogue, Stock, Stock history, Delivery Partners, Users and the Dashboard: a search box (with clear ×) and Sort on top; filters below as dashed '+ Filter' pills that open a small menu and become solid chips ('Type | Express ×') once set — × clears one, 'Clear filters' clears all. 'Showing X of Y' tells you how much is hidden. Excel/CSV export downloads exactly what the filters show."],
-  ["Orders — today at a glance", "Stats on top: orders today (express / scheduled / pickup), in progress, late now, sales today."],
-  ["Orders — Needs action", "First tab: new orders not yet confirmed, late orders, items marked unavailable waiting for the customer, and return requests — each with its reason."],
-  ["Orders — timing badges", "Every open order says if it's on time: 'Not confirmed · 14 min', 'Express overdue 5 min', 'Slot in 20 min — not packed', 'Slot ended — not delivered'."],
-  ["Orders — three views", "List · By slot (today's orders grouped under each delivery window with booked/capacity, express and pickup in their own groups) · Board (a column per stage with a one-tap 'next step' button on each card)."],
-  ["Orders — side panel", "Click any order: items as a picking checklist (tick as you pick, 'Not available' starts the swap/refund flow), customer with call link and notes, delivery and rider, payment and bill, return/rating, timeline. Print a picking slip sorted by category, or the invoice."],
+  ["Orders — live operations console", "Rebuilt like the store-ops screens quick-commerce dark stores use. A 'Live' header (refreshes every 30 seconds) and a KPI strip: orders today (vs yesterday), live now, at risk / late, average time to pack vs target, delivered on time, cash to collect, riders ready."],
+  ["Orders — stage targets (SLA)", "Each stage has a target: accept 3m, confirm→pick 5m, pick 8m, pack 5m, dispatch 10m, deliver 30m. Every open order shows a timer ring for its current stage that fills up and turns amber (75%) then red (over), with the time printed inside."],
+  ["Orders — pipeline", "New › Confirmed › Picking › Packing › Ready to dispatch › Out for delivery › Delivered (today): count and oldest wait per stage, coloured by the worst order. Click a stage to see only those. Below it: Needs action · All orders · Cancelled · Returned."],
+  ["Orders — rows", "Timer ring, order no + stage, express or slot, customer + postcode + rider, product photos with items/units, 'Chilled' when dairy, meat or frozen food is in the order, 'Collect S$x' on cash orders, and the next-step button (Confirm → Start picking → …). Sorted 'Most urgent first' by default."],
+  ["Orders — right rail", "Riders (ready / on delivery with the order / offline), today's slot load, and average time per stage today vs target."],
+  ["Orders — side panel", "Stage tracker with the time of each step and how long it took, live timer chip, cash-to-collect banner, product photos in the picking checklist, 'Chilled — pick last, bag separately', customer, delivery and rider, payment, timeline; picking slip and invoice."],
+  ["Orders — demo button", "Prototype only: 'Demo: add live orders' adds six fresh orders across the stages so the timers can be seen working."],
   ["Orders — filters", "Placed date (presets or custom), type, delivery slot, payment method, paid / cash to collect / refunded, rider (or not assigned), issues (late, item unavailable, return)."],
   ["Customers — overview", "Stats (customers, new this month, repeat rate, average order) and a table with orders, spent, average order, last order, wallet and open orders / blocked."],
   ["Customers — filters", "Last order, total spent, number of orders, usual store, and 'show only' (open order, refund pending, wallet balance, blocked)."],
