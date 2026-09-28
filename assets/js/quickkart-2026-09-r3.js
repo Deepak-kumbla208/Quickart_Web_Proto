@@ -101,7 +101,7 @@ const qmatch = (q, ...fields) => !q || fields.some((x) => String(x || "").toLowe
     }
     return { ...o, deliverySpeed: "express" };
   });
-  // A few older customers, so "At risk" and "Inactive" segments aren't empty.
+  // A few older customers, so the "Last order: not in 30+ / 90+ days" filters have something to find.
   const old = [["Rahul Verma", "91110001", 45], ["Mei Lin Goh", "91110002", 70], ["Suresh Pillai", "91110003", 120], ["Nadia Rahman", "91110004", 150]];
   old.forEach(([name, mobile, daysAgo], i) => {
     [0, 6].forEach((extra, k) => {
@@ -515,26 +515,15 @@ function walletHistoryFor(c) {
 }
 function customerRecords() {
   const base = customersFromOrders();
-  const spends = base.map((c) => c.totalSpent).sort((a, b) => b - a);
-  const vipLine = spends.length ? spends[Math.max(0, Math.ceil(spends.length * 0.1) - 1)] : Infinity;
-  const now = Date.now();
   return base.map((c) => {
     const billable = c.orders.filter((o) => o.status !== "cancelled");
     const wallet = walletHistoryFor(c);
     const stores = {};
     c.orders.forEach((o) => { if (o.branchId) stores[o.branchId] = (stores[o.branchId] || 0) + 1; });
     const favStoreId = Number(Object.keys(stores).sort((a, b) => stores[b] - stores[a])[0]) || null;
-    const seg = {
-      vip: c.totalSpent > 0 && c.totalSpent >= vipLine,
-      new: c.firstOrderAt >= now - 30 * 86400000,
-      repeat: c.orderCount >= 2,
-      atrisk: c.lastOrderAt < now - 30 * 86400000 && c.lastOrderAt >= now - 90 * 86400000,
-      inactive: c.lastOrderAt < now - 90 * 86400000,
-    };
-    const primary = seg.vip ? "vip" : seg.new ? "new" : seg.atrisk ? "atrisk" : seg.inactive ? "inactive" : seg.repeat ? "repeat" : "once";
     const meta = customerMeta(c.key);
     return {
-      ...c, seg, primary, favStoreId, walletHistory: wallet,
+      ...c, favStoreId, walletHistory: wallet,
       walletBalance: Math.max(0, round2(wallet.reduce((s, r) => s + r.amount, 0))),
       aov: billable.length ? c.totalSpent / billable.length : 0,
       openOrders: c.orders.filter((o) => !TERMINAL_STATUSES.includes(o.status)).length,
@@ -544,20 +533,12 @@ function customerRecords() {
     };
   });
 }
-const SEGMENTS = {
-  vip: { label: "VIP", tone: "green", hint: "Top 10% by total spend" },
-  new: { label: "New", tone: "blue", hint: "First order in the last 30 days" },
-  repeat: { label: "Repeat", tone: "blue", hint: "2 or more orders" },
-  atrisk: { label: "At risk", tone: "yellow", hint: "Ordered before, nothing in 30–90 days" },
-  inactive: { label: "Inactive", tone: "red", hint: "Nothing in 90+ days" },
-  once: { label: "One-time", tone: "gray", hint: "One order, not recent" },
-};
 function customersFiltered(all) {
   const f = F("customers");
   const now = Date.now();
   const list = all.filter((c) => {
     if (!qmatch(f.q, c.name, c.mobile)) return false;
-    if (f.segment && !(f.segment === "once" ? c.primary === "once" : c.seg[f.segment])) return false;
+
     if (f.last === "7" && c.lastOrderAt < now - 7 * 86400000) return false;
     if (f.last === "30" && c.lastOrderAt < now - 30 * 86400000) return false;
     if (f.last === "30plus" && c.lastOrderAt >= now - 30 * 86400000) return false;
@@ -590,11 +571,11 @@ function adminCustomersV2() {
     <div class="stat-card"><div class="stat-label">Repeat rate</div><div class="stat-value">${all.length ? pct((repeat / all.length) * 100) : "0%"}</div><div class="stat-sub"><span>${repeat} ordered more than once</span></div></div>
     <div class="stat-card"><div class="stat-label">Average order</div><div class="stat-value">${money(billableOrders ? all.reduce((s, c) => s + c.totalSpent, 0) / billableOrders : 0)}</div><div class="stat-sub"><span>Across all customers</span></div></div>
   </div>
-  <div class="admin-toolbar"><div class="seg-legend">${Object.entries(SEGMENTS).filter(([k]) => k !== "once").map(([k, s]) => `<button type="button" class="badge badge-${s.tone}-soft seg-chip ${F("customers").segment === k ? "on" : ""}" data-action="set-filter-btn" data-screen="customers" data-key="segment" data-value="${F("customers").segment === k ? "" : k}" title="${esc(s.hint)}">${s.label} ${all.filter((c) => c.seg[k]).length}</button>`).join("")}</div>${exportButtonsHTML("customers")}</div>
+  <div class="admin-toolbar"><span></span>${exportButtonsHTML("customers")}</div>
   ${filterBarHTML("customers", {
     search: "Name or mobile…",
     fields: [
-      { key: "segment", label: "Segment", options: Object.entries(SEGMENTS).map(([k, s]) => [k, s.label]) },
+
       { key: "last", label: "Last order", all: "Any time", options: [["7", "In the last 7 days"], ["30", "In the last 30 days"], ["30plus", "Not in 30+ days"], ["90plus", "Not in 90+ days"]] },
       { key: "spend", label: "Total spent", options: [["0-50", "Under S$50"], ["50-200", "S$50 – 200"], ["200-500", "S$200 – 500"], ["500-0", "S$500 +"]] },
       { key: "orders", label: "Orders", options: [["1", "1 order"], ["2-5", "2 – 5"], ["6+", "6 +"]] },
@@ -612,11 +593,11 @@ function customersResultsHTML() {
   return `
   ${resultCountHTML(list.length, all.length, "customers")}
   <div class="cust-list">
-    <div class="cust-row cust-head"><span>Customer</span><span>Segment</span><span class="r">Orders</span><span class="r">Spent</span><span class="r">Avg order</span><span>Last order</span><span class="r">Wallet</span></div>
+    <div class="cust-row cust-head"><span>Customer</span><span>Status</span><span class="r">Orders</span><span class="r">Spent</span><span class="r">Avg order</span><span>Last order</span><span class="r">Wallet</span></div>
     ${list.map((c) => `
     <button type="button" class="cust-row" data-action="open-customer" data-key="${esc(c.key)}">
       <span class="cust-name"><span class="avatar">${esc(c.name.split(" ").map((w) => w[0]).slice(0, 2).join("").toUpperCase())}</span><span><b>${esc(c.name)}</b><span class="qk-muted small">${c.mobile ? fmtMobile(c.mobile) : "No mobile"}</span></span></span>
-      <span><span class="badge badge-${SEGMENTS[c.primary].tone}-soft">${SEGMENTS[c.primary].label}</span>${c.blocked ? ` <span class="badge badge-red">Blocked</span>` : ""}${c.openOrders ? ` <span class="badge badge-blue-soft">${c.openOrders} open</span>` : ""}</span>
+      <span>${c.blocked ? `<span class="badge badge-red">Blocked</span> ` : ""}${c.openOrders ? `<span class="badge badge-blue-soft">${c.openOrders} open order${c.openOrders === 1 ? "" : "s"}</span>` : c.blocked ? "" : `<span class="qk-muted small">—</span>`}</span>
       <span class="r">${c.orderCount}</span>
       <span class="r qk-num">${money(c.totalSpent)}</span>
       <span class="r qk-num">${money(c.aov)}</span>
@@ -636,7 +617,7 @@ function customerDetailHTML(key) {
   <div class="summary-card cust-hero">
     <span class="avatar avatar-lg">${esc(c.name.split(" ").map((w) => w[0]).slice(0, 2).join("").toUpperCase())}</span>
     <div class="cust-hero-info">
-      <div class="drawer-title">${esc(c.name)} ${Object.keys(SEGMENTS).filter((k) => k !== "once" && c.seg[k]).map((k) => `<span class="badge badge-${SEGMENTS[k].tone}-soft" title="${esc(SEGMENTS[k].hint)}">${SEGMENTS[k].label}</span>`).join(" ")} ${c.blocked ? `<span class="badge badge-red">Blocked</span>` : ""}</div>
+      <div class="drawer-title">${esc(c.name)} ${c.blocked ? `<span class="badge badge-red">Blocked</span>` : ""}</div>
       <div class="qk-muted small">${c.mobile ? `<a href="${telHref(c.mobile)}">${fmtMobile(c.mobile)}</a> · ` : ""}Customer since ${fmtDate(c.firstOrderAt)} · last order ${timeAgo(c.lastOrderAt)}${c.favStoreId ? ` · usually ${esc((findBranch(c.favStoreId) || {}).name || "")}` : ""}</div>
       ${c.blocked ? `<div class="notice notice-danger" style="margin-top:8px">${ic("alert")}<span>Blocked by ${esc(c.blocked.by)} on ${fmtDate(c.blocked.at)} — ${esc(c.blocked.reason)}. They can browse but can't place orders.</span></div>` : ""}
     </div>
@@ -953,8 +934,8 @@ Object.assign(Submits, {
 Object.assign(EXPORTS, {
   orders: () => ({ name: "orders", columns: ["Order no", "Placed", "Customer", "Mobile", "Store", "Type", "Slot", "Status", "On time?", "Items", "Item total", "Delivery fee", "Express charge", "Coupon discount", "Wallet used", "Total", "Payment", "Payment status", "Rider"],
     rows: (F("orders").view === "board" ? sortOrders(ordersBase()) : ordersFiltered()).map((o) => { const t = orderTiming(o); return [o.id, fmtDateTime(o.createdAt), o.customerName, o.contactMobile || "", (findBranch(o.branchId) || {}).name || "", KIND_META[orderKind(o)].label, o.scheduledSlot || "", STATUS_META[o.status].label, t ? t.label : "", o.items.reduce((n, i) => n + i.qty, 0), round2(o.itemTotal != null ? o.itemTotal : o.items.reduce((s, i) => s + i.price * i.qty, 0)), round2(o.deliveryFee), round2(o.expressCharge), round2(o.couponDiscount), round2(o.walletApplied), round2(o.total), o.paymentMethod, orderPayStatus(o).label, (findPartner(o.deliveryPartnerId) || {}).name || ""]; }) }),
-  customers: () => ({ name: "customers", columns: ["Name", "Mobile", "Segment", "Orders", "Total spent", "Average order", "First order", "Last order", "Usual store", "Wallet", "Open orders", "Blocked"],
-    rows: customersFiltered(customerRecords()).map((c) => [c.name, c.mobile, SEGMENTS[c.primary].label, c.orderCount, round2(c.totalSpent), round2(c.aov), fmtDate(c.firstOrderAt), fmtDate(c.lastOrderAt), (findBranch(c.favStoreId) || {}).name || "", round2(c.walletBalance), c.openOrders, c.blocked ? "yes" : "no"]) }),
+  customers: () => ({ name: "customers", columns: ["Name", "Mobile", "Orders", "Total spent", "Average order", "First order", "Last order", "Usual store", "Wallet", "Open orders", "Blocked"],
+    rows: customersFiltered(customerRecords()).map((c) => [c.name, c.mobile, c.orderCount, round2(c.totalSpent), round2(c.aov), fmtDate(c.firstOrderAt), fmtDate(c.lastOrderAt), (findBranch(c.favStoreId) || {}).name || "", round2(c.walletBalance), c.openOrders, c.blocked ? "yes" : "no"]) }),
   catalog: () => ({ name: "products", columns: ["SKU", "Name", "Category", "Brand", "Unit", "MRP", "Price", "Cost price", "Margin %", "Supplier code", "Reorder level", "Barcode", "Selling"],
     rows: catalogueFiltered().map((i) => [i.sku, i.name, i.cat, i.brand || "", i.unit, round2(i.mrp), round2(i.price), round2(i.costPrice), i.price ? Math.round(((i.price - (i.costPrice || 0)) / i.price) * 1000) / 10 : 0, (State.suppliers.find((s) => s.id === i.supplierId) || {}).code || "", i.reorderLevel || 0, i.barcode || "", i.stock ? "yes" : "no"]) }),
   inventory: () => {
@@ -986,9 +967,9 @@ WHATS_NEW.unshift({ area: "Admin panel — filters, Orders, Customers (round 3)"
   ["Orders — three views", "List · By slot (today's orders grouped under each delivery window with booked/capacity, express and pickup in their own groups) · Board (a column per stage with a one-tap 'next step' button on each card)."],
   ["Orders — side panel", "Click any order: items as a picking checklist (tick as you pick, 'Not available' starts the swap/refund flow), customer with call link and notes, delivery and rider, payment and bill, return/rating, timeline. Print a picking slip sorted by category, or the invoice."],
   ["Orders — filters", "Placed date (presets or custom), type, delivery slot, payment method, paid / cash to collect / refunded, rider (or not assigned), issues (late, item unavailable, return)."],
-  ["Customers — overview", "Stats (customers, new this month, repeat rate, average order), segment chips (VIP, New, Repeat, At risk, Inactive) and a table with orders, spent, average order, last order and wallet."],
-  ["Customers — filters", "Segment, last order, total spent, number of orders, usual store, and 'show only' (open order, refund pending, wallet balance, blocked)."],
-  ["Customers — detail page", "Profile with segments, orders (open one to jump to its order panel), returns/refunds/cancellations, staff notes, wallet history, saved addresses, ratings and feedback, messages sent."],
+  ["Customers — overview", "Stats (customers, new this month, repeat rate, average order) and a table with orders, spent, average order, last order, wallet and open orders / blocked."],
+  ["Customers — filters", "Last order, total spent, number of orders, usual store, and 'show only' (open order, refund pending, wallet balance, blocked)."],
+  ["Customers — detail page", "Profile, orders (open one to jump to its order panel), returns/refunds/cancellations, staff notes, wallet history, saved addresses, ratings and feedback, messages sent."],
   ["Customers — actions", "Add goodwill wallet credit (reason required, S$50 per customer per 30 days), send a one-off message (push / SMS / email), block / unblock (blocked customers can browse but checkout is disabled)."],
   ["Catalogue & Stock filters", "Catalogue: category, brand, supplier, selling / switched off / out everywhere, offers, low margin, sort by price or margin. Stock: status, category, supplier, selling here, sort by quantity or value. Stock history: date, movement type, who, search."],
   ["Dashboard", "Date range now includes yesterday, this month and custom dates; Top selling items follows the range."],
