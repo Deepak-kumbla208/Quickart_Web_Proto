@@ -327,7 +327,7 @@ function findSlotByKey(key) {
   const slot = slotsFor(Number(storeId), date).find((s) => s.id === slotId);
   return slot ? { storeId: Number(storeId), date, slot } : null;
 }
-function slotDayLabel(date) { const d = slotDays().find((x) => x.date === date); return d ? d.label : date; }
+function slotDayLabel(date) { const d = slotDays().find((x) => x.date === date); return d ? d.label : new Date(`${date}T00:00:00`).toLocaleDateString("en-SG", { weekday: "short", day: "numeric", month: "short" }); }
 function slotLabelFromKey(key) { const f = findSlotByKey(key); return f ? `${slotDayLabel(f.date)}, ${fmtSlotRange(f.slot)}` : ""; }
 // Demo bookings so the prototype shows every fill colour; real orders add on top.
 function demoBooked(key, defaultCap) {

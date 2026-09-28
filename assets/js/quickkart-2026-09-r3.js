@@ -34,38 +34,88 @@ function rangeLabel(preset, fromStr, toStr) {
   if (preset === "custom") return fromStr || toStr ? `${fromStr || "…"} to ${toStr || "…"}` : "Custom dates";
   return (DATE_PRESETS.find((p) => p[0] === (preset || "")) || DATE_PRESETS[0])[1];
 }
-// fields: [{ key, label, options: [[value, label]] | groups: [{ label, options }] }]
-// date: { key, label } → preset select + From/To when "Custom dates…"
+// Filter bar (Round 3, redesigned): search box + filter pills + sort.
+// An unused filter is a dashed "+ Label" pill; once set it becomes a solid chip
+// "Label | Value ×". Pills open a small menu (not the browser's select list).
+// fields: [{ key, label, options: [[value, label]] | groups: [{ label, options }], all? }]
+// date:   { key, label } → presets + From/To dates inside the menu
+// sort:   [[value, label]] — first one is the default
+if (!Icon.plusCircle) Icon.plusCircle = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/></svg>';
+if (!Icon.sortArrows) Icon.sortArrows = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 4v16M4 7l3-3 3 3M17 20V4M14 17l3 3 3-3"/></svg>';
+if (!Icon.xCircle) Icon.xCircle = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M8 8l8 8M16 8l-8 8"/></svg>';
+function fieldOptions(fd) { return fd.groups ? fd.groups.flatMap((g) => g.options) : fd.options; }
+function fmenuHTML(screen, key, title, bodyHTML) {
+  return `<div class="fmenu" role="dialog" aria-label="${esc(title)}"><div class="fmenu-title">${esc(title)}</div>${bodyHTML}</div>`;
+}
 function filterBarHTML(screen, cfg) {
   const f = F(screen);
-  const opt = (v, l, cur) => `<option value="${esc(v)}" ${String(cur || "") === String(v) ? "selected" : ""}>${esc(l)}</option>`;
-  const select = (key, label, inner, active) => `
-    <label class="fchip ${active ? "on" : ""}"><span class="fchip-label">${esc(label)}</span>
-      <select data-action="set-filter" data-screen="${screen}" data-key="${key}" aria-label="${esc(label)}">${inner}</select>
-    </label>`;
-  const fields = (cfg.fields || []).filter(Boolean).map((fd) => {
-    const cur = f[fd.key] || "";
-    const inner = opt("", fd.all || "All", cur) + (fd.groups
-      ? fd.groups.map((g) => `<optgroup label="${esc(g.label)}">${g.options.map(([v, l]) => opt(v, l, cur)).join("")}</optgroup>`).join("")
-      : fd.options.map(([v, l]) => opt(v, l, cur)).join(""));
-    return select(fd.key, fd.label, inner, !!cur);
+  const open = UI.openFilter;
+  const isOpen = (key) => open === `${screen}:${key}`;
+  const pill = (key, label, valueLabel, menu) => {
+    const active = !!valueLabel;
+    return `
+    <div class="fpill-wrap ${isOpen(key) ? "is-open" : ""}">
+      <button type="button" class="fpill ${active ? "on" : ""}" data-action="toggle-fmenu" data-screen="${screen}" data-key="${key}" aria-haspopup="true" aria-expanded="${isOpen(key)}">
+        ${active ? `<span class="fpill-label">${esc(label)}</span><span class="fpill-sep"></span><span class="fpill-value">${esc(valueLabel)}</span>${ic("chevronDown")}` : `${ic("plusCircle")}<span>${esc(label)}</span>`}
+      </button>
+      ${active ? `<button type="button" class="fpill-x" data-action="pick-filter" data-screen="${screen}" data-key="${key}" data-value="" aria-label="Clear ${esc(label)} filter">${ic("xCircle")}</button>` : ""}
+      ${isOpen(key) ? menu : ""}
+    </div>`;
+  };
+  const optionRows = (key, options, current) => options.map(([v, l]) => {
+    const on = String(current || "") === String(v);
+    return `<button type="button" class="fmenu-opt ${on ? "on" : ""}" role="option" aria-selected="${on}" data-action="pick-filter" data-screen="${screen}" data-key="${key}" data-value="${esc(v)}"><span>${esc(l)}</span>${on ? ic("check") : ""}</button>`;
   }).join("");
+  // Date pill
   const date = cfg.date ? (() => {
     const k = cfg.date.key || "date";
     const cur = f[k] || "";
-    return select(k, cfg.date.label || "Date", DATE_PRESETS.map(([v, l]) => opt(v, l, cur)).join(""), !!cur) + (cur === "custom" ? `
-      <span class="fdates"><input type="date" class="input input-sm" value="${esc(f[`${k}From`] || "")}" data-action="set-filter" data-screen="${screen}" data-key="${k}From" aria-label="From date" />
-      <span class="qk-muted small">to</span>
-      <input type="date" class="input input-sm" value="${esc(f[`${k}To`] || "")}" data-action="set-filter" data-screen="${screen}" data-key="${k}To" aria-label="To date" /></span>` : "");
+    const value = cur ? rangeLabel(cur, f[`${k}From`], f[`${k}To`]) : "";
+    const menu = fmenuHTML(screen, k, `Filter by ${cfg.date.label.toLowerCase()} date`, `
+      <div class="fmenu-list" role="listbox">${optionRows(k, DATE_PRESETS.filter(([v]) => v !== "custom"), cur)}
+        <button type="button" class="fmenu-opt ${cur === "custom" ? "on" : ""}" data-action="pick-filter" data-screen="${screen}" data-key="${k}" data-value="custom" data-keep="1"><span>Custom dates…</span>${cur === "custom" ? ic("check") : ""}</button>
+      </div>
+      ${cur === "custom" ? `<div class="fmenu-dates">
+        <label><span>From</span><input type="date" class="input" value="${esc(f[`${k}From`] || "")}" data-action="set-filter" data-screen="${screen}" data-key="${k}From" data-keep="1" /></label>
+        <label><span>To</span><input type="date" class="input" value="${esc(f[`${k}To`] || "")}" data-action="set-filter" data-screen="${screen}" data-key="${k}To" data-keep="1" /></label>
+        <button type="button" class="btn btn-primary btn-sm btn-block" data-action="close-fmenu">Done</button>
+      </div>` : ""}`);
+    return pill(k, cfg.date.label, value, menu);
   })() : "";
-  const sort = cfg.sort ? select("sort", "Sort", cfg.sort.map(([v, l]) => opt(v, l, f.sort || cfg.sort[0][0])).join(""), false) : "";
-  const activeCount = Object.keys(f).filter((k) => k !== "sort" && k !== "view" && f[k]).length;
+  // Other pills
+  const fields = (cfg.fields || []).filter(Boolean).map((fd) => {
+    const cur = f[fd.key] || "";
+    const hit = cur ? fieldOptions(fd).find(([v]) => String(v) === String(cur)) : null;
+    const list = fd.groups
+      ? fd.groups.map((g) => `<div class="fmenu-group">${esc(g.label)}</div>${optionRows(fd.key, g.options, cur)}`).join("")
+      : optionRows(fd.key, fd.options, cur);
+    const menu = fmenuHTML(screen, fd.key, `Filter by ${fd.label.toLowerCase()}`, `<div class="fmenu-list" role="listbox">${list}</div>`);
+    return pill(fd.key, fd.label, hit ? hit[1] : "", menu);
+  }).join("");
+  // Sort (right-aligned, never "active")
+  const sort = cfg.sort ? (() => {
+    const cur = f.sort || cfg.sort[0][0];
+    const label = (cfg.sort.find(([v]) => v === cur) || cfg.sort[0])[1];
+    return `
+    <div class="fpill-wrap fsort ${isOpen("sort") ? "is-open" : ""}">
+      <button type="button" class="fsort-btn" data-action="toggle-fmenu" data-screen="${screen}" data-key="sort" aria-haspopup="true" aria-expanded="${isOpen("sort")}">${ic("sortArrows")}<span>${esc(label)}</span>${ic("chevronDown")}</button>
+      ${isOpen("sort") ? fmenuHTML(screen, "sort", "Sort by", `<div class="fmenu-list" role="listbox">${optionRows("sort", cfg.sort, cur)}</div>`) : ""}
+    </div>`;
+  })() : "";
+  const activeCount = Object.keys(f).filter((k) => !["sort", "view", "q"].includes(k) && !/(From|To)$/.test(k) && f[k]).length + (f.q ? 1 : 0);
   return `
-  <div class="fbar">
-    ${cfg.search ? `<div class="search-box fbar-search"><span>${ic("search")}</span><input class="input" value="${esc(f.q || "")}" oninput="onFilterSearch('${screen}', this.value)" placeholder="${esc(cfg.search)}" /></div>` : ""}
-    <div class="fbar-chips">${date}${fields}${sort}
-      ${activeCount ? `<button type="button" class="link-btn fbar-clear" data-action="clear-filters" data-screen="${screen}">Clear all (${activeCount})</button>` : ""}
+  <div class="fbar" role="search">
+    ${cfg.search ? `
+    <div class="fsearch">
+      ${ic("search")}
+      <input type="search" class="fsearch-input" value="${esc(f.q || "")}" oninput="onFilterSearch('${screen}', this.value)" placeholder="${esc(cfg.search)}" aria-label="${esc(cfg.search)}" autocomplete="off" />
+      <button type="button" class="fsearch-x" data-action="clear-search" data-screen="${screen}" aria-label="Clear search">${ic("xCircle")}</button>
+    </div>` : ""}
+    <div class="fpills">
+      ${date}${fields}
+      ${activeCount ? `<button type="button" class="fclear" data-action="clear-filters" data-screen="${screen}">Clear filters</button>` : ""}
     </div>
+    ${sort}
   </div>`;
 }
 function resultCountHTML(shown, total, noun) {
@@ -308,7 +358,7 @@ function orderRowHTML(o) {
   <button type="button" class="ord-row ${UI.orderDrawerId === o.id ? "is-open" : ""}" data-action="open-order" data-id="${o.id}">
     <span class="ord-id"><b>#${esc(o.id)}</b><span class="qk-muted small">${fmtDateTime(o.createdAt)}</span></span>
     <span class="ord-cust"><b>${esc(o.customerName)}</b><span class="qk-muted small">${o.contactMobile ? fmtMobile(o.contactMobile) : "—"}</span></span>
-    <span class="ord-type"><span class="badge badge-${KIND_META[kind].tone}-soft">${KIND_META[kind].label}</span><span class="qk-muted small">${kind === "scheduled" && o.scheduledSlot ? esc(o.scheduledSlot) : branch ? esc(branch.name) : ""}</span></span>
+    <span class="ord-type"><span class="badge badge-${KIND_META[kind].tone}-soft">${KIND_META[kind].label}</span><span class="qk-muted small">${kind === "scheduled" && (o.slotKey || o.scheduledSlot) ? esc((o.slotKey && slotLabelFromKey(o.slotKey)) || o.scheduledSlot) : branch ? esc(branch.name) : ""}</span></span>
     <span class="ord-amt"><b class="qk-num">${money(o.total)}</b><span class="qk-muted small">${o.items.reduce((n, i) => n + i.qty, 0)} items · <span class="tone-${pay.tone}">${pay.label}</span></span></span>
     <span class="ord-status"><span class="badge badge-${STATUS_META[o.status].tone}-soft">${STATUS_META[o.status].label}</span>${t ? `<span class="badge badge-${t.tone}-soft timing">${esc(t.label)}</span>` : ""}${reason && (!t || reason !== t.label) ? `<span class="small tone-red">${esc(reason)}</span>` : ""}</span>
   </button>`;
@@ -862,15 +912,28 @@ function setFilter(screen, key, value) {
 }
 (function wrapExistingActions() {
   const adminTab = Actions["admin-tab"];
-  Actions["admin-tab"] = (el) => { UI.customerKey = null; UI.orderDrawerId = null; adminTab(el); };
+  Actions["admin-tab"] = (el) => { UI.customerKey = null; UI.orderDrawerId = null; UI.openFilter = null; adminTab(el); };
   const login = Submits["submit-login"];
   Submits["submit-login"] = (form) => {
     login(form);
     if (State.session && State.session.role === "customer") { State.demoCustomerName = State.session.name; persist("demoCustomerName"); }
   };
 })();
+// A filter menu closes on a click outside it, or on Esc.
+document.addEventListener("click", (ev) => {
+  if (!UI.openFilter) return;
+  if (ev.target.closest(".fmenu") || ev.target.closest('[data-action="toggle-fmenu"]')) return;
+  UI.openFilter = null; render();
+});
+document.addEventListener("keydown", (ev) => {
+  if (ev.key === "Escape" && UI.openFilter) { UI.openFilter = null; render(); }
+});
 Object.assign(Actions, {
   "set-filter"(el) { setFilter(el.dataset.screen, el.dataset.key, el.value); },
+  "toggle-fmenu"(el) { const id = `${el.dataset.screen}:${el.dataset.key}`; UI.openFilter = UI.openFilter === id ? null : id; render(); },
+  "close-fmenu"() { UI.openFilter = null; render(); },
+  "pick-filter"(el) { if (!el.dataset.keep) UI.openFilter = null; setFilter(el.dataset.screen, el.dataset.key, el.dataset.value); },
+  "clear-search"(el) { F(el.dataset.screen).q = ""; render(); const box = document.querySelector(".fsearch-input"); if (box) box.focus(); },
   "set-filter-btn"(el) { setFilter(el.dataset.screen, el.dataset.key, el.dataset.value); },
   "clear-filters"(el) { const f = F(el.dataset.screen); const keep = { sort: f.sort, view: f.view }; UI.filters[el.dataset.screen] = Object.fromEntries(Object.entries(keep).filter(([, v]) => v)); render(); },
   "open-order"(el) { UI.orderDrawerId = el.dataset.id; if (UI.adminTab !== "orders") { UI.adminTab = "orders"; UI.adminOrderFilter = "all"; UI.customerKey = null; } render(); },
@@ -960,7 +1023,7 @@ Object.assign(EXPORTS, {
 
 /* ---------------- 13. What's changed ---------------- */
 WHATS_NEW.unshift({ area: "Admin panel — filters, Orders, Customers (round 3)", items: [
-  ["Filter bar", "One filter bar on Orders, Customers, Catalogue, Stock, Stock history and Delivery Partners: search, dropdown filters that turn blue when used, a sort, and Clear all. 'Showing X of Y' tells you how much is hidden. Excel/CSV export downloads exactly what the filters show."],
+  ["Filter bar", "Same bar on Orders, Customers, Catalogue, Stock, Stock history, Delivery Partners, Users and the Dashboard: a search box (with clear ×) and Sort on top; filters below as dashed '+ Filter' pills that open a small menu and become solid chips ('Type | Express ×') once set — × clears one, 'Clear filters' clears all. 'Showing X of Y' tells you how much is hidden. Excel/CSV export downloads exactly what the filters show."],
   ["Orders — today at a glance", "Stats on top: orders today (express / scheduled / pickup), in progress, late now, sales today."],
   ["Orders — Needs action", "First tab: new orders not yet confirmed, late orders, items marked unavailable waiting for the customer, and return requests — each with its reason."],
   ["Orders — timing badges", "Every open order says if it's on time: 'Not confirmed · 14 min', 'Express overdue 5 min', 'Slot in 20 min — not packed', 'Slot ended — not delivered'."],

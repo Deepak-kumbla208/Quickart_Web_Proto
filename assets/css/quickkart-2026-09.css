@@ -145,23 +145,73 @@
 .dash-nav-sub .ic { width: 14px; height: 14px; }
 .dash-topbar h1 .crumb { color: var(--muted); font-weight: 600; font-size: .75em; }
 
-/* ===== Round 3 — filter bar ===== */
-.fbar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; background: var(--card); border: 1px solid var(--line); border-radius: var(--r-lg); padding: 10px 12px; margin-bottom: 10px; }
-.fbar-search { flex: 1 1 240px; max-width: 360px; }
-.fbar-chips { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
-.fchip { position: relative; display: inline-flex; align-items: center; gap: 4px; border: 1px solid var(--line); background: var(--bg); border-radius: var(--r-pill); padding: 0 4px 0 12px; height: 32px; font-size: 12.5px; cursor: pointer; }
-.fchip:hover { border-color: #C4D5E4; }
-.fchip-label { color: var(--muted); font-weight: 600; white-space: nowrap; }
-.fchip select { appearance: none; -webkit-appearance: none; border: none; background: transparent; font: inherit; font-weight: 700; color: var(--ink); padding: 0 22px 0 2px; height: 30px; cursor: pointer; max-width: 190px; background-image: linear-gradient(45deg, transparent 50%, currentColor 50%), linear-gradient(135deg, currentColor 50%, transparent 50%); background-position: calc(100% - 11px) 13px, calc(100% - 7px) 13px; background-size: 4px 4px; background-repeat: no-repeat; }
-.fchip select { field-sizing: content; min-width: 48px; }
-.fchip select:focus-visible { outline: 2px solid var(--primary); border-radius: var(--r-pill); }
-.fchip.on { background: var(--tint); border-color: var(--primary); }
-.fchip.on .fchip-label, .fchip.on select { color: var(--primary); }
-.fdates { display: inline-flex; align-items: center; gap: 6px; }
-.fdates .input { width: 140px; }
-.fbar-clear { font-size: 12.5px; margin-left: 4px; }
-.fcount { font-size: 12px; color: var(--muted); margin: 2px 0 8px; }
-.insights-head .fbar { padding: 0; border: none; background: none; margin: 0; }
+/* ===== Round 3 — filter bar (redesigned: search + filter pills + sort) ===== */
+.fbar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 12px; margin: 4px 0 12px; }
+.fcount { font-size: 12px; color: var(--muted); margin: 0 0 8px; }
+
+/* search */
+.fsearch { position: relative; flex: 1 1 280px; max-width: 420px; }
+.fsearch > .ic { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); width: 17px; height: 17px; color: var(--muted); pointer-events: none; }
+.fsearch-input { width: 100%; height: 42px; padding: 0 38px 0 40px; border: 1px solid var(--line); border-radius: 10px; background: var(--card); color: var(--ink); font-size: 14px; box-shadow: var(--shadow-xs); transition: border-color .15s, box-shadow .15s; }
+.fsearch-input::placeholder { color: #7A8794; }
+.fsearch-input:hover { border-color: #C4D5E4; }
+.fsearch-input:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 18%, transparent); }
+.fsearch-input::-webkit-search-cancel-button { display: none; }
+.fsearch-x { position: absolute; right: 6px; top: 50%; transform: translateY(-50%); width: 30px; height: 30px; border: none; border-radius: 50%; background: transparent; color: var(--muted); display: inline-flex; align-items: center; justify-content: center; cursor: pointer; }
+.fsearch-x:hover { background: var(--bg); color: var(--ink); }
+.fsearch-x .ic { width: 14px; height: 14px; }
+.fsearch-input:placeholder-shown ~ .fsearch-x { display: none; }
+
+/* pills */
+.fpills { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; flex: 1 1 100%; min-width: 0; order: 3; }
+.fpill-wrap { position: relative; display: inline-flex; align-items: center; }
+.fpill { display: inline-flex; align-items: center; gap: 6px; height: 34px; padding: 0 12px; border-radius: var(--r-pill); border: 1px dashed #B8C6D3; background: transparent; color: #4A5866; font-size: 13px; font-weight: 600; cursor: pointer; white-space: nowrap; transition: background-color .15s, border-color .15s, color .15s; }
+.fpill .ic { width: 15px; height: 15px; }
+.fpill:hover { background: var(--card); border-color: #93A6B8; color: var(--ink); }
+.fpill:focus-visible, .fpill-x:focus-visible, .fsort-btn:focus-visible, .fmenu-opt:focus-visible, .fclear:focus-visible, .fsearch-x:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+.fpill-wrap.is-open .fpill { background: var(--card); border-color: var(--primary); color: var(--primary); }
+.fpill.on { border: 1px solid color-mix(in srgb, var(--primary) 35%, transparent); background: var(--tint); color: var(--primary); padding-right: 34px; }
+.fpill.on .fpill-label { font-weight: 600; color: #3E556B; }
+.fpill.on .fpill-sep { width: 1px; height: 14px; background: color-mix(in srgb, var(--primary) 30%, transparent); }
+.fpill.on .fpill-value { font-weight: 700; max-width: 200px; overflow: hidden; text-overflow: ellipsis; }
+.fpill.on .ic { width: 13px; height: 13px; opacity: .7; }
+.fpill-x { position: absolute; right: 5px; top: 50%; transform: translateY(-50%); width: 24px; height: 24px; border: none; border-radius: 50%; background: transparent; color: var(--primary); display: inline-flex; align-items: center; justify-content: center; cursor: pointer; }
+.fpill-x:hover { background: color-mix(in srgb, var(--primary) 14%, transparent); }
+.fpill-x .ic { width: 12px; height: 12px; }
+.fclear { border: none; background: none; color: var(--primary); font-size: 13px; font-weight: 700; padding: 6px 4px; cursor: pointer; border-radius: var(--r-sm); }
+.fclear:hover { text-decoration: underline; }
+
+/* sort */
+.fsort { margin-left: auto; order: 2; }
+.fsort-btn { display: inline-flex; align-items: center; gap: 6px; height: 34px; padding: 0 12px; border: 1px solid var(--line); border-radius: var(--r-pill); background: var(--card); color: var(--ink); font-size: 13px; font-weight: 600; cursor: pointer; white-space: nowrap; transition: border-color .15s; }
+.fsort-btn:hover, .fsort.is-open .fsort-btn { border-color: #93A6B8; }
+.fsort-btn .ic { width: 15px; height: 15px; color: var(--muted); }
+.fsort .fmenu { left: auto; right: 0; }
+
+/* menu */
+.fmenu { position: absolute; top: calc(100% + 6px); left: 0; z-index: 30; min-width: 230px; max-width: 320px; background: var(--card); border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow-lg); padding: 6px; animation: fmenuIn .14s ease-out; }
+@keyframes fmenuIn { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
+.fmenu-title { font-size: 11.5px; font-weight: 700; color: var(--muted); padding: 6px 10px 4px; }
+.fmenu-list { max-height: 300px; overflow-y: auto; display: flex; flex-direction: column; }
+.fmenu-group { font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); padding: 10px 10px 4px; }
+.fmenu-opt { display: flex; align-items: center; justify-content: space-between; gap: 10px; width: 100%; min-height: 36px; padding: 6px 10px; border: none; border-radius: 8px; background: transparent; color: var(--ink); font-size: 13.5px; text-align: left; cursor: pointer; }
+.fmenu-opt:hover { background: var(--bg); }
+.fmenu-opt.on { color: var(--primary); font-weight: 700; background: var(--tint); }
+.fmenu-opt .ic { width: 15px; height: 15px; flex-shrink: 0; }
+.fmenu-dates { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; padding: 8px 6px 4px; border-top: 1px solid var(--line); margin-top: 6px; }
+.fmenu-dates label { display: flex; flex-direction: column; gap: 4px; font-size: 11.5px; font-weight: 700; color: var(--muted); }
+.fmenu-dates .input { min-height: 36px; padding: 6px 8px; font-size: 13px; }
+.fmenu-dates .btn { grid-column: 1 / -1; }
+
+/* the Dashboard's period pill sits inside the insights header */
+.insights-head .fbar { margin: 0; }
+@media (prefers-reduced-motion: reduce) { .fmenu { animation: none; } }
+@media (max-width: 600px) {
+  .fsearch { max-width: none; flex-basis: 100%; }
+  .fpill, .fsort-btn { height: 40px; }
+  .fsort { margin-left: 0; }
+  .fmenu { position: fixed; left: 12px; right: 12px; top: auto; bottom: 12px; max-width: none; }
+}
 
 /* segmented control */
 .seg { display: inline-flex; background: var(--bg); border: 1px solid var(--line); border-radius: var(--r-pill); padding: 3px; }
@@ -253,6 +303,6 @@ button.cust-row:hover { border-color: #C4D5E4; box-shadow: var(--shadow-xs); }
   .ord-row { grid-template-columns: 1fr; }
   .topitems-grid { grid-template-columns: 1fr; }
   .cust-hero { flex-direction: column; }
-  .fchip select { max-width: 140px; }
 }
 .board-card .badge { white-space: normal; text-align: left; line-height: 1.3; }
+#fres-orders > .pill-row { flex-wrap: wrap; overflow: visible; }
