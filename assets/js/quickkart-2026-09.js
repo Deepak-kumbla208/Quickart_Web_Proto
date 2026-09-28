@@ -288,6 +288,7 @@ function checkoutAssignment() {
   return { ...best, fallback: false, nearest: stores[0] };
 }
 function checkoutStockNoticeHTML(a) {
+  if (State.session && isCustomerBlocked(State.session.name)) return `<div class="notice notice-danger" style="margin-bottom:12px">${ic("alert")}<span>Your account can't place orders right now. Please contact ${esc(State.companyProfile.phone || "customer support")}.</span></div>`;
   if (a.reason === "not-serviceable") return `<div class="notice notice-danger" style="margin-bottom:12px">${ic("alert")}<span>We don't deliver to this address yet — no store's delivery radius covers it. Choose another address or pickup.</span></div>`;
   if (a.shortages && a.shortages.length) {
     return `<div class="notice notice-danger stock-short-notice" style="margin-bottom:12px">${ic("alert")}<div>
@@ -489,10 +490,9 @@ function adminSlotDayCard(branch, d, editable) {
 
 /* ---------------- 10. Admin ▸ Dashboard insights ---------------- */
 function dashboardInsightsHTML(scopedOrders) {
-  const range = UI.dashRange || "30";
-  const now = new Date();
-  const from = range === "today" ? new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime() : Date.now() - Number(range) * 86400000;
-  const orders = scopedOrders.filter((o) => o.status !== "cancelled" && o.createdAt >= from);
+  // Round 3: period comes from the shared filter bar (presets or custom dates).
+  const dr = dashRange();
+  const orders = scopedOrders.filter((o) => o.status !== "cancelled" && inRange(o.createdAt, dr.range));
   // Top categories → top items inside each.
   const cats = {};
   orders.forEach((o) => o.items.forEach((it) => {
@@ -517,14 +517,14 @@ function dashboardInsightsHTML(scopedOrders) {
     return { ...s, idx, count: list.length, sales: list.reduce((n, o) => n + o.total, 0) };
   });
   const busiest = secStats.reduce((b, s) => (!b || s.count > b.count ? s : b), null);
-  const rangeLabel = { today: "Today", 7: "Last 7 days", 30: "Last 30 days" }[range];
+  const itemTotals = {};
+  orders.forEach((o) => o.items.forEach((it) => { const t = itemTotals[it.name] || (itemTotals[it.name] = { name: it.name, qty: 0, revenue: 0 }); t.qty += it.qty; t.revenue += it.price * it.qty; }));
+  const topItems = Object.values(itemTotals).sort((a, b) => b.qty - a.qty).slice(0, 8);
+  const maxItemQty = topItems.length ? topItems[0].qty : 1;
   return `
   <div class="insights-head">
-    <div class="summary-card-title" style="margin:0">Sales insights · ${rangeLabel}</div>
-    <div class="filter-pill-row">
-      ${[["today", "Today"], ["7", "7 days"], ["30", "30 days"]].map(([k, l]) => `<button type="button" class="filter-pill ${range === k ? "active" : ""}" data-action="dash-range" data-range="${k}">${l}</button>`).join("")}
-      ${exportButtonsHTML("dashboard")}
-    </div>
+    <div class="summary-card-title" style="margin:0">Sales insights · ${esc(dr.label)} <span class="qk-muted small" style="font-weight:600">${orders.length} orders · ${money(orders.reduce((s, o) => s + o.total, 0))}</span></div>
+    <div class="filter-pill-row">${filterBarHTML("dash", { date: { key: "date", label: "Period" } })}${exportButtonsHTML("dashboard")}</div>
   </div>
   <div class="dash-grid-2">
     <div class="summary-card">
@@ -555,6 +555,12 @@ function dashboardInsightsHTML(scopedOrders) {
       </div>
       ${canEdit(currentUser(), "tax") || isSuperAdmin(currentUser()) ? `<button class="link-btn" data-action="edit-peak-sections" style="margin-top:8px">${ic("edit")} Edit time sections</button>` : ""}
     </div>
+  </div>
+  <div class="summary-card" style="margin-bottom:16px">
+    <div class="summary-card-title">Top selling items · ${esc(dr.label)}</div>
+    ${topItems.length ? `<div class="topitems-grid">${topItems.map((t, idx) => `
+      <div class="topseller-row"><div class="row"><span>${idx + 1}. ${esc(t.name)}</span><span>${t.qty} sold · ${money(t.revenue)}</span></div>
+      <div class="progress-track"><div class="progress-fill" style="width:${(t.qty / maxItemQty) * 100}%"></div></div></div>`).join("")}</div>` : `<div class="qk-muted small">No sales in this period.</div>`}
   </div>`;
 }
 function peakSectionsModal() {
@@ -587,12 +593,20 @@ function peakSectionsModal() {
 function adminUsersListV2(editable) {
   const me = currentUser();
   const roleFilter = UI.userRoleFilter || "all";
-  const users = State.users.filter((u) => roleFilter === "all" || u.roleId === roleFilter);
+  const uf = F("users");
+  const users = State.users.filter((u) => (roleFilter === "all" || u.roleId === roleFilter)
+    && qmatch(uf.q, u.name, u.email, u.mobile)
+    && (!uf.store || isSuperAdmin(u) || (u.storeIds || []).includes(Number(uf.store)))
+    && (!uf.status || (uf.status === "active") === (u.active !== false)));
   return `
   <div class="admin-toolbar">
     ${editable ? `<button class="btn btn-primary" data-action="new-user">${ic("plus")} Add user</button>` : "<span></span>"}
     ${exportButtonsHTML("users")}
   </div>
+  ${filterBarHTML("users", { fields: [
+    { key: "store", label: "Store", options: State.branches.map((b) => [String(b.id), b.name]) },
+    { key: "status", label: "Status", options: [["active", "Active"], ["inactive", "Inactive"]] },
+  ] })}
   <div class="pill-row">
     <button class="pill ${roleFilter === "all" ? "active" : ""}" data-action="user-role-filter" data-role="all">All (${State.users.length})</button>
     ${State.roles.map((r) => `<button class="pill ${roleFilter === r.id ? "active" : ""}" data-action="user-role-filter" data-role="${r.id}">${esc(r.name)} (${State.users.filter((u) => u.roleId === r.id).length})</button>`).join("")}
@@ -719,28 +733,24 @@ function adminInventoryV2() {
   ${tab === "history" ? inventoryHistoryHTML(branchId) : inventoryStockHTML(branchId, editable)}`;
 }
 function inventoryStockHTML(branchId, editable) {
-  const f = UI.invFilter || "all";
+  FILTER_RESULTS.stock = () => inventoryRowsHTML(branchId, editable);
   return `
   <div class="admin-toolbar">
-    <div class="search-box"><span>${ic("search")}</span><input class="input" value="${esc(UI.adminInventoryQuery || "")}" oninput="onAdminInventorySearch(this.value, ${branchId})" placeholder="Search by name, SKU or category..." /></div>
+    <div class="qk-muted small">Stock on hand at <b>${esc(findBranch(branchId).name)}</b>.</div>
     <div class="filter-pill-row">
       ${editable ? `<button class="btn btn-primary btn-sm" data-action="open-stock-move" data-mode="receive" data-branch="${branchId}">${ic("plus")} Receive stock</button>
       <button class="btn btn-outline btn-sm" data-action="open-import" data-entity="inventory">${ic("upload")} Import</button>` : ""}
       ${exportButtonsHTML("inventory")}
     </div>
   </div>
-  <div class="pill-row">
-    ${[["all", "All"], ["low", "Low stock"], ["out", "Out of stock"], ["negative", "Negative"]].map(([k, l]) => `<button class="pill ${f === k ? "active" : ""}" data-action="inv-filter" data-filter="${k}">${l}</button>`).join("")}
-  </div>
-  <div id="adminInventoryList" class="inv-table">${inventoryRowsHTML(branchId, editable)}</div>`;
+  ${stockFilterBarHTML()}
+  <div id="fres-stock">${inventoryRowsHTML(branchId, editable)}</div>`;
 }
 function inventoryRowsHTML(branchId, editable) {
-  const q = (UI.adminInventoryQuery || "").toLowerCase();
-  const f = UI.invFilter || "all";
-  const items = State.items
-    .filter((i) => !q || i.name.toLowerCase().includes(q) || (i.sku || "").toLowerCase().includes(q) || i.cat.toLowerCase().includes(q))
-    .filter((i) => { const k = stockStatus(branchId, i).key; return f === "all" || (f === "low" ? k === "low" : f === "out" ? k === "out" || k === "negative" : k === f); });
+  const items = stockItemsFiltered(branchId);
   return `
+  ${resultCountHTML(items.length, State.items.length, "products")}
+  <div id="adminInventoryList" class="inv-table">
     <div class="inv-row inv-head"><span>Product</span><span>Supplier</span><span class="r">On hand</span><span class="r">Reorder at</span><span>Status</span><span class="r">Actions</span></div>
     ${items.map((item) => {
       const s = stockStatus(branchId, item);
@@ -762,15 +772,24 @@ function inventoryRowsHTML(branchId, editable) {
         </span>
       </div>`;
     }).join("")}
-    ${items.length === 0 ? `<div class="empty-state"><div class="empty-title">No products match</div></div>` : ""}`;
+    ${items.length === 0 ? `<div class="empty-state"><div class="empty-title">No products match</div></div>` : ""}
+  </div>`;
 }
 function inventoryHistoryHTML(branchId) {
-  const moves = State.stockMoves.filter((m) => m.branchId === branchId).slice(0, 200);
+  FILTER_RESULTS.stockHistory = () => inventoryHistoryRowsHTML(branchId);
   return `
   <div class="admin-toolbar"><div class="qk-muted small">Every change to this store's stock, newest first. Nothing edits a quantity without leaving a line here.</div>${exportButtonsHTML("stockHistory")}</div>
+  ${stockHistoryFilterBarHTML(branchId)}
+  <div id="fres-stockHistory">${inventoryHistoryRowsHTML(branchId)}</div>`;
+}
+function inventoryHistoryRowsHTML(branchId) {
+  const all = State.stockMoves.filter((m) => m.branchId === branchId).length;
+  const moves = stockMovesFiltered(branchId);
+  return `
+  ${resultCountHTML(Math.min(moves.length, 300), all, "movements")}
   <div class="inv-table">
     <div class="inv-row inv-hist inv-head"><span>When</span><span>Product</span><span>Movement</span><span class="r">Qty</span><span class="r">Balance</span><span>Reference / note</span><span>By</span></div>
-    ${moves.map((m) => {
+    ${moves.slice(0, 300).map((m) => {
       const item = findItem(m.itemId);
       const t = STOCK_MOVE_TYPES[m.type] || { label: m.type, tone: "gray" };
       return `<div class="inv-row inv-hist">
@@ -1216,10 +1235,8 @@ const EXPORTS = {
   },
   dashboard: () => {
     const ids = scopedBranchIds();
-    const range = UI.dashRange || "30";
-    const now = new Date();
-    const from = range === "today" ? new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime() : Date.now() - Number(range) * 86400000;
-    const orders = State.orders.filter((o) => (!ids || ids.includes(o.branchId)) && o.status !== "cancelled" && o.createdAt >= from);
+    const dr = dashRange();
+    const orders = State.orders.filter((o) => (!ids || ids.includes(o.branchId)) && o.status !== "cancelled" && inRange(o.createdAt, dr.range));
     const rows = [];
     const byCat = {}; const byItem = {};
     orders.forEach((o) => o.items.forEach((it) => { const cat = (findItem(it.id) || {}).cat || "Other"; byCat[cat] = byCat[cat] || [0, 0]; byCat[cat][0] += it.qty; byCat[cat][1] += it.qty * it.price; const k = `${cat}|${it.name}`; byItem[k] = byItem[k] || [0, 0]; byItem[k][0] += it.qty; byItem[k][1] += it.qty * it.price; }));
@@ -1439,6 +1456,7 @@ function extraModal(type) {
     case "templateForm": return templateFormModal();
     case "bulkImport": return bulkImportModal();
     case "whatsNew": return whatsNewModal();
+    case "customerModal": return customerModal(); // Round 3
     default: return "";
   }
 }

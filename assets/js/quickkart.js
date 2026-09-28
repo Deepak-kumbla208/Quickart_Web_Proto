@@ -2382,7 +2382,7 @@ function viewCheckout() {
   const speed = effectiveDeliverySpeed();
   const slotOk = isPickup || speed !== "scheduled" || selectedSlotValid(assign.branch);
   const stockOk = !!assign.branch && !assign.shortages.length;
-  const canPay = (isPickup ? !!store : !!addr) && slotOk && stockOk;
+  const canPay = (isPickup ? !!store : !!addr) && slotOk && stockOk && !isCustomerBlocked(State.session.name);
   return `
   <div class="container section checkout-layout">
     <div class="checkout-main">
@@ -3297,12 +3297,12 @@ function adminTabContent(user) {
   switch (UI.adminTab) {
     case "stores": return adminBranches();
     case "users": return adminUsers();
-    case "customers": return adminCustomers();
+    case "customers": return adminCustomersV2(); // Round 3
     case "brands": return adminBrands();
-    case "catalog": return adminCatalog();
+    case "catalog": return adminCatalogV2(); // Round 3
     case "categories": return adminCategories();
     case "homeScreen": return adminHomeScreen();
-    case "orders": return adminOrders();
+    case "orders": return adminOrdersV2(); // Round 3
     case "reports": return adminReports();
     case "partners": return adminPartners();
     case "tax": return adminBusinessSettings();
@@ -3368,15 +3368,11 @@ function adminDashboard() {
     const lowStock = State.items.filter((i) => !customerItemAvailable(i));
     return `
     <div class="dash-grid-2">
-      ${topSellers.length ? `
       <div class="summary-card">
-        <div class="summary-card-title">Top selling items</div>
-        ${topSellers.map(([name, qty], idx) => `
-          <div class="topseller-row">
-            <div class="row"><span>${idx + 1}. ${esc(name)}</span><span>${qty}</span></div>
-            <div class="progress-track"><div class="progress-fill" style="width:${(qty / maxSold) * 100}%"></div></div>
-          </div>`).join("")}
-      </div>` : "<div></div>"}
+        <div class="summary-card-title">Stock alerts</div>
+        ${State.branches.map((b) => { const low = State.items.filter((i) => stockStatus(b.id, i).key === "low").length; const out = State.items.filter((i) => ["out", "negative"].includes(stockStatus(b.id, i).key)).length; return `<div class="row"><span>${esc(b.name)}</span><span><span class="badge badge-yellow-soft">${low} low</span> <span class="badge badge-red-soft">${out} out</span></span></div>`; }).join("")}
+        <button class="link-btn small" data-action="admin-tab" data-tab="inventory">Open Masters › Stock →</button>
+      </div>
       <div class="summary-card">
         <div class="summary-card-title">Out of stock for customers ${lowStock.length ? `<span class="badge badge-red-soft">${lowStock.length}</span>` : ""}</div>
         ${lowStock.length ? lowStock.map((i) => `<div class="row"><span>${esc(i.name)}</span><span class="badge badge-red-soft">Out</span></div>`).join("") : `<div class="qk-muted small">Everything is in stock.</div>`}
@@ -4017,12 +4013,15 @@ function adminOrderItemRow(order, it, idx, editable) {
 function adminPartners() {
   const branchIds = scopedBranchIds();
   const editable = canEdit(currentUser(), "partners");
-  const partners = branchIds ? State.partners.filter((p) => branchIds.includes(p.branchId)) : State.partners;
+  const inScope = branchIds ? State.partners.filter((p) => branchIds.includes(p.branchId)) : State.partners;
+  const partners = partnersFiltered(inScope); // Round 3 filters
   return `
   <div class="admin-toolbar">
     ${editable ? `<button class="btn btn-primary" data-action="new-partner">${ic("plus")} Add delivery partner</button>` : "<span></span>"}
     ${exportButtonsHTML("partners")}
   </div>
+  ${partnersFilterBarHTML()}
+  ${resultCountHTML(partners.length, inScope.length, "delivery partners")}
   <div class="partner-grid">
     ${partners.map((p) => {
       const theirs = State.orders.filter((o) => o.deliveryPartnerId === p.id);
@@ -4984,7 +4983,7 @@ function handlePay(method) {
   // that has everything (unless negative stock is allowed) and a bookable slot.
   const assign = checkoutAssignment();
   const speed = isPickup ? null : effectiveDeliverySpeed();
-  if (!assign.branch || assign.shortages.length) return;
+  if (!assign.branch || assign.shortages.length || isCustomerBlocked(State.session.name)) return;
   if (speed === "scheduled" && !selectedSlotValid(assign.branch)) return;
   const orderItems = t.cartItems.map((i) => ({ id: i.id, name: i.name, unit: i.unit, price: i.price, eta: i.eta, qty: i.qty, bogo: isBogo(i.id), delivered: null }));
   const branch = assign.branch;
@@ -6144,7 +6143,7 @@ function initEvents() {
     // blocks the browser's native focus/picker behavior (a select dropdown
     // yanked shut before a choice is made; a text/color input that silently
     // refuses to focus; a file input whose native picker never opens).
-    if (el.tagName === "SELECT" || (el.tagName === "INPUT" && ["checkbox", "radio", "text", "color", "file"].includes(el.type))) return;
+    if (el.tagName === "SELECT" || (el.tagName === "INPUT" && ["checkbox", "radio", "text", "color", "file", "number", "date", "time", "email", "search", "tel"].includes(el.type))) return;
     const action = el.dataset.action;
     if (Actions[action]) { ev.preventDefault(); Actions[action](el, ev); }
   });
