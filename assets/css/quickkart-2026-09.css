@@ -1,0 +1,134 @@
+/* QuickKart prototype — styles for the September 2026 director change set
+   (assets/js/quickkart-2026-09.js). Uses the tokens from quickkart.css. */
+:root {
+  --fill-low: var(--success);
+  --fill-low-tint: var(--tint-success);
+  --fill-mid: #B86E00;
+  --fill-mid-tint: #FFF1D6;
+  --fill-high: var(--danger);
+  --fill-high-tint: var(--tint-danger);
+  --fill-full: #8894A0;
+  --fill-full-tint: #EEF1F4;
+  --sec-0: #5B6B7A; --sec-1: #1173C4; --sec-2: #00897B; --sec-3: #B86E00; --sec-4: #C2185B; --sec-5: #5E35B1;
+}
+
+/* Shared bits */
+.pill-count { display: inline-block; min-width: 20px; padding: 0 6px; margin-left: 4px; border-radius: var(--r-pill); background: var(--tint); color: var(--primary); font-size: 11px; line-height: 18px; text-align: center; }
+.pill.active .pill-count { background: rgba(255,255,255,.22); color: #fff; }
+.export-group { display: inline-flex; gap: 6px; }
+.export-group .ic { width: 14px; height: 14px; }
+.admin-toolbar { flex-wrap: wrap; gap: 10px; }
+.input-sm { min-height: 32px; padding: 4px 8px; font-size: 12.5px; width: auto; }
+.tone-red { color: var(--danger-ink); } .tone-green { color: var(--success-ink); } .tone-yellow { color: var(--fill-mid); } .tone-gray { color: var(--muted); }
+.plain-list { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 6px; font-size: 13px; }
+.dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 6px; vertical-align: middle; }
+.whats-new-btn { margin-top: 10px; }
+.whats-new h3 { font-size: 14px; margin: 18px 0 8px; color: var(--primary); }
+.whats-new h3:first-of-type { margin-top: 0; }
+.wn-item { padding: 8px 0; border-bottom: 1px solid var(--line); }
+
+/* Slot fill levels (customer + admin) */
+.fill-low { --c: var(--fill-low); --t: var(--fill-low-tint); }
+.fill-mid { --c: var(--fill-mid); --t: var(--fill-mid-tint); }
+.fill-high { --c: var(--fill-high); --t: var(--fill-high-tint); }
+.fill-full, .fill-closed, .fill-past { --c: var(--fill-full); --t: var(--fill-full-tint); }
+.dot.fill-low, .dot.fill-mid, .dot.fill-high, .dot.fill-full { background: var(--c); }
+.slot-legend { display: flex; flex-wrap: wrap; gap: 12px; font-size: 12px; color: var(--muted); margin: 0 0 10px; }
+.slot-pill-row { display: flex; flex-wrap: wrap; gap: 8px; }
+.slot-pill { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; padding: 8px 12px; border-radius: var(--r-md); border: 1px solid var(--c); border-left-width: 4px; background: var(--t); color: var(--ink); font-size: 12.5px; font-weight: 700; min-width: 150px; text-align: left; }
+.slot-pill-state { font-size: 11px; font-weight: 700; color: var(--c); }
+.slot-pill.active { outline: 2px solid var(--primary); outline-offset: 1px; background: var(--card); }
+.slot-pill:disabled { cursor: not-allowed; opacity: .75; text-decoration: line-through; text-decoration-color: rgba(0,0,0,.25); }
+.slot-pill:disabled .slot-pill-state { text-decoration: none; }
+.slot-badge { background: var(--t); color: var(--c); }
+
+/* Admin ▸ Delivery Slots */
+.slot-tpl-grid { display: flex; flex-direction: column; gap: 6px; }
+.slot-tpl-head, .slot-tpl-row { display: grid; grid-template-columns: 1fr 1fr 1fr 34px; gap: 8px; align-items: center; }
+.slot-tpl-head { font-size: 11.5px; font-weight: 700; color: var(--muted); }
+.slot-day-card { margin-top: 14px; }
+.slot-admin-rows { display: flex; flex-direction: column; }
+.slot-admin-row { display: grid; grid-template-columns: 170px minmax(140px, 1fr) auto auto auto auto auto; gap: 10px; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--line); }
+.slot-admin-bar { display: flex; flex-direction: column; gap: 4px; }
+.fill-track { height: 8px; border-radius: var(--r-pill); background: var(--bg); overflow: hidden; }
+.fill-bar { height: 100%; border-radius: var(--r-pill); background: var(--c); }
+.slot-override { display: flex; align-items: center; gap: 6px; }
+.slot-override .input { width: 76px; min-height: 32px; padding: 4px 8px; }
+.slot-orders { background: var(--bg); border-radius: var(--r-md); padding: 8px 12px; margin: 6px 0; }
+.slot-orders .row { align-items: center; }
+.slot-extra-form { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 10px; }
+.slot-extra-form .input { width: 120px; min-height: 34px; }
+
+/* Admin ▸ Dashboard insights */
+.insights-head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 10px; margin: 6px 0 12px; }
+.topcat-row { display: block; width: 100%; background: none; border: none; padding: 6px 0; text-align: left; color: inherit; }
+.topcat-row .collapsible-chev { display: inline-flex; width: 14px; height: 14px; vertical-align: middle; }
+.topcat-items { background: var(--bg); border-radius: var(--r-md); padding: 6px 12px; margin: 2px 0 8px; }
+.peak-chart { display: grid; grid-template-columns: repeat(24, 1fr); gap: 3px; align-items: end; height: 150px; padding: 8px 0 18px; position: relative; }
+.peak-col { height: 100%; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; position: relative; }
+.peak-bar { width: 100%; min-height: 2px; border-radius: 4px 4px 0 0; opacity: .75; }
+.peak-bar.is-peak { opacity: 1; box-shadow: 0 0 0 2px var(--ink) inset; }
+.peak-label { position: absolute; bottom: -16px; font-size: 9.5px; color: var(--muted); white-space: nowrap; }
+.sec-0 { background: var(--sec-0); } .sec-1 { background: var(--sec-1); } .sec-2 { background: var(--sec-2); }
+.sec-3 { background: var(--sec-3); } .sec-4 { background: var(--sec-4); } .sec-5 { background: var(--sec-5); }
+.peak-sections { margin-top: 8px; }
+
+/* Admin ▸ Users & Roles */
+.role-select { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+.role-card-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 10px; }
+.role-card-head .input { max-width: 320px; font-weight: 700; }
+
+/* Admin ▸ Inventory */
+.inv-table { display: flex; flex-direction: column; background: var(--card); border: 1px solid var(--line); border-radius: var(--r-md); overflow: hidden; }
+.inv-row { display: grid; grid-template-columns: minmax(220px, 2.4fr) 1.3fr 80px 80px 110px minmax(300px, 2.6fr); gap: 10px; align-items: center; padding: 8px 12px; border-bottom: 1px solid var(--line); font-size: 13px; }
+.inv-row.inv-hist { grid-template-columns: 130px 1.6fr 110px 60px 70px 2fr 1fr; }
+.inv-head { background: var(--bg); font-size: 11.5px; font-weight: 700; color: var(--muted); }
+.inv-row .r { text-align: right; }
+.inv-prod { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.inv-prod img { width: 38px; height: 38px; border-radius: var(--r-sm); object-fit: cover; flex-shrink: 0; }
+.inv-prod > span { display: flex; flex-direction: column; min-width: 0; }
+.inv-qty { font-size: 16px; font-weight: 800; }
+.inv-actions { display: flex; gap: 6px; justify-content: flex-end; align-items: center; flex-wrap: wrap; }
+
+/* Business Settings */
+.radio-card { display: flex; gap: 10px; align-items: flex-start; border: 1px solid var(--line); border-radius: var(--r-md); padding: 12px; margin-top: 10px; cursor: pointer; font-size: 13px; }
+.radio-card.active { border-color: var(--primary); background: var(--tint); }
+.radio-card input { margin-top: 3px; }
+
+/* Admin ▸ Notifications */
+.notif-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 16px; align-items: start; }
+.notif-card.is-off { opacity: .8; }
+.notif-card-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+.notif-card-head .ic { width: 16px; height: 16px; }
+.notif-mode { display: flex; flex-direction: column; gap: 6px; font-size: 13px; margin-bottom: 8px; }
+.template-preview { background: var(--bg); border: 1px dashed var(--line); border-radius: var(--r-md); padding: 10px 12px; margin-top: 10px; font-size: 13px; }
+
+/* Routes (to discuss) */
+.route-mock { opacity: .8; }
+.route-stop { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border: 1px dashed var(--line); border-radius: var(--r-md); margin-top: 6px; font-size: 13px; }
+.route-stop-n { width: 24px; height: 24px; border-radius: 50%; background: var(--primary); color: #fff; display: inline-flex; align-items: center; justify-content: center; font-weight: 800; font-size: 12px; }
+.route-stop .qk-muted { margin-left: auto; }
+
+/* Bulk import */
+.import-step { display: flex; gap: 12px; padding: 12px 0; border-top: 1px solid var(--line); }
+.import-step-n { width: 26px; height: 26px; flex-shrink: 0; border-radius: 50%; background: var(--tint); color: var(--primary); display: inline-flex; align-items: center; justify-content: center; font-weight: 800; }
+.import-preview { max-height: 280px; overflow: auto; border: 1px solid var(--line); border-radius: var(--r-md); }
+.import-row { display: grid; grid-template-columns: 60px minmax(160px, 1.4fr) 70px 2fr; gap: 8px; align-items: center; padding: 6px 10px; border-bottom: 1px solid var(--line); font-size: 12.5px; }
+
+/* Checkout stock notice */
+.stock-short-notice { align-items: flex-start; }
+.stock-short-notice > div { display: flex; flex-direction: column; gap: 3px; }
+
+@media (max-width: 900px) {
+  .inv-row, .inv-row.inv-hist { grid-template-columns: 1fr 1fr; }
+  .inv-head { display: none; }
+  .inv-row .r { text-align: left; }
+  .slot-admin-row { grid-template-columns: 1fr 1fr; }
+  .import-row { grid-template-columns: 50px 1fr 70px; }
+  .import-row > :last-child { grid-column: 1 / -1; }
+  .notif-grid { grid-template-columns: 1fr; }
+}
+@media (max-width: 480px) {
+  .slot-pill { min-width: calc(50% - 4px); }
+  .slot-tpl-head, .slot-tpl-row { grid-template-columns: 1fr 1fr 70px 34px; }
+}
