@@ -361,7 +361,7 @@ function opsRowHTML(o) {
     <div class="ops-cust">
       <b>${esc(o.customerName)}</b>
       <span class="qk-muted small">${postalOf(o) ? `S(${postalOf(o).slice(0, 2)}) ${postalOf(o)} · ` : ""}${timeAgo(o.createdAt)}</span>
-      <span class="qk-muted small">${kind === "pickup" ? "Customer collects" : rider ? `${ic("truck")} ${esc(rider.name)}` : DISPATCH_STATUSES.includes(o.status) ? `<span class="tone-yellow">No rider yet</span>` : ""}</span>
+      <span class="ops-rider">${riderChipHTML(o)}</span>
     </div>
     <div class="ops-items">
       <div class="thumbs">${thumbs}</div>
@@ -459,7 +459,7 @@ function opsRailHTML(inScope) {
       const st = partnerStatusKey(p);
       const onOrder = State.orders.find((o) => o.deliveryPartnerId === p.id && DISPATCH_STATUSES.includes(o.status));
       return `<div class="rider-row"><span class="avatar">${esc(p.name.split(" ").map((w) => w[0]).slice(0, 2).join(""))}</span>
-        <div class="rider-info"><b>${esc(p.name)}</b><span class="qk-muted small">${esc(p.vehicle || "")}${onOrder ? ` · <button class="link-btn small" data-action="open-order" data-id="${onOrder.id}">#${esc(onOrder.id)}</button>` : ""}</span></div>
+        <div class="rider-info"><b>${esc(p.name)}</b><span class="qk-muted small">${esc(p.vehicle || "")} · ${riderLoad(p.id)}/${riderCapacity(p)}${onOrder ? ` · <button class="link-btn small" data-action="open-order" data-id="${onOrder.id}">#${esc(onOrder.id)}</button>` : ""}</span></div>
         <span class="rider-st rider-${st}">${{ ready: "Ready", busy: "On delivery", offline: "Offline", inactive: "Inactive" }[st]}</span></div>`;
     }).join("") : `<div class="qk-muted small">No riders for this store.</div>`}
   </div>
@@ -484,7 +484,7 @@ function adminOrdersV2() {
       <div class="ops-live"><span class="live-dot" aria-hidden="true"></span><b>Live</b><span class="qk-muted small">updates every 30s · last ${fmtTime(Date.now())}</span></div>
       <div class="ops-head-actions">
         <div class="seg" role="tablist" aria-label="View">
-          ${[["list", "Queue"], ["slot", "By slot"], ["board", "Board"]].map(([k, l]) => `<button type="button" class="seg-btn ${view === k ? "active" : ""}" data-action="set-filter-btn" data-screen="orders" data-key="view" data-value="${k}" role="tab" aria-selected="${view === k}">${l}</button>`).join("")}
+          ${[["list", "Queue"], ["slot", "By slot"], ["board", "Board"], ["dispatch", "Dispatch"]].map(([k, l]) => `<button type="button" class="seg-btn ${view === k ? "active" : ""}" data-action="set-filter-btn" data-screen="orders" data-key="view" data-value="${k}" role="tab" aria-selected="${view === k}">${l}</button>`).join("")}
         </div>
         ${exportButtonsHTML("orders")}
         <button type="button" class="btn btn-sm btn-outline demo-btn" data-action="demo-live-orders" title="Prototype only — adds fresh orders so you can watch the timers">${ic("plus")} Demo: add live orders</button>
@@ -515,6 +515,7 @@ function ordersResultsHTML() {
   const view = F("orders").view || "list";
   const base = ordersBase();
   if (view === "board") return `${opsPipelineHTML(base)}${ordersBoardHTML(sortOrders(base))}`;
+  if (view === "dispatch") return ordersDispatchHTML(); // Round 4 (quickkart-2026-09-r4.js)
   const list = ordersFiltered();
   return `
   ${opsPipelineHTML(base)}
@@ -584,7 +585,7 @@ function ordersBoardHTML(list) {
             <div class="board-card-top">${slaRingHTML(o)}<div><b>#${esc(o.id)}</b><div class="qk-num small">${money(o.total)}</div></div>${isCold(o) ? `<span class="tag tag-cold">Chilled</span>` : ""}</div>
             <div class="small">${esc(o.customerName)} · ${o.items.reduce((n, i) => n + i.qty, 0)} items</div>
             <div class="board-card-tags"><span class="badge badge-${KIND_META[orderKind(o)].tone}-soft">${KIND_META[orderKind(o)].label}</span>${t ? `<span class="badge badge-${t.tone}-soft">${esc(t.label)}</span>` : ""}</div>
-            ${st === "ready_for_rider" && o.fulfillment !== "pickup" ? `<div class="small qk-muted">${rider ? `Rider: ${esc(rider.name)}` : "Waiting for a rider"}</div>` : ""}
+            ${o.fulfillment !== "pickup" && st !== "new" ? `<div class="small">${riderChipHTML(o)}</div>` : ""}
             ${editable && next ? `<button type="button" class="btn btn-sm btn-primary-soft btn-block" data-action="set-order-status" data-id="${o.id}" data-status="${next.status}">${esc(next.label)} →</button>` : ""}
           </div>`;
         }).join("") || `<div class="board-empty">Nothing here</div>`}
@@ -658,12 +659,7 @@ function orderDrawerHTML() {
         <div class="row small"><span>Type</span><span><span class="badge badge-${KIND_META[kind].tone}-soft">${KIND_META[kind].label}</span></span></div>
         ${o.scheduledSlot ? `<div class="row small"><span>Slot</span><span>${esc(o.scheduledSlot)}</span></div>` : ""}
         <div class="row small"><span>${kind === "pickup" ? "Pickup store" : "Store"}</span><span>${branch ? esc(branch.name) : "—"}</span></div>
-        ${kind !== "pickup" && DISPATCH_STATUSES.includes(o.status) && editable ? `
-        <label class="field"><span class="field-label">Rider (${branch ? esc(branch.name) : "store"} riders)</span>
-          <select class="input" data-action="assign-partner" data-order="${o.id}" ${!o.branchId ? "disabled" : ""}>
-            <option value="">Unassigned</option>
-            ${riders.map((p) => `<option value="${p.id}" ${o.deliveryPartnerId === p.id ? "selected" : ""}>${esc(p.name)} (${esc(p.code)})</option>`).join("")}
-          </select></label>` : o.deliveryPartnerId ? `<div class="row small"><span>Rider</span><span>${esc((findPartner(o.deliveryPartnerId) || {}).name || "—")}</span></div>` : ""}
+        ${kind !== "pickup" ? `<div class="row small"><span>Rider</span><span>${riderChipHTML(o) || "—"}</span></div>` : ""}
       </section>
       <section class="drawer-sec">
         <div class="drawer-sec-title">Payment <span class="badge badge-${pay.tone}-soft">${pay.label}</span></div>

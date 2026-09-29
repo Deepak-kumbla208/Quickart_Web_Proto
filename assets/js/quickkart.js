@@ -1122,6 +1122,10 @@ function riderShiftStats(partnerId, startedAt) {
 // "ready_for_rider" and whenever a rider goes ready, since this prototype has no
 // background job runner.
 function tryAutoAssign(branchId) {
+  // 2026-09 Round 4: automatic round robin is switched off — the admin assigns
+  // riders (quickkart-2026-09-r4.js). Kept as a no-op so existing callers still work.
+  return;
+  // eslint-disable-next-line no-unreachable
   if (!branchId) return;
   const queue = State.readyQueue[branchId] ? [...State.readyQueue[branchId]] : [];
   if (!queue.length) return;
@@ -4037,7 +4041,7 @@ function adminPartners() {
       <div class="partner-card">
         <div class="partner-card-top">
           <div><span class="status-dot ${busy ? "busy" : ready ? "on" : ""}"></span><span class="partner-name">${esc(p.name)}</span>
-            <div class="qk-muted small">${esc(p.code)} · ${esc(p.vehicle || "—")}${branch ? ` · ${esc(branch.name)}` : ""}</div>
+            <div class="qk-muted small">${esc(p.code)} · ${esc(p.vehicle || "—")} · ${riderLoad(p.id)}/${riderCapacity(p)} orders${branch ? ` · ${esc(branch.name)}` : ""}</div>
             <div class="qk-muted small">${fmtMobile(p.mobile)}${p.email ? " · " + esc(p.email) : ""}</div>
           </div>
           <div class="partner-card-actions">
@@ -4180,7 +4184,7 @@ function adminDeliveryPanel(editable) {
     </div>
     ${allDisabled ? `<div class="notice notice-warn" style="margin-top:10px">${ic("alert")}<span>All payment methods are disabled — customers with anything left to pay won't be able to check out.</span></div>` : ""}
   </div>
-  ${adminExpressCard(editable)}`;
+  ${adminExpressCard(editable)}${vehicleCapacityCardHTML(editable)}`;
 }
 
 function adminPromotions() {
@@ -4619,6 +4623,7 @@ function partnerFormModal() {
         <label class="field"><span class="field-label">Branch *</span>
           <select class="input" name="branchId">${State.branches.map((b) => `<option value="${b.id}" ${Number(f.branchId) === b.id ? "selected" : ""}>${esc(b.name)}</option>`).join("")}</select>
         </label>
+        <label class="field"><span class="field-label">Orders per trip <span class="qk-muted small" style="font-weight:400">(leave blank to use the vehicle's default: ${State.deliverySettings.vehicleCapacity[f.vehicle || "Motorcycle"] || 1})</span></span><input class="input" type="number" min="1" max="99" name="capacity" value="${f.capacity || ""}" placeholder="Vehicle default" /></label>
         <label class="stock-toggle-lg"><input type="checkbox" name="active" ${f.active ? "checked" : ""} /><span>Active — can sign in and take new orders</span></label>
         <div class="form-actions">
           <button type="button" class="btn btn-outline btn-block" data-action="close-modal">Cancel</button>
@@ -4784,7 +4789,7 @@ function viewRiderShell() {
   const startedAt = State.shiftStart[session.partnerId] || null;
   const onShift = !!startedAt;
   const branch = findBranch(findPartner(session.partnerId) && findPartner(session.partnerId).branchId);
-  const statusLabel = busy ? "On a delivery" : ready ? "Ready — waiting for next order" : "Not ready";
+  const statusLabel = busy ? "On a trip" : ready ? "Online — the store assigns your orders" : "Offline";
   return `
   <div class="site">
     <header class="topbar rider-topbar">
@@ -4793,7 +4798,7 @@ function viewRiderShell() {
         <div class="rider-title"><div class="qk-muted small" style="color:rgba(255,255,255,.75)">Delivery partner${branch ? ` · ${esc(branch.name)}` : ""}</div><div class="rider-name">${esc(session.name)}</div></div>
         <nav class="topbar-actions">
           <span class="online-toggle ${ready ? "on" : ""}"><span class="status-dot ${busy ? "busy" : ready ? "on" : ""}"></span>${statusLabel}</span>
-          ${!busy && !ready ? `<button class="topbar-link" data-action="go-ready" style="background:var(--success)">${ic("check")}<span>Ready for next order</span></button>` : ""}
+          ${!busy && !ready ? `<button class="topbar-link" data-action="go-ready" style="background:var(--success)">${ic("check")}<span>Go online</span></button>` : ""}
           ${!busy && ready ? `<button class="topbar-link" data-action="leave-ready-queue">Pause</button>` : ""}
           ${!busy && onShift ? `<button class="topbar-link" data-action="end-shift-request">${ic("clock")}<span>End shift</span></button>` : ""}
           <button class="topbar-link" data-action="logout">${ic("logout")}<span>Logout</span></button>
@@ -4817,14 +4822,24 @@ function viewRiderShell() {
 }
 
 function riderTabContent(session, ready) {
-  const mine = State.orders.filter((o) => o.deliveryPartnerId === session.partnerId && DISPATCH_STATUSES.includes(o.status)).sort((a, b) => a.createdAt - b.createdAt);
+  // 2026-09 Round 4: every order assigned to this rider (from Confirmed on), grouped into trips by slot.
+  const mine = riderOpenOrders(session.partnerId).sort((a, b) => sectorOf(a).localeCompare(sectorOf(b)));
   const history = State.orders.filter((o) => o.deliveryPartnerId === session.partnerId && TERMINAL_STATUSES.includes(o.status)).sort((a, b) => b.createdAt - a.createdAt);
   if (UI.riderTab === "history") return riderHistory(history);
   if (UI.riderTab === "earnings") return riderEarnings(history);
   if (!mine.length) {
-    return `<div class="empty-state empty-wide"><div class="empty-title">No deliveries right now</div><div class="empty-hint">${ready ? "You're in the ready queue — the next order at your branch will come to you." : "Tap “Ready for next order” above to join your branch's queue."}</div></div>`;
+    return `<div class="empty-state empty-wide"><div class="empty-title">No deliveries right now</div><div class="empty-hint">${ready ? "You're online — the store will assign your next trip." : "Tap “Go online” above so the store can assign you orders."}</div></div>`;
   }
-  return `<div class="admin-orders-list">${mine.map((o) => riderOrderCard(o)).join("")}</div>`;
+  const partner = findPartner(session.partnerId);
+  const trips = new Map();
+  mine.forEach((o) => { const k = tripKey(o); if (!trips.has(k)) trips.set(k, []); trips.get(k).push(o); });
+  return `
+  <div class="qk-muted small" style="margin-bottom:8px">${mine.length} order${mine.length === 1 ? "" : "s"} assigned · your ${esc(partner ? partner.vehicle : "vehicle")} carries ${riderCapacity(partner)} per trip. Stops are sorted by postcode.</div>
+  ${[...trips.entries()].map(([k, list]) => `
+    <div class="rider-trip">
+      <div class="rider-trip-head"><b>Trip · ${esc(tripLabel(k))}</b><span class="qk-muted small">${list.length} stop${list.length === 1 ? "" : "s"} · ${list.filter((o) => o.status === "picked_up").length} out</span></div>
+      <div class="admin-orders-list">${list.map((o) => riderOrderCard(o)).join("")}</div>
+    </div>`).join("")}`;
 }
 
 function riderOrderCard(order) {
@@ -4834,11 +4849,12 @@ function riderOrderCard(order) {
   <div class="admin-order-card">
     <button class="admin-order-head" data-action="toggle-rider-order" data-id="${order.id}">
       <div><div class="order-row-id">#${order.id}</div><div class="qk-muted small">${esc(order.customerName)} · ${order.items.length} item${order.items.length > 1 ? "s" : ""} · ${money(order.total)}</div></div>
-      <span class="badge badge-${STATUS_META[order.status].tone}-soft">${STATUS_META[order.status].label}</span>
+      <span class="badge badge-${PREP_STATUSES.includes(order.status) ? "gray" : STATUS_META[order.status].tone}-soft">${PREP_STATUSES.includes(order.status) ? "Being packed" : STATUS_META[order.status].label}</span>
     </button>
     ${open ? `
       <div class="admin-order-body">
         <div class="qk-muted small">${ic("pin")} ${esc(order.address)}</div>
+        ${PREP_STATUSES.includes(order.status) ? `<div class="notice notice-warn" style="margin:6px 0">${ic("clock")}<span>Still being packed at the store — collect it when it's ready.</span></div>` : ""}
         ${order.deliveryInstructions ? `<div class="notice notice-warn" style="margin:6px 0">${ic("bell")}<span>${esc(order.deliveryInstructions)}</span></div>` : ""}
         ${order.contactName || order.contactMobile ? `
           <div class="rider-contact">
