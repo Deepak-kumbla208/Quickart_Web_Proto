@@ -112,29 +112,11 @@ Object.assign(Actions, {
     if (renamed.length) { State.partners = State.partners.map((p) => { const r = renamed.find((x) => x.orig === p.vehicle); return r ? { ...p, vehicle: r.name } : p; }); persist("partners"); }
     saveVehicleCapacity(map); showToast("Vehicle types saved"); render();
   },
-  "transfer-for-order"(el) {
-    const o = State.orders.find((x) => x.id === el.dataset.order);
-    const idx = Number(el.dataset.idx);
-    const it = o && o.items[idx];
-    const from = findBranch(Number(el.dataset.from));
-    if (!o || !it || !from) return;
-    const qty = Math.min(it.short, storeQty(from.id, it.id) || 0);
-    if (!(qty > 0)) { showToast(`${from.name} has none left`, "danger"); render(); return; }
-    const to = findBranch(o.branchId);
-    recordStockMove({ branchId: from.id, itemId: it.id, type: "transfer_out", qty: -qty, ref: `To ${to.name} for #${o.id}` });
-    recordStockMove({ branchId: to.id, itemId: it.id, type: "transfer_in", qty, ref: `From ${from.name} for #${o.id}` });
-    // With negative stock off the order took only what the store had, so the transferred units go straight to it.
-    if (!allowNegativeStock()) recordStockMove({ branchId: to.id, itemId: it.id, type: "sale", qty: -qty, ref: `Order #${o.id} (transferred)` });
-    State.orders = State.orders.map((x) => x.id !== o.id ? x : { ...x, items: x.items.map((line, i) => i !== idx ? line : { ...line, short: line.short - qty, shortCovered: (line.shortCovered || 0) + qty, shortCoveredFrom: from.name }) });
-    persist("orders");
-    showToast(`${qty} × ${it.name} transferred from ${from.name}${it.short - qty > 0 ? ` — still short ${it.short - qty}` : ""}`);
-    render();
-  },
 });
 
 /* ---------------- 4. What's changed ---------------- */
 WHATS_NEW.unshift({ area: "Vehicle types & nearest store (round 5)", items: [
   ["Vehicle types", "Setup ▸ Business Settings ▸ Delivery & Payments ▸ Vehicle types: add your own (e.g. E-scooter, Mini truck) with orders per trip, rename (riders keep it), change capacity, remove when no rider uses it. The rider form, filters and assign screens use this list."],
   ["Order goes to the nearest store", "Checkout never blocks or re-routes because of stock: the order always goes to the nearest store that delivers to the address (pickup: the chosen store)."],
-  ["Short at this store", "If that store doesn't have enough, the line is flagged 'Short N at this store' (stock stops at zero, or goes negative if allowed). The order lands in Needs action with a 'Short at store' tag and filter. In the order panel the store sees which nearby stores have it and can 'Transfer N from <store>' in one tap, or mark the item unavailable (swap / refund flow)."],
+  ["Short at this store", "If that store doesn't have enough, the line is flagged 'Short N at this store' (stock stops at zero, or goes negative if allowed). The order lands in Needs action with a 'Short at store' tag and filter. In the order panel the store sees which nearby stores have it and can request a transfer (round 6), or mark the item unavailable (swap / refund flow)."],
 ] });

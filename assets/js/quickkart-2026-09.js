@@ -684,7 +684,11 @@ function adminInventoryV2() {
   const editable = canEdit(currentUser(), "inventory");
   if (!branchIds || branchIds.length !== 1) {
     const list = branchIds ? State.branches.filter((b) => branchIds.includes(b.id)) : State.branches;
-    return `
+    // Round 6: transfers across all the stores in scope.
+    const tc = transferCounts(branchIds);
+    const tabs = `<div class="pill-row"><button class="pill ${UI.invTab !== "transfers" ? "active" : ""}" data-action="inv-tab" data-tab="stock">Stores</button><button class="pill ${UI.invTab === "transfers" ? "active" : ""}" data-action="inv-tab" data-tab="transfers">Transfers${tc.toSend + tc.toReceive ? ` <span class="pill-count">${tc.toSend + tc.toReceive}</span>` : ""}</button></div>`;
+    if (UI.invTab === "transfers") return `${tabs}${transfersHTML(null)}`;
+    return `${tabs}
     <div class="admin-toolbar">
       <div class="qk-muted small">Products are shared; <b>quantities are per store</b>. Pick a store to receive, adjust or transfer stock.</div>
       <div class="filter-pill-row">${editable ? `<button class="btn btn-outline btn-sm" data-action="open-import" data-entity="inventory">${ic("upload")} Import stock</button>` : ""}${exportButtonsHTML("inventory")}</div>
@@ -717,8 +721,9 @@ function adminInventoryV2() {
   <div class="pill-row">
     <button class="pill ${tab === "stock" ? "active" : ""}" data-action="inv-tab" data-tab="stock">Stock on hand</button>
     <button class="pill ${tab === "history" ? "active" : ""}" data-action="inv-tab" data-tab="history">Stock history</button>
+    <button class="pill ${tab === "transfers" ? "active" : ""}" data-action="inv-tab" data-tab="transfers">Transfers${(() => { const tc = transferCounts([branchId]); return tc.toSend + tc.toReceive ? ` <span class="pill-count">${tc.toSend + tc.toReceive}</span>` : ""; })()}</button>
   </div>
-  ${tab === "history" ? inventoryHistoryHTML(branchId) : inventoryStockHTML(branchId, editable)}`;
+  ${tab === "transfers" ? transfersHTML(branchId) : tab === "history" ? inventoryHistoryHTML(branchId) : inventoryStockHTML(branchId, editable)}`;
 }
 function inventoryStockHTML(branchId, editable) {
   FILTER_RESULTS.stock = () => inventoryRowsHTML(branchId, editable);
@@ -798,7 +803,7 @@ function stockMoveModal() {
   const branch = findBranch(m.branchId);
   const item = m.itemId ? findItem(m.itemId) : null;
   const qty = item ? storeQty(m.branchId, item.id) : null;
-  const title = { receive: "Receive stock", adjust: "Adjust stock", transfer: "Transfer stock" }[m.mode];
+  const title = { receive: "Receive stock", adjust: "Adjust stock", transfer: "Send stock to another store" }[m.mode];
   return `
   <div class="overlay" data-action="close-modal-backdrop">
     <div class="dialog dialog-static" role="dialog" aria-modal="true" data-action="noop">
@@ -1641,9 +1646,9 @@ Object.assign(Submits, {
       if (qty <= 0) return fail("Quantity must be more than 0");
       if (!allowNegativeStock() && qty > onHand) return fail(`Only ${onHand} on hand to transfer`);
       const note = String(fd.get("note") || "").trim();
-      recordStockMove({ branchId: m.branchId, itemId, type: "transfer_out", qty: -qty, ref: `To ${findBranch(to).name}`, note });
-      recordStockMove({ branchId: to, itemId, type: "transfer_in", qty, ref: `From ${findBranch(m.branchId).name}`, note });
-      showToast(`Moved ${qty} × ${item.name} to ${findBranch(to).name}`);
+      // Round 6: sending is one half of a transfer — the other store marks it received (Stock ▸ Transfers).
+      createTransfer({ fromId: m.branchId, toId: to, itemId, qty, note, status: "sent" });
+      showToast(`Sent ${qty} × ${item.name} to ${findBranch(to).name} — they'll mark it received`);
     }
     UI.modal = null; render();
   },

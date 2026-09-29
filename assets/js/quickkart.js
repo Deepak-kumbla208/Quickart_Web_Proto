@@ -1041,7 +1041,7 @@ function invoiceLines(order) {
       // rather than inflating every line, and keeping this exact regardless
       // of order-level discounts.
       gst, total: gross,
-      note: it.resolution === "swap" ? "Replaced" : it.resolution ? "Refunded" : it.bogo ? "BOGO" : null,
+      note: it.resolution === "swap" ? "Replaced" : it.resolution === "removed" ? "Removed" : it.resolution ? "Refunded" : it.bogo ? "BOGO" : null,
     };
   });
 }

@@ -779,7 +779,7 @@ function walletHistoryFor(c) {
   const rows = [];
   c.orders.forEach((o) => {
     if (o.walletApplied > 0) rows.push({ at: o.createdAt, amount: -o.walletApplied, text: `Used on order #${o.id}` });
-    o.items.forEach((it) => { if (it.resolution === "wallet") rows.push({ at: o.createdAt, amount: round2(it.price * it.qty * 1.1), text: `${it.name} unavailable on #${o.id} (+10% bonus)` }); });
+    o.items.forEach((it) => { if (it.resolution === "wallet") rows.push({ at: it.resolvedAt || o.createdAt, amount: it.creditAmount != null ? it.creditAmount : round2(it.price * it.qty * 1.1), text: `${it.name} unavailable on #${o.id} (wallet refund incl. bonus)` }); });
   });
   customerMeta(c.key).credits.forEach((cr) => rows.push({ at: cr.at, amount: cr.amount, text: `Goodwill credit — ${cr.reason} (by ${cr.by})` }));
   return rows.sort((a, b) => b.at - a.at);
@@ -1168,7 +1168,7 @@ Object.assign(Actions, {
     const id = el.dataset.id, idx = Number(el.dataset.idx);
     const o = State.orders.find((x) => x.id === id);
     if (!o || !window.confirm(`Mark "${o.items[idx].name}" as unavailable? The customer will be asked to pick a swap or a refund.`)) return;
-    State.orders = State.orders.map((x) => x.id === id ? { ...x, items: x.items.map((it, i) => i === idx ? { ...it, unavailable: true } : it) } : x);
+    State.orders = State.orders.map((x) => x.id === id ? { ...x, items: x.items.map((it, i) => i === idx ? { ...it, unavailable: true, unavailableAt: Date.now() } : it) } : x);
     persist("orders"); showToast(`${o.items[idx].name} marked unavailable — offer a swap or refund below`, "danger"); render();
   },
   "demo-live-orders"() { addDemoLiveOrders(); UI.adminOrderFilter = "action"; showToast("Added 6 live demo orders — watch the timers"); render(); },
