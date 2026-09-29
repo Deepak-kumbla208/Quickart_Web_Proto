@@ -2385,7 +2385,7 @@ function viewCheckout() {
   const assign = checkoutAssignment();
   const speed = effectiveDeliverySpeed();
   const slotOk = isPickup || speed !== "scheduled" || selectedSlotValid(assign.branch);
-  const stockOk = !!assign.branch && !assign.shortages.length;
+  const stockOk = !!assign.branch; // Round 5: stock never blocks checkout
   const canPay = (isPickup ? !!store : !!addr) && slotOk && stockOk && !isCustomerBlocked(State.session.name);
   return `
   <div class="container section checkout-layout">
@@ -4999,7 +4999,7 @@ function handlePay(method) {
   // that has everything (unless negative stock is allowed) and a bookable slot.
   const assign = checkoutAssignment();
   const speed = isPickup ? null : effectiveDeliverySpeed();
-  if (!assign.branch || assign.shortages.length || isCustomerBlocked(State.session.name)) return;
+  if (!assign.branch || isCustomerBlocked(State.session.name)) return;
   if (speed === "scheduled" && !selectedSlotValid(assign.branch)) return;
   const orderItems = t.cartItems.map((i) => ({ id: i.id, name: i.name, unit: i.unit, price: i.price, eta: i.eta, qty: i.qty, bogo: isBogo(i.id), delivered: null }));
   const branch = assign.branch;
@@ -5029,7 +5029,19 @@ function handlePay(method) {
   State.orders.unshift(order); persist("orders");
   // 2026-09: book the slot and take the stock from the assigned store.
   if (slotKeyPicked) { State.slotBookings = { ...State.slotBookings, [slotKeyPicked]: (State.slotBookings[slotKeyPicked] || 0) + 1 }; persist("slotBookings"); }
-  orderItems.forEach((it) => { if (storeQty(branch.id, it.id) != null) recordStockMove({ branchId: branch.id, itemId: it.id, type: "sale", qty: -it.qty, ref: `Order #${order.id}` }); });
+  // Round 5: take the stock from the nearest store. Negative stock OFF → it stops at 0;
+  // ON → it may go below 0. Either way the missing quantity is flagged on the line as
+  // `short`, so the store can transfer it from a nearby store or mark it unavailable.
+  order.items.forEach((it) => {
+    const before = storeQty(branch.id, it.id);
+    if (before == null) return;
+    const have = Math.max(before, 0);
+    const take = allowNegativeStock() ? it.qty : Math.min(it.qty, have);
+    if (take > 0) recordStockMove({ branchId: branch.id, itemId: it.id, type: "sale", qty: -take, ref: `Order #${order.id}` });
+    const short = Math.max(0, it.qty - have);
+    if (short) it.short = short;
+  });
+  persist("orders");
   if (t.walletApplied > 0) { State.wallet = Math.max(State.wallet - t.walletApplied, 0); persist("wallet"); }
   UI.lastOrderId = order.id;
   State.cart = {}; persist("cart");

@@ -279,6 +279,7 @@ function ordersBase() {
       if (f.issue === "unavailable" && !iss.unavailable) return false;
       if (f.issue === "return" && !iss.returnReq) return false;
       if (f.issue === "late" && !(orderTiming(o) || {}).late) return false;
+      if (f.issue === "short" && !orderShortLines(o).length) return false; // Round 5
     }
     return true;
   });
@@ -366,7 +367,7 @@ function opsRowHTML(o) {
     <div class="ops-items">
       <div class="thumbs">${thumbs}</div>
       <span class="small">${o.items.length} items · ${orderUnits(o)} units</span>
-      <span class="ops-tags">${isCold(o) ? `<span class="tag tag-cold">${ic("sparkle")} Chilled</span>` : ""}${iss.unavailable ? `<span class="tag tag-warn">Item unavailable</span>` : ""}${iss.returnReq ? `<span class="tag tag-warn">Return</span>` : ""}</span>
+      <span class="ops-tags">${isCold(o) ? `<span class="tag tag-cold">${ic("sparkle")} Chilled</span>` : ""}${iss.unavailable ? `<span class="tag tag-warn">Item unavailable</span>` : ""}${iss.returnReq ? `<span class="tag tag-warn">Return</span>` : ""}${orderShortLines(o).length ? `<span class="tag tag-warn">Short at store</span>` : ""}</span>
     </div>
     <div class="ops-amt">
       <b class="qk-num">${money(o.total)}</b>
@@ -500,7 +501,7 @@ function adminOrdersV2() {
         { key: "pay", label: "Payment", options: [...State.deliverySettings.paymentMethods.map((m) => [m.name, m.name]), ["QuickKart Wallet", "QuickKart Wallet"]] },
         { key: "payStatus", label: "Paid?", options: [["paid", "Paid / collected"], ["collect", "Cash to collect"], ["refunded", "Refunded / void"]] },
         { key: "rider", label: "Rider", options: [["none", "Not assigned"], ...riders.map((p) => [String(p.id), p.name])] },
-        { key: "issue", label: "Issues", options: [["late", "Late"], ["unavailable", "Item unavailable"], ["return", "Return requested"]] },
+        { key: "issue", label: "Issues", options: [["late", "Late"], ["short", "Short at store"], ["unavailable", "Item unavailable"], ["return", "Return requested"]] },
       ],
       sort: [["urgent", "Most urgent first"], ["newest", "Newest first"], ["oldest", "Oldest first"], ["slot", "Slot time"], ["amount", "Amount (high → low)"]],
     })}
@@ -644,7 +645,8 @@ function orderDrawerHTML() {
             <span class="pick-name">${esc(it.name)}${it.resolution === "swap" ? " <span class='badge badge-blue-soft'>Swapped</span>" : it.resolution ? " <span class='badge badge-gray-soft'>Refunded</span>" : ""}<span class="qk-muted small">${esc(it.unit || "")}${cat ? ` · ${esc(cat)}` : ""}</span></span>
             <span class="qk-num">${money(it.price * it.qty)}</span>
             ${picking && editable && !picked[idx] && !it.resolution ? `<button class="link-btn link-danger small" data-action="mark-item-unavailable" data-id="${o.id}" data-idx="${idx}">Not available</button>` : ""}
-          </div>`;
+          </div>
+          ${shortLineHTML(o, it, idx, editable)}`;
         }).join("")}
       </section>
       <section class="drawer-sec">
@@ -758,7 +760,7 @@ function printHtmlDocument(title, bodyHtml) {
 function printPickSlip(o) {
   const byCat = {};
   o.items.forEach((it) => { if (it.resolution) return; const c = (findItem(it.id) || {}).cat || "Other"; (byCat[c] = byCat[c] || []).push(it); });
-  const rows = Object.keys(byCat).sort().map((c) => `<tr class="cat"><td colspan="4">${esc(c)}</td></tr>${byCat[c].map((it) => `<tr><td><span class="box"></span></td><td><b>${it.qty}</b></td><td>${esc(it.name)}${it.unavailable ? " — UNAVAILABLE" : ""}</td><td>${esc(it.unit || "")}</td></tr>`).join("")}`).join("");
+  const rows = Object.keys(byCat).sort().map((c) => `<tr class="cat"><td colspan="4">${esc(c)}</td></tr>${byCat[c].map((it) => `<tr><td><span class="box"></span></td><td><b>${it.qty}</b></td><td>${esc(it.name)}${it.unavailable ? " — UNAVAILABLE" : it.short > 0 ? ` — SHORT ${it.short} (transfer or mark unavailable)` : ""}</td><td>${esc(it.unit || "")}</td></tr>`).join("")}`).join("");
   const branch = findBranch(o.branchId);
   printHtmlDocument(`Picking slip #${o.id}`, `
     <h1>Picking slip · #${esc(o.id)}</h1>

@@ -230,19 +230,7 @@ function ordersDispatchHTML() {
   </div>`;
 }
 
-/* ---------------- 5. Setup ▸ Business Settings ▸ Delivery: vehicle capacity ---------------- */
-function vehicleCapacityCardHTML(editable) {
-  const cap = State.deliverySettings.vehicleCapacity;
-  return `
-  <div class="summary-card" style="max-width:420px; margin-top:16px">
-    <div class="summary-card-title">Vehicle capacity</div>
-    <div class="qk-muted small">How many orders each vehicle carries on one trip. Used when assigning riders; you can override it for one rider in their profile.</div>
-    <div class="cap-grid">
-      ${VEHICLE_TYPES.map((v) => `<label class="field"><span class="field-label">${esc(v)}</span><input class="input" type="number" min="1" max="99" id="cap_${v.replace(/\W/g, "")}" value="${cap[v] || 1}" ${editable ? "" : "disabled"} /></label>`).join("")}
-    </div>
-    ${editable ? `<button class="btn btn-primary btn-block" data-action="save-vehicle-capacity">Save capacity</button>` : ""}
-  </div>`;
-}
+/* ---------------- 5. Vehicle capacity card: replaced by the Vehicle types editor in quickkart-2026-09-r5.js ---------------- */
 
 /* ---------------- 6. Handlers ---------------- */
 function assignOrders(ids, partnerId) {
@@ -315,12 +303,6 @@ Object.assign(Actions, {
   },
   "dispatch-clear"() { UI.dispatchSel = []; render(); },
   "dispatch-assign"() { if (UI.dispatchSel.length) { UI.modal = { type: "assignRider", ids: [...UI.dispatchSel] }; render(); } },
-  "save-vehicle-capacity"() {
-    const cap = {};
-    VEHICLE_TYPES.forEach((v) => { const el = document.getElementById(`cap_${v.replace(/\W/g, "")}`); cap[v] = Math.max(1, Math.floor(Number(el && el.value) || 1)); });
-    State.deliverySettings = { ...State.deliverySettings, vehicleCapacity: cap };
-    persist("deliverySettings"); showToast("Vehicle capacity saved"); render();
-  },
 });
 
 /* ---------------- 7. What's changed ---------------- */

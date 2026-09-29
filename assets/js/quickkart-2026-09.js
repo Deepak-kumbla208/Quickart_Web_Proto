@@ -268,35 +268,23 @@ function cartShortages(branchId, lines) {
     available: storeSellable(branchId, l) ? Math.max(storeQty(branchId, l.id) || 0, 0) : 0,
   }));
 }
-// Delivery: nearest covering store that has everything; otherwise the next
-// nearest; if none has everything, the lines that are short are shown and
-// checkout is blocked (negative stock OFF). Pickup: the chosen store only.
+// Round 5: the order always goes to the NEAREST store whose radius covers the
+// address (pickup: the chosen store). Checkout is never blocked or moved to
+// another store because of stock — if that store is short, the store decides
+// (transfer from a nearby store, or mark the item unavailable). `shortages`
+// stays in the return value, always empty, so callers don't change.
 function checkoutAssignment() {
-  const lines = cartLines();
   if (UI.fulfillment === "pickup") {
     const store = findPickupBranch(UI.pickupStoreId);
-    return store ? { branch: store, shortages: cartShortages(store.id, lines), fallback: false } : { branch: null, shortages: [], reason: "no-pickup" };
+    return store ? { branch: store, shortages: [], fallback: false } : { branch: null, shortages: [], reason: "no-pickup" };
   }
   const stores = coveringStores(getSelectedAddress());
   if (!stores.length) return { branch: null, shortages: [], reason: "not-serviceable" };
-  let best = null;
-  for (let i = 0; i < stores.length; i++) {
-    const s = cartShortages(stores[i].id, lines);
-    if (!s.length) return { branch: stores[i], shortages: [], fallback: i > 0, nearest: stores[0] };
-    if (!best || s.length < best.shortages.length) best = { branch: stores[i], shortages: s };
-  }
-  return { ...best, fallback: false, nearest: stores[0] };
+  return { branch: stores[0], shortages: [], fallback: false, nearest: stores[0] };
 }
 function checkoutStockNoticeHTML(a) {
   if (State.session && isCustomerBlocked(State.session.name)) return `<div class="notice notice-danger" style="margin-bottom:12px">${ic("alert")}<span>Your account can't place orders right now. Please contact ${esc(State.companyProfile.phone || "customer support")}.</span></div>`;
   if (a.reason === "not-serviceable") return `<div class="notice notice-danger" style="margin-bottom:12px">${ic("alert")}<span>We don't deliver to this address yet — no store's delivery radius covers it. Choose another address or pickup.</span></div>`;
-  if (a.shortages && a.shortages.length) {
-    return `<div class="notice notice-danger stock-short-notice" style="margin-bottom:12px">${ic("alert")}<div>
-      <b>Some items aren't available in the quantity you want</b>
-      ${a.shortages.map((s) => `<div class="small">${esc(s.name)} — ${s.available > 0 ? `only ${s.available} available, you have ${s.wanted}` : "out of stock"}</div>`).join("")}
-      <div class="small qk-muted">Reduce the quantity or remove these items in your cart to continue.</div></div></div>`;
-  }
-  if (a.fallback && a.nearest) return `<div class="notice notice-ok" style="margin-bottom:12px">${ic("store")}<span>Your nearest store (${esc(a.nearest.name)}) is short on something in your cart, so <b>${esc(a.branch.name)}</b> will deliver this order.</span></div>`;
   return "";
 }
 
@@ -1063,9 +1051,9 @@ function adminStockRulesPanel(editable) {
   <div class="summary-card" style="max-width:560px">
     <div class="summary-card-title">When stock runs out</div>
     <label class="radio-card ${!allow ? "active" : ""}"><input type="radio" name="negStock" value="off" ${!allow ? "checked" : ""} ${editable ? "" : "disabled"} />
-      <span><b>Don't allow negative stock</b> <span class="badge badge-green-soft">Recommended</span><br><span class="qk-muted small">A product shows <b>Out of stock</b> once no store has any left. Customers can't order more than the store that will deliver has — checkout asks them to lower the quantity. The order goes to the next nearest store if the nearest one is short.</span></span></label>
+      <span><b>Don't allow negative stock</b> <span class="badge badge-green-soft">Recommended</span><br><span class="qk-muted small">A product shows <b>Out of stock</b> once no store has any left. An order always goes to the nearest store; if that store is short, its stock stops at zero and the order is flagged <b>Short</b> so the store can transfer the item from a nearby store or mark it unavailable.</span></span></label>
     <label class="radio-card ${allow ? "active" : ""}"><input type="radio" name="negStock" value="on" ${allow ? "checked" : ""} ${editable ? "" : "disabled"} />
-      <span><b>Allow negative stock</b><br><span class="qk-muted small">Customers can keep ordering after stock reaches zero. The store's quantity goes below zero (shown in red in Inventory) until you receive more. Only a product you switch off shows Out of stock.</span></span></label>
+      <span><b>Allow negative stock</b><br><span class="qk-muted small">Customers can keep ordering after stock reaches zero. The nearest store's quantity goes below zero (shown in red in Stock) and the order is flagged <b>Short</b>. Only a product you switch off shows Out of stock.</span></span></label>
     ${negLines ? `<div class="notice notice-warn" style="margin-top:10px">${ic("alert")}<span>${negLines} product/store line(s) are below zero right now.</span></div>` : ""}
     ${editable ? `<button class="btn btn-primary btn-block" style="margin-top:12px" data-action="save-stock-rules">Save</button>` : ""}
   </div>`;
@@ -1104,7 +1092,7 @@ const WHATS_NEW = [
   { area: "Customer app", items: [
     ["Checkout — Express", "'Deliver at your convenience' is now 'Express delivery' with its charge shown on the button and as its own bill line. Hidden when the business switches it off."],
     ["Checkout — slots", "Dated slots for the store that will deliver, coloured by how full they are: Available (green), Filling fast (amber), Almost full (red); Full / closed / past cut-off slots are greyed out and can't be picked."],
-    ["Checkout — stock", "Quantities are checked against the store that will deliver. If the nearest store is short, the next nearest store that has everything takes the order (a note says which). If none has everything and negative stock is off, the short items are listed and checkout is blocked. 'Only N left' is no longer shown on product cards."],
+    ["Checkout — stock", "The order always goes to the nearest store that delivers to the address; checkout is never blocked for stock. If that store is short, the order is flagged Short for the store to handle (see round 5). 'Only N left' is no longer shown on product cards."],
     ["Cart", "The 'Send order on WhatsApp' button is removed."],
     ["Bill & invoice", "New 'Express delivery charge' line on the cart, checkout and tax invoice."],
   ] },
