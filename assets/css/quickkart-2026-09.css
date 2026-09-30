@@ -41,6 +41,13 @@
 .slot-pill:disabled { cursor: not-allowed; opacity: .75; text-decoration: line-through; text-decoration-color: rgba(0,0,0,.25); }
 .slot-pill:disabled .slot-pill-state { text-decoration: none; }
 .slot-badge { background: var(--t); color: var(--c); }
+/* Round 7: the customer picker is plain — the colour states stay on the admin Delivery Slots screen. */
+.slot-pill.plain { border: 1px solid var(--border, #D9DEE3); background: var(--card); min-height: 44px; justify-content: center; }
+.slot-pill.plain .slot-pill-state { color: var(--muted); font-weight: 600; }
+.slot-pill.plain:not(:disabled):hover { border-color: var(--primary); }
+.slot-pill.plain.active { background: var(--primary); border-color: var(--primary); color: #fff; outline: none; }
+.slot-pill.plain:disabled { background: #F3F5F7; border-color: #E3E7EB; color: var(--muted); opacity: 1; text-decoration: none; }
+.slot-pill.plain:disabled .slot-pill-time { text-decoration: line-through; text-decoration-color: rgba(0,0,0,.3); }
 
 /* Admin ▸ Delivery Slots */
 .slot-tpl-grid { display: flex; flex-direction: column; gap: 6px; }

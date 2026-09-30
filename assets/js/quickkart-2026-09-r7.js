@@ -604,7 +604,36 @@ Object.assign(Actions, {
   },
 });
 
-/* ---------------- 14. What's changed ---------------- */
+/* ---------------- 14. Customer slot picker: plain pills (user, 2026-09-30) ---------------- */
+// The colour states (Available / Filling fast / Almost full) stay on the admin Delivery Slots screen,
+// where staff need the load at a glance. Customers get plain pills; slots they can't book are greyed
+// out with the reason, and the chosen one is blue.
+(() => {
+  const NOT_BOOKABLE_TEXT = { full: "Full", closed: "Closed", past: "Cut-off passed" };
+  window.checkoutSlotPickerHTML = (branch) => {
+    if (!branch) return `<div class="qk-muted small">Add an address we deliver to, to see delivery times.</div>`;
+    return `
+  <div class="slot-groups">
+    ${slotDays().map((d) => `
+      <div class="slot-group">
+        <div class="slot-group-day">${esc(d.label)}</div>
+        <div class="slot-pill-row">
+          ${slotsFor(branch.id, d.date).map((s) => {
+            const inf = slotInfo(branch.id, d.date, s);
+            const ok = slotBookable(inf);
+            const why = ok ? "" : NOT_BOOKABLE_TEXT[inf.level] || "Not available";
+            return `<button type="button" class="slot-pill plain ${UI.scheduledSlot === inf.key ? "active" : ""}" data-action="set-scheduled-slot" data-slot="${inf.key}" ${ok ? "" : "disabled"}${why ? ` title="${why}"` : ""}>
+              <span class="slot-pill-time">${fmtSlotRange(s)}</span>
+              ${why ? `<span class="slot-pill-state">${why}</span>` : ""}
+            </button>`;
+          }).join("")}
+        </div>
+      </div>`).join("")}
+  </div>`;
+  };
+})();
+
+/* ---------------- 15. What's changed ---------------- */
 WHATS_NEW.unshift({ area: "Backend alignment (round 7)", items: [
   ["GST on delivery charges", "Setup ▸ Business Settings ▸ Delivery & Payments: two switches — GST on the delivery fee, GST on the express charge (both off by default). Frozen on each order."],
   ["Order timing targets", "Same tab: minutes per stage, the 'not confirmed' alert and the express due buffer are settings now; the Orders screen reads them."],
@@ -616,4 +645,5 @@ WHATS_NEW.unshift({ area: "Backend alignment (round 7)", items: [
   ["On-trip riders", "Assign rider: a rider who has left the store shows 'On delivery — back after N stops' under Can't take it, with no 'Assign anyway'."],
   ["Sidebar", "Customers moved next to Orders; a Transfers shortcut (with a count) under Masters ▸ Stock. Nothing else moved."],
   ["Import", "The upload dialog states the limits: .xlsx or .csv, up to 5 MB / 10,000 rows."],
+  ["Customer slot picker", "Plain pills — no colour states or legend. Full, closed and past-cut-off slots are greyed out with the reason; the chosen slot is blue. The colours stay on the admin Delivery Slots screen."],
 ] });
