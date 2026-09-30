@@ -215,7 +215,7 @@ function orderTiming(o) {
   if (TERMINAL_STATUSES.includes(o.status)) return null;
   const now = Date.now();
   const age = (now - o.createdAt) / 60000;
-  if (o.status === "new" && age > 10) return { late: true, tone: "red", label: `Not confirmed · ${minsText(age)}` };
+  if (o.status === "new" && age > (window.timingSettings ? timingSettings().confirmAlertMins : 10)) return { late: true, tone: "red", label: `Not confirmed · ${minsText(age)}` }; // 2026-09 r7: a setting
   const kind = orderKind(o);
   if (kind === "scheduled") {
     const w = orderSlotWindow(o);
@@ -226,7 +226,7 @@ function orderTiming(o) {
     }
   }
   if (kind === "express") {
-    const eta = Math.max(...o.items.map((i) => i.eta || 20), 20) + 15;
+    const eta = Math.max(...o.items.map((i) => i.eta || 20), 20) + (window.timingSettings ? timingSettings().expressBufferMins : 15); // 2026-09 r7: a setting
     const due = o.createdAt + eta * 60000;
     if (now > due) return { late: true, tone: "red", label: `Express overdue ${minsText((now - due) / 60000)}` };
     return { late: false, tone: "blue", label: `Due in ${minsText((due - now) / 60000)}` };
@@ -391,7 +391,7 @@ function opsKpisHTML(inScope) {
     const at = statusAt(o, "delivered") || o.createdAt;
     const w = orderSlotWindow(o);
     if (w) return at <= w.endMs;
-    if (orderKind(o) === "express") return at <= o.createdAt + (Math.max(...o.items.map((i) => i.eta || 20), 20) + 15) * 60000;
+    if (orderKind(o) === "express") return at <= o.createdAt + (Math.max(...o.items.map((i) => i.eta || 20), 20) + (window.timingSettings ? timingSettings().expressBufferMins : 15)) * 60000; // 2026-09 r7
     return true;
   }).length;
   const cod = open.filter((o) => orderPayStatus(o).key === "collect");
