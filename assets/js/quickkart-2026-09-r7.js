@@ -128,12 +128,12 @@ function timingCardHTML(editable) {
     <div class="summary-card-title">Order timing targets</div>
     <div class="qk-muted small">Minutes each stage should take. The Orders screen colours the timer amber at 75% of the target and red when over, and works out "at risk", "late" and the average-vs-target figures from these.</div>
     <div class="field-grid-2" style="margin-top:10px">
-      ${field("new", "Confirm a new order (min)")}${field("confirmed", "Start picking (min)")}
+      ${field("new", "Accept a new order (min) — manual mode")}${field("confirmed", "Start picking (min)")}
       ${field("picking", "Picking (min)")}${field("packing", "Packing (min)")}
       ${field("ready_for_rider", "Waiting for the rider (min)")}${field("picked_up", "Out for delivery (min)")}
     </div>
     <div class="field-grid-2">
-      <label class="field"><span class="field-label">"Not confirmed" alert after (min)</span><input class="input" type="number" min="1" max="120" id="timing_confirmAlertMins" value="${t.confirmAlertMins}" ${dis} /><span class="qk-muted small">Shown in red on the order and counted in Needs action.</span></label>
+      <label class="field"><span class="field-label">"Not accepted" alert after (min) — manual mode</span><input class="input" type="number" min="1" max="120" id="timing_confirmAlertMins" value="${t.confirmAlertMins}" ${dis} /><span class="qk-muted small">Shown in red on the order and counted in Needs action while it waits for Accept.</span></label>
       <label class="field"><span class="field-label">Express due = longest item ETA + (min)</span><input class="input" type="number" min="0" max="120" id="timing_expressBufferMins" value="${t.expressBufferMins}" ${dis} /><span class="qk-muted small">Past this an express order is "overdue".</span></label>
     </div>
     ${editable ? `<button class="btn btn-primary btn-block" data-action="save-timing">Save</button>` : ""}
@@ -156,7 +156,7 @@ function goodwillCapsCardHTML(editable) {
 }
 (() => {
   const delivery = adminDeliveryPanel;
-  window.adminDeliveryPanel = (editable) => `${delivery(editable)}${feeTaxCardHTML(editable)}${timingCardHTML(editable)}`;
+  window.adminDeliveryPanel = (editable) => `${delivery(editable)}${feeTaxCardHTML(editable)}${confirmationCardHTML(editable)}${timingCardHTML(editable)}`;
   const rules = adminStockRulesPanel;
   window.adminStockRulesPanel = (editable) => `${rules(editable)}${goodwillCapsCardHTML(editable)}`;
 })();
@@ -633,7 +633,71 @@ Object.assign(Actions, {
   };
 })();
 
-/* ---------------- 15. What's changed ---------------- */
+/* ---------------- 15. Order confirmation mode (D71, user 2026-09-30) ---------------- */
+// automatic (the backend's default): a paid or cash order is confirmed the moment it is placed and the
+// first staff step is "Start picking". manual: it waits as "New — accept" until staff tap Accept (or
+// cancel it). Either way the customer sees "Confirmed" once paid.
+State.deliverySettings = { orderConfirmation: "auto", ...State.deliverySettings };
+function confirmationMode() { return State.deliverySettings.orderConfirmation === "manual" ? "manual" : "auto"; }
+function autoConfirm(o) {
+  if (o.status !== "new") return o;
+  return { ...o, status: "confirmed", autoConfirmed: true, statusHistory: [...(o.statusHistory || []), { status: "confirmed", at: Date.now() }] };
+}
+const PIPELINE_ALL = PIPELINE.map((s) => s.slice());
+const BOARD_COLUMNS_ALL = BOARD_COLUMNS.slice();
+// The console's stage list and board columns follow the mode: no "New" stage when orders confirm themselves.
+function applyConfirmationMode() {
+  const manual = confirmationMode() === "manual";
+  PIPELINE.length = 0;
+  PIPELINE_ALL.forEach(([k, label]) => {
+    if (k === "new" && !manual) return;
+    PIPELINE.push([k, k === "new" ? "New — accept" : k === "confirmed" && !manual ? "New (paid / COD)" : label]);
+  });
+  BOARD_COLUMNS.length = 0;
+  BOARD_COLUMNS_ALL.forEach((k) => { if (k !== "new" || manual) BOARD_COLUMNS.push(k); });
+  ADVANCE_LABEL.new = "Accept order";
+}
+applyConfirmationMode();
+function confirmNewOrders() {
+  let n = 0;
+  State.orders = State.orders.map((o) => { if (o.status === "new") { n++; return autoConfirm(o); } return o; });
+  if (n) persist("orders");
+  return n;
+}
+(() => {
+  // Placing an order (customer app) and the demo button both create "new" orders; in automatic mode they
+  // confirm at once, as the backend does for a paid or cash order.
+  const pay = handlePay;
+  window.handlePay = (method) => { const r = pay(method); if (confirmationMode() === "auto" && confirmNewOrders()) render(); return r; };
+  const demo = addDemoLiveOrders;
+  window.addDemoLiveOrders = () => { const r = demo(); if (confirmationMode() === "auto") confirmNewOrders(); return r; };
+})();
+function confirmationCardHTML(editable) {
+  const mode = confirmationMode();
+  const dis = editable ? "" : "disabled";
+  const pending = State.orders.filter((o) => o.status === "new").length;
+  return `
+  <div class="summary-card" style="max-width:560px; margin-top:16px">
+    <div class="summary-card-title">Order confirmation</div>
+    <div class="qk-muted small">How a new order enters your queue. Either way the customer sees "Confirmed" once they have paid; an unpaid online order only ever shows under "Awaiting payment".</div>
+    <label class="stock-toggle-lg" style="margin-top:10px"><input type="radio" name="confirmMode" value="auto" ${mode === "auto" ? "checked" : ""} ${dis} /><span><b>Automatic</b> <span class="qk-muted small">— a paid or cash order is confirmed the moment it is placed; the first step is "Start picking". (Default)</span></span></label>
+    <label class="stock-toggle-lg"><input type="radio" name="confirmMode" value="manual" ${mode === "manual" ? "checked" : ""} ${dis} /><span><b>Manual</b> <span class="qk-muted small">— every order waits as "New — accept" until your team taps Accept (or cancels it). The "accept" target and alert below apply.</span></span></label>
+    ${pending && mode === "manual" ? `<div class="qk-muted small" style="margin-top:6px">${pending} order${pending === 1 ? "" : "s"} waiting to be accepted right now — switching to automatic confirms them.</div>` : ""}
+    ${editable ? `<button class="btn btn-primary btn-block" data-action="save-confirmation-mode">Save</button>` : ""}
+  </div>`;
+}
+Actions["save-confirmation-mode"] = () => {
+  const el = document.querySelector('input[name="confirmMode"]:checked');
+  const mode = el && el.value === "manual" ? "manual" : "auto";
+  State.deliverySettings = { ...State.deliverySettings, orderConfirmation: mode };
+  persist("deliverySettings");
+  const confirmed = mode === "auto" ? confirmNewOrders() : 0;
+  applyConfirmationMode();
+  showToast(mode === "auto" ? `Automatic confirmation on${confirmed ? ` — ${confirmed} waiting order${confirmed === 1 ? "" : "s"} confirmed` : ""}` : "Manual confirmation on — new orders wait for Accept");
+  render();
+};
+
+/* ---------------- 16. What's changed ---------------- */
 WHATS_NEW.unshift({ area: "Backend alignment (round 7)", items: [
   ["GST on delivery charges", "Setup ▸ Business Settings ▸ Delivery & Payments: two switches — GST on the delivery fee, GST on the express charge (both off by default). Frozen on each order."],
   ["Order timing targets", "Same tab: minutes per stage, the 'not confirmed' alert and the express due buffer are settings now; the Orders screen reads them."],
@@ -646,4 +710,5 @@ WHATS_NEW.unshift({ area: "Backend alignment (round 7)", items: [
   ["Sidebar", "Customers moved next to Orders; a Transfers shortcut (with a count) under Masters ▸ Stock. Nothing else moved."],
   ["Import", "The upload dialog states the limits: .xlsx or .csv, up to 5 MB / 10,000 rows."],
   ["Customer slot picker", "Plain pills — no colour states or legend. Full, closed and past-cut-off slots are greyed out with the reason; the chosen slot is blue. The colours stay on the admin Delivery Slots screen."],
+  ["Order confirmation mode", "Setup ▸ Business Settings ▸ Delivery & Payments ▸ Order confirmation: Automatic (default — a paid or cash order is confirmed as soon as it is placed; first step 'Start picking'; no 'New' stage) or Manual (orders wait as 'New — accept' until your team taps Accept). Switching to automatic confirms the orders waiting."],
 ] });

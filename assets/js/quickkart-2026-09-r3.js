@@ -215,7 +215,7 @@ function orderTiming(o) {
   if (TERMINAL_STATUSES.includes(o.status)) return null;
   const now = Date.now();
   const age = (now - o.createdAt) / 60000;
-  if (o.status === "new" && age > (window.timingSettings ? timingSettings().confirmAlertMins : 10)) return { late: true, tone: "red", label: `Not confirmed · ${minsText(age)}` }; // 2026-09 r7: a setting
+  if (o.status === "new" && age > (window.timingSettings ? timingSettings().confirmAlertMins : 10)) return { late: true, tone: "red", label: `Not accepted · ${minsText(age)}` }; // 2026-09 r7: a setting; "accept" wording per D71
   const kind = orderKind(o);
   if (kind === "scheduled") {
     const w = orderSlotWindow(o);
@@ -250,7 +250,7 @@ function needsAction(o) {
 function needsActionReason(o) {
   const iss = orderIssues(o);
   const t = orderTiming(o);
-  return iss.returnReq ? "Return requested" : iss.unavailable ? "Item unavailable — customer to choose" : t && t.late ? t.label : o.status === "new" ? "Confirm this order" : "";
+  return iss.returnReq ? "Return requested" : iss.unavailable ? "Item unavailable — customer to choose" : t && t.late ? t.label : o.status === "new" ? "Accept this order" : ""; // 2026-09 r7 (D71)
 }
 
 /* ---------------- 4. Admin ▸ Orders (workspace) ---------------- */
