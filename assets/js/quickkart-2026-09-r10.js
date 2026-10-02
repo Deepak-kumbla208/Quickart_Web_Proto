@@ -1,6 +1,7 @@
 /* ====================================================================
-   QuickKart prototype — Round 10 (2 October 2026): picture uploads, as
-   the backend built them (P9-1, MR !72 on quickkart-api-service, D77).
+   QuickKart prototype — Round 10 (2 October 2026): picture uploads (P9-1,
+   MR !72, D77) and Categories / Brands (P9-2, MR !73), as the backend
+   built them on quickkart-api-service. Every change of the day is here.
 
    A. "Upload" next to every Image URL box — product, category, the home
       screen's section / tile / combo / promo-section forms, promotion —
@@ -12,6 +13,10 @@
       Pictures already saved are left alone.
    D. Fix: "New promotion" no longer breaks the page (its default picture
       list, BANNERS, was never defined).
+   E. Categories (P9-2): a category that a home-screen tile opens cannot be
+      deleted either (a tile would open a missing category); the list shows
+      the tiles next to the item count; the refusals use the backend's
+      words — for brands too.
 
    In the real admin app the button calls POST /admin/uploads/presign
    { purpose, contentType, sizeBytes } with the SHRUNK picture's type and
@@ -189,10 +194,59 @@ while (BANNERS.length < 4) BANNERS.push(BANNERS[0] || { image: img("photo-156647
   };
 })();
 
-/* ---------------- 4. What's changed ---------------- */
-WHATS_NEW.unshift({ area: "Picture uploads (round 10)", items: [
+/* ---------------- 4. Categories and brands (P9-2) ---------------- */
+(() => {
+  const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
+  const itemsIn = (category) => State.items.filter((i) => i.cat === category.name).length;
+  const tilesFor = (category) =>
+    State.homeSections.reduce((n, s) => n + (s.tiles || []).filter((t) => t.catId === category.id).length, 0);
+
+  // The list: "3 items · 1 home-screen tile", so the admin sees why Delete may be refused.
+  const baseCategories = adminCategories;
+  window.adminCategories = () => {
+    let html = baseCategories();
+    for (const c of State.categories) {
+      const tiles = tilesFor(c);
+      if (tiles === 0) continue;
+      const count = `<div class="admin-row-name">${esc(c.name)}</div><div class="qk-muted small">${itemsIn(c)} items`;
+      html = html.replace(count, `${count} · ${plural(tiles, "home-screen tile", "home-screen tiles")}`);
+    }
+    return html;
+  };
+
+  // Delete: refused while products OR home-screen tiles use the category — the backend's 409 CATEGORY_IN_USE words.
+  const baseDeleteCategory = Actions["delete-category"];
+  Actions["delete-category"] = (el) => {
+    const c = State.categories.find((x) => x.id === Number(el.dataset.id));
+    const items = itemsIn(c);
+    const tiles = tilesFor(c);
+    if (items > 0 || tiles > 0) {
+      const uses = [items > 0 ? plural(items, "product", "products") : null, tiles > 0 ? plural(tiles, "home-screen tile", "home-screen tiles") : null].filter(Boolean);
+      const fix = [items > 0 ? "move the products to another category" : null, tiles > 0 ? "change the tiles on the Home Screen" : null].filter(Boolean);
+      showToast(`This category is used by ${uses.join(" and ")} — ${fix.join(" and ")} first`, "danger");
+      return;
+    }
+    baseDeleteCategory(el);
+  };
+
+  // Brands: the backend's 409 BRAND_IN_USE words.
+  const baseDeleteBrand = Actions["delete-brand"];
+  Actions["delete-brand"] = (el) => {
+    const b = State.brands.find((x) => x.id === Number(el.dataset.id));
+    const used = State.items.filter((i) => i.brand === b.name).length;
+    if (used > 0) {
+      showToast(`${plural(used, "product uses", "products use")} this brand — give ${used === 1 ? "it" : "them"} another brand first`, "danger");
+      return;
+    }
+    baseDeleteBrand(el);
+  };
+})();
+
+/* ---------------- 5. What's changed ---------------- */
+WHATS_NEW.unshift({ area: "Picture uploads, categories & brands (round 10)", items: [
   ["Upload from device", "Every image field — products, categories, the home screen's sections, tiles, combos and promo sections, promotions — has an Upload button next to the Image URL box. Pick a photo: it is shrunk to 1200 px, shows in the preview at once and is saved with the form."],
   ["Picture rules", "JPEG, PNG or WebP only (never SVG), at most 2 MB after shrinking — anything else gets a message and nothing changes. The logo's device upload follows the same rules now (it was any image type up to 500 KB)."],
   ["Or paste a link", "The Image URL box still takes a link to a picture on the web, but it must start with https://. Pictures already saved are not affected."],
   ["New promotion fixed", "Marketing ▸ Promotions ▸ New promotion opened a blank page; it opens the form now, and a promotion saved without a picture gets one of the default banners."],
+  ["Categories in use", "Masters ▸ Categories: a category that a home-screen tile opens can't be deleted either (the tile would lead nowhere) — the row shows \"· 1 home-screen tile\", and Delete says what to change first. Brands and categories with products say how many, as the real app will."],
 ] });
