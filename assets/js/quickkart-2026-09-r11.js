@@ -1,8 +1,11 @@
 /* ====================================================================
-   QuickKart prototype — Round 11 (5 October 2026): stock transfers as the
-   backend built them (P9-4b, MR !78, D58 a, D81) on quickkart-api-service.
-   Round 6 already has the flow (request → Accept & send / Decline → Mark
-   received, and "Send to store"); this round lines up the rules.
+   QuickKart prototype — Round 11 (5 October 2026): stock transfers (P9-4b,
+   MR !78, D58 a, D81) and, later the same day, the Home Screen (P9-5,
+   MR !79, D82) as the backend built them on quickkart-api-service. Every
+   change of the day is here.
+
+   Stock transfers — Round 6 already has the flow (request → Accept & send /
+   Decline → Mark received, and "Send to store"); this lines up the rules.
 
    A. Mark received settles the order's short line only while the order is
       still open and the line is not marked unavailable — otherwise the
@@ -18,6 +21,20 @@
    E. A product with a transfer still requested or on the way can't be
       deleted, nor a store with one to or from it (D81 b) — the backend's
       words.
+
+   Home Screen (Marketing ▸ Home Screen) — the editor already does what
+   P9-5 built (sections on/off and dragged, rails, banners, promo sections,
+   tiles with their category / tag / icon, combos, theme & branding); this
+   adds the backend's checks:
+   F. A combo's bundle price must be below what its products cost apart
+      ("Bundle price must be below S$11.70 — what these products cost
+      apart"); a combo holds at most 10 products.
+   G. Limits: 20 tiles a section, 10 promo sections, 20 products a promo
+      section, 30 combos ("The home page holds at most … — delete one
+      first").
+   H. Titles at most 80 characters, subtitles 200.
+   I. Every Home Screen change is in Setup ▸ Audit log (the backend audits
+      them): sections, tiles, combos, the order, theme & branding.
 
    In the real admin app (quickkart-api-service docs/08 §36): the lists are
    GET /admin/stock-transfers?view=to_send|to_receive|waiting|sent|done, the
@@ -193,11 +210,183 @@
   };
 })();
 
+/* ---------------- Later the same day: the Home Screen as P9-5 built it (MR !79, D82) ---------------- */
+/* In the real admin app (quickkart-api-service docs/08 §37): GET /admin/home-sections (every section with `editable`
+   and its tiles), PATCH / POST / DELETE and PUT …/order; tiles under …/:sectionId/tiles; /admin/combos (each with
+   `membersTotal` and `saving`); GET / PUT /admin/site-customization (all eleven colours, the logo, `defaults`). */
+(function round11HomeScreen() {
+  const LIMITS = { tiles: 20, promoSections: 10, promoProducts: 20, combos: 30, comboProducts: 10 };
+  const TITLE_MAX = 80;
+  const SUBTITLE_MAX = 200;
+  const limit = (n, what) => `The home page holds at most ${n} ${what} — delete one first`;
+  const textProblem = (fd) => {
+    if (String(fd.get("title") || "").trim().length > TITLE_MAX) return `Keep the title to ${TITLE_MAX} characters`;
+    if (String(fd.get("subtitle") || "").trim().length > SUBTITLE_MAX) return `Keep the subtitle to ${SUBTITLE_MAX} characters`;
+    return null;
+  };
+  // F, G, H. A check before the save the earlier rounds built (Round 10's picture rules still run after it).
+  const guard = (key, check) => {
+    const base = Submits[key];
+    Submits[key] = (form, ev) => {
+      const problem = check(form, new FormData(form));
+      if (problem) { UI.modal.error = problem; render(); return; }
+      return base(form, ev);
+    };
+  };
+  guard("save-section-edit", (_form, fd) => textProblem(fd));
+  guard("save-promo-section", (_form, fd) => {
+    const adding = !(UI.modal.form || {}).id;
+    if (adding && State.homeSections.filter((s) => s.type === "promo").length >= LIMITS.promoSections) {
+      return limit(LIMITS.promoSections, "promo sections");
+    }
+    if (fd.getAll("itemIds").length > LIMITS.promoProducts) return `A promo section shows at most ${LIMITS.promoProducts} products`;
+    return textProblem(fd);
+  });
+  guard("save-tile", (form, fd) => {
+    const section = State.homeSections.find((s) => s.id === Number(form.dataset.section));
+    if (form.dataset.tile === "new" && (section.tiles || []).length >= LIMITS.tiles) return limit(LIMITS.tiles, "tiles in one section");
+    return textProblem(fd);
+  });
+  guard("save-combo", (form, fd) => {
+    const section = State.homeSections.find((s) => s.id === Number(form.dataset.section));
+    const itemIds = fd.getAll("itemIds").map(Number);
+    const price = Number(fd.get("bundlePrice")) || 0;
+    if (form.dataset.combo === "new" && (section.combos || []).length >= LIMITS.combos) return limit(LIMITS.combos, "combos");
+    if (itemIds.length > LIMITS.comboProducts) return `A combo holds at most ${LIMITS.comboProducts} products`;
+    const text = textProblem(fd);
+    if (text) return text;
+    // An empty title, no products or no price: the form's own messages, as before.
+    if (!String(fd.get("title") || "").trim() || !itemIds.length || price <= 0) return null;
+    const apart = Math.round(comboIndividualTotal({ itemIds }) * 100) / 100;
+    if (price >= apart) return `Bundle price must be below ${money(apart)} — what these products cost apart`;
+    return null;
+  });
+
+  // I. Every Home Screen change in the audit log, as the backend records them.
+  Object.assign(AUDIT_ACTION_TEXT, {
+    "home_section.created": ["Home sections", "added home section"],
+    "home_section.updated": ["Home sections", "changed home section"],
+    "home_section.deleted": ["Home sections", "deleted home section"],
+    "home_section.reordered": ["Home sections", "reordered the home sections"],
+    "home_tile.created": ["Home tiles", "added a tile to"],
+    "home_tile.updated": ["Home tiles", "changed a tile of"],
+    "home_tile.deleted": ["Home tiles", "deleted a tile of"],
+    "home_tile.reordered": ["Home tiles", "reordered the tiles of"],
+    "combo.created": ["Combos", "added combo"],
+    "combo.updated": ["Combos", "changed combo"],
+    "combo.deleted": ["Combos", "deleted combo"],
+    "combo.reordered": ["Combos", "reordered the combos"],
+    "site_customization.updated": ["Theme & branding", "changed the theme & branding"],
+  });
+  Object.assign(AUDIT_ENTITY_LABEL, {
+    home_section: "Home sections",
+    home_tile: "Home tiles",
+    combo: "Combos",
+    site_customization: "Theme & branding",
+  });
+  Object.assign(AUDIT_FIELD_LABEL, {
+    enabled: "Shown", title: "Title", subtitle: "Subtitle", image: "Picture", poolKey: "Products from", itemIds: "Products",
+    icon: "Icon", catId: "Category", tag: "Tag", bundlePrice: "Bundle price", logoUrl: "Logo", logoSize: "Logo size",
+  });
+
+  const SECTION_FIELDS = ["enabled", "title", "subtitle", "image", "poolKey", "itemIds"];
+  const TILE_FIELDS = ["title", "subtitle", "image", "icon", "catId", "tag"];
+  const COMBO_FIELDS = ["title", "subtitle", "image", "bundlePrice", "itemIds"];
+  const snap = () => JSON.parse(JSON.stringify({ sections: State.homeSections, site: State.siteCustomization || {} }));
+  const labelOf = (s) => homeSectionLabel(s);
+  // An uploaded picture is a long data: address — the log says so instead of storing it again.
+  const shown = (v) => (typeof v === "string" && v.startsWith("data:") ? "(uploaded picture)" : v ?? null);
+  const pick = (r, keys) => Object.fromEntries(keys.map((k) => [k, shown(r[k])]));
+  const changedKeys = (a, b, keys) => keys.filter((k) => !auditSame(a[k], b[k]));
+  const inOrder = (list) => [...list].sort((x, y) => (x.order || 0) - (y.order || 0));
+
+  function recordHome(before, actor) {
+    if (!actor) return;
+    const by = { actorType: "user", actorId: actor.id };
+    const after = snap();
+    const was = new Map(before.sections.map((s) => [s.id, s]));
+    const now = new Map(after.sections.map((s) => [s.id, s]));
+    for (const s of after.sections) {
+      const o = was.get(s.id);
+      const names = { entity: labelOf(s) };
+      if (!o) {
+        addAuditEvent({ action: "home_section.created", entity: "home_section", entityId: s.id, ...by, after: pick(s, SECTION_FIELDS), names });
+        continue;
+      }
+      const ch = changedKeys(o, s, SECTION_FIELDS);
+      if (ch.length) addAuditEvent({ action: "home_section.updated", entity: "home_section", entityId: s.id, ...by, before: pick(o, ch), after: pick(s, ch), names });
+      for (const [list, entity, fields] of [["tiles", "home_tile", TILE_FIELDS], ["combos", "combo", COMBO_FIELDS]]) {
+        const oldList = o[list] || [];
+        const newList = s[list] || [];
+        const oldById = new Map(oldList.map((x) => [x.id, x]));
+        const newById = new Map(newList.map((x) => [x.id, x]));
+        const nameOf = (x) => ({ entity: entity === "combo" ? x.title : labelOf(s) });
+        for (const x of newList) {
+          const ox = oldById.get(x.id);
+          if (!ox) { addAuditEvent({ action: `${entity}.created`, entity, entityId: x.id, ...by, after: pick(x, fields), names: nameOf(x) }); continue; }
+          const c = changedKeys(ox, x, fields);
+          if (c.length) addAuditEvent({ action: `${entity}.updated`, entity, entityId: x.id, ...by, before: { title: ox.title, ...pick(ox, c) }, after: { title: x.title, ...pick(x, c) }, names: nameOf(x) });
+        }
+        for (const ox of oldList) {
+          if (!newById.has(ox.id)) addAuditEvent({ action: `${entity}.deleted`, entity, entityId: ox.id, ...by, before: pick(ox, ["title"]), names: nameOf(ox) });
+        }
+        const kept = (l) => inOrder(l).filter((x) => oldById.has(x.id) && newById.has(x.id)).map((x) => x.id);
+        if (!auditSame(kept(oldList), kept(newList))) {
+          addAuditEvent({
+            action: `${entity}.reordered`, entity, entityId: entity === "combo" ? null : s.id, ...by,
+            before: { order: inOrder(oldList).map((x) => x.title) }, after: { order: inOrder(newList).map((x) => x.title) },
+            names: entity === "combo" ? {} : { entity: labelOf(s) },
+          });
+        }
+      }
+    }
+    for (const o of before.sections) {
+      if (!now.has(o.id)) addAuditEvent({ action: "home_section.deleted", entity: "home_section", entityId: o.id, ...by, before: pick(o, ["title"]), names: { entity: labelOf(o) } });
+    }
+    const kept = (l) => inOrder(l).filter((s) => was.has(s.id) && now.has(s.id)).map((s) => s.id);
+    if (!auditSame(kept(before.sections), kept(after.sections))) {
+      addAuditEvent({
+        action: "home_section.reordered", entity: "home_section", entityId: null, ...by,
+        before: { order: inOrder(before.sections).map(labelOf) }, after: { order: inOrder(after.sections).map(labelOf) },
+      });
+    }
+    const t0 = before.site.theme || {};
+    const t1 = after.site.theme || {};
+    const b0 = before.site.branding || {};
+    const b1 = after.site.branding || {};
+    const colours = [...new Set([...Object.keys(t0), ...Object.keys(t1)])].filter((k) => !auditSame(t0[k], t1[k]));
+    const logo = ["logoUrl", "logoSize"].filter((k) => !auditSame(b0[k], b1[k]));
+    if (colours.length || logo.length) {
+      addAuditEvent({
+        action: "site_customization.updated", entity: "site_customization", entityId: null, ...by,
+        before: { ...pick(t0, colours), ...pick(b0, logo) }, after: { ...pick(t1, colours), ...pick(b1, logo) },
+      });
+    }
+  }
+  const audited = (table, name) => {
+    const base = table[name];
+    if (!base) return;
+    table[name] = function (...args) {
+      const actor = currentUser();
+      const before = snap();
+      const result = base.apply(this, args);
+      recordHome(before, actor);
+      return result;
+    };
+  };
+  ["save-section-edit", "save-promo-section", "save-tile", "save-combo"].forEach((n) => audited(Submits, n));
+  ["toggle-home-section", "delete-promo-section", "delete-tile", "delete-combo", "save-theme", "reset-theme"].forEach((n) => audited(Actions, n));
+  ["reorderHomeSection", "reorderSectionTiles", "reorderCombos"].forEach((n) => audited(window, n));
+})();
+
 /* ---------------- What's changed ---------------- */
-WHATS_NEW.unshift({ area: "Stock transfers as built (round 11)", items: [
+WHATS_NEW.unshift({ area: "Stock transfers & Home Screen as built (round 11)", items: [
   ["Order cancelled", "Cancelling an order cancels its transfer requests that were not sent yet — Transfers ▸ Done shows them as \"Cancelled · with the order\". One already on the way still arrives: Mark received adds it to the store's stock."],
   ["Mark received", "A transfer for an order covers the short item only while the order is open and the item isn't marked unavailable; otherwise the units simply join the store's stock, and the toast says so."],
   ["Decline with a note", "Stock ▸ Transfers ▸ Decline: a note box next to the reason. The lists show the reason and the note, and who did the last step."],
   ["Not enough to send", "With negative stock not allowed, Accept & send and Send to store say \"Only 2 on hand at QuickKart Clementi — this business does not allow negative stock\"."],
   ["Deleting a product or a store", "Not while a stock transfer of the product — or to or from the store — is still requested or on the way: receive, decline or cancel it first."],
+  ["Combo price", "Marketing ▸ Home Screen ▸ Deals & Combos: the bundle price must be below what its products cost apart — \"Bundle price must be below S$11.70 — what these products cost apart\". A combo holds at most 10 products."],
+  ["Home Screen limits", "At most 20 tiles in a section, 10 promo sections, 20 products in a promo section and 30 combos — the message says to delete one first. Titles up to 80 characters, subtitles up to 200."],
+  ["Home Screen in the audit log", "Setup ▸ Audit log shows every Home Screen change: sections switched, edited, added, deleted or reordered; tiles; combos; theme & branding — with before and after."],
 ] });
