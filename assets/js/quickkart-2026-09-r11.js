@@ -36,6 +36,28 @@
    I. Every Home Screen change is in Setup ▸ Audit log (the backend audits
       them): sections, tiles, combos, the order, theme & branding.
 
+   Business Settings (Setup ▸ Business Settings) — later the same day, as
+   P9-6 (MR !80) built it; every card keeps its own Save:
+   J. Company Profile: Website, WhatsApp number and Timezone boxes; legal
+      name, trading-as and UEN required; the UEN, GST number, SFA licence,
+      email and phones checked with the backend's words, shown by the box.
+   K. Payment methods: the last one on cannot be switched off — checkout
+      needs one for every order, even one the wallet pays in full.
+   L. Delivery & Payments ▸ Order rules (new card): customers may cancel
+      until (new / confirmed / picking / packing — never once it is ready
+      for the rider), the most of one item per order (1–99), returns within
+      N days of delivery (0 = none; applies at once).
+   M. Delivery & Payments ▸ Rider pay (new card): what a rider earns per
+      delivery (was a fixed S$5.00); an order keeps its amount.
+   N. Stock Rules ▸ Goodwill limits: the staff credit has its own period,
+      and a per-staff-member daily limit (default S$200; above it only the
+      Super Admin) — Customers ▸ Add wallet credit enforces both.
+   P. Order timing targets: the alert and the express buffer go to 240 min.
+   Q. Peak-hour time sections: at least one, at most 24, names ≤ 40.
+   R. The demo follows the new settings: the customer's Cancel and Return
+      buttons, the cart's per-item limit, the rider's earnings.
+   S. Every Business Settings save is one entry in Setup ▸ Audit log.
+
    In the real admin app (quickkart-api-service docs/08 §36): the lists are
    GET /admin/stock-transfers?view=to_send|to_receive|waiting|sent|done, the
    badge GET /admin/stock-transfers/counts, "Request N from <store> (has
@@ -379,8 +401,387 @@
   ["reorderHomeSection", "reorderSectionTiles", "reorderCombos"].forEach((n) => audited(window, n));
 })();
 
+/* ---------------- Later the same day: Business Settings as P9-6 built it (MR !80) ---------------- */
+/* In the real admin app (quickkart-api-service docs/08 §38): GET /admin/settings answers every setting grouped as these
+   cards; PATCH /admin/settings takes only what a card sends — each card keeps its own Save. A refused value is a 422
+   naming the field (errors["company.uen"] …) — show it by the box. */
+const DEFAULT_BUSINESS_RULES = {
+  timezone: "Asia/Singapore",
+  customerCancelUntil: "confirmed",
+  maxQtyPerItem: 99,
+  returnWindowDays: 7,
+  riderDeliveryFee: RIDER_FLAT_FEE,
+};
+State.businessRules = { ...DEFAULT_BUSINESS_RULES, ...loadLS("businessRules", {}) };
+function businessRules() { return State.businessRules; }
+function riderDeliveryFee() { return Number(businessRules().riderDeliveryFee); }
+State.deliverySettings = {
+  ...State.deliverySettings,
+  goodwill: { staffDays: 30, staffPerUserDay: 200, ...State.deliverySettings.goodwill },
+};
+
+(function round11BusinessSettings() {
+  const UEN = /^[0-9A-Z]{8,9}[A-Z]$/;
+  const GST_REG_NO = /^(?:[0-9A-Z]{8,9}[A-Z]|M[0-9A-Z]-?[0-9]{7}-?[0-9A-Z])$/;
+  const PHONE = /^\+?(?=.*[0-9])[0-9 ()-]+$/;
+  const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  const WEBSITE = /^(https?:\/\/)?[a-z0-9-]+(\.[a-z0-9-]+)+(\/\S*)?$/i;
+  const TIMEZONES = ["Asia/Singapore", "Asia/Kuala_Lumpur", "Asia/Jakarta", "Asia/Bangkok", "Asia/Manila", "Asia/Hong_Kong", "Asia/Kolkata", "Asia/Dubai", "Australia/Sydney", "Europe/London"];
+  const CANCEL_STEPS = ["new", "confirmed", "picking", "packing"];
+  const CANCEL_LABEL = {
+    new: "New — until the store confirms it",
+    confirmed: "Confirmed — until picking starts (default)",
+    picking: "Picking — until packing starts",
+    packing: "Packing — until it's ready for the rider",
+  };
+  const DAY = 86400000;
+  const LAST_METHOD = "Keep at least one payment method on — customers could not place any order";
+  const regNo = (v) => String(v || "").replace(/\s/g, "").toUpperCase();
+  const wholeIn = (v, min, max) => Number.isInteger(v) && v >= min && v <= max;
+  const amountIn = (v, max) => Number.isFinite(v) && v >= 0 && v <= max && Math.round(v * 100) === v * 100;
+  const dis = (editable) => (editable ? "" : "disabled");
+
+  /* J. Company Profile: Website, WhatsApp and Timezone boxes; the backend's checks, by the box. */
+  window.adminCompanyProfilePanel = (editable) => {
+    const c = { ...State.companyProfile, timezone: businessRules().timezone, ...(UI.cpDraft || {}) };
+    const err = UI.cpErrors || {};
+    const box = (id, key, label, attrs = "") => `<label class="field"><span class="field-label">${label}</span><input class="input" id="${id}" value="${esc(c[key] || "")}" ${attrs} ${dis(editable)} />${err[key] ? `<span class="field-error">${esc(err[key])}</span>` : ""}</label>`;
+    const zones = TIMEZONES.includes(c.timezone) ? TIMEZONES : [c.timezone, ...TIMEZONES];
+    return `
+  <div class="summary-card" style="max-width:480px">
+    <div class="summary-card-title">Company Profile</div>
+    <div class="qk-muted small">Shown on the customer site footer, the tax invoice, and the login page.</div>
+    ${box("cpName", "name", "Legal company name *")}
+    ${box("cpTradingAs", "tradingAs", "Trading as *")}
+    ${box("cpAddress1", "address1", "Address line 1")}
+    ${box("cpAddress2", "address2", "Address line 2")}
+    <div class="field-grid-2">
+      ${box("cpUen", "uen", "UEN *", 'placeholder="e.g. 201912345K"')}
+      ${box("cpGstReg", "gstReg", "GST Reg. No.", 'placeholder="Empty = not GST-registered"')}
+    </div>
+    ${box("cpSfaLicence", "sfaLicence", "SFA Licence No.")}
+    <div class="field-grid-2">
+      ${box("cpEmail", "email", "Support email", 'type="email"')}
+      ${box("cpPhone", "phone", "Support phone")}
+    </div>
+    <div class="field-grid-2">
+      ${box("cpSupportHours", "supportHours", "Support hours")}
+      ${box("cpWhatsapp", "whatsapp", "WhatsApp number", 'placeholder="Optional"')}
+    </div>
+    ${box("cpWebsite", "website", "Website", 'placeholder="e.g. www.yourshop.sg"')}
+    <label class="field"><span class="field-label">Timezone</span>
+      <select class="input" id="cpTimezone" ${dis(editable)}>${zones.map((z) => `<option ${z === c.timezone ? "selected" : ""}>${esc(z)}</option>`).join("")}</select>
+      <span class="qk-muted small">Order dates, invoices, delivery-slot days and reports follow it.</span>
+    </label>
+    ${editable ? `<button class="btn btn-primary btn-block" data-action="save-company-profile">Save</button>` : ""}
+  </div>`;
+  };
+  Actions["save-company-profile"] = () => {
+    const val = (id) => document.getElementById(id).value.trim();
+    const draft = {
+      name: val("cpName"), tradingAs: val("cpTradingAs"), address1: val("cpAddress1"), address2: val("cpAddress2"),
+      uen: regNo(val("cpUen")), gstReg: regNo(val("cpGstReg")), sfaLicence: regNo(val("cpSfaLicence")),
+      email: val("cpEmail"), phone: val("cpPhone"), supportHours: val("cpSupportHours"),
+      whatsapp: val("cpWhatsapp"), website: val("cpWebsite"), timezone: document.getElementById("cpTimezone").value,
+    };
+    const errors = {};
+    if (draft.name.length < 1 || draft.name.length > 150) errors.name = "Must be 1–150 characters";
+    if (draft.tradingAs.length < 1 || draft.tradingAs.length > 100) errors.tradingAs = "Must be 1–100 characters";
+    if (!UEN.test(draft.uen)) errors.uen = "Must be a UEN: 9 or 10 letters and digits ending in a letter, e.g. 201912345K";
+    if (draft.gstReg && !GST_REG_NO.test(draft.gstReg)) errors.gstReg = "Must be a GST registration number: your UEN, or an M number such as M2-0012345-6";
+    if (draft.sfaLicence && !/^[0-9A-Z][0-9A-Z/-]{0,29}$/.test(draft.sfaLicence)) errors.sfaLicence = "Must be 1–30 letters, digits, dashes or slashes";
+    if (draft.email && !EMAIL.test(draft.email)) errors.email = "Must be a valid email address";
+    for (const key of ["phone", "whatsapp"]) {
+      if (draft[key] && (!PHONE.test(draft[key]) || draft[key].length < 3 || draft[key].length > 30)) errors[key] = "Only digits, spaces, brackets, dashes and a leading + (3–30)";
+    }
+    if (draft.website && !WEBSITE.test(draft.website)) errors.website = "Must be a website address";
+    if (Object.keys(errors).length) { UI.cpDraft = draft; UI.cpErrors = errors; render(); return; }
+    const { timezone, ...profile } = draft;
+    State.companyProfile = { ...State.companyProfile, ...profile };
+    State.businessRules = { ...businessRules(), timezone };
+    UI.cpDraft = null; UI.cpErrors = null;
+    persist("companyProfile"); persist("businessRules"); showToast("Company profile updated"); render();
+  };
+  const baseTab = Actions["set-business-tab"];
+  Actions["set-business-tab"] = (el) => { UI.cpDraft = null; UI.cpErrors = null; return baseTab(el); };
+
+  /* K. Payment methods: the last one on cannot be switched off (checkout needs one for every order). */
+  const enabledCount = () => State.deliverySettings.paymentMethods.filter((m) => m.enabled).length;
+  const baseToggle = Actions["toggle-payment-method"];
+  Actions["toggle-payment-method"] = (el) => {
+    const m = State.deliverySettings.paymentMethods.find((x) => x.name === el.dataset.name);
+    if (m && m.enabled && enabledCount() <= 1) { showToast(LAST_METHOD, "danger"); return; }
+    return baseToggle(el);
+  };
+
+  /* L, M. Delivery & Payments: an "Order rules" card and a "Rider pay" card after the timing targets. */
+  function orderRulesCardHTML(editable) {
+    const r = businessRules();
+    return `
+  <div class="summary-card" style="max-width:560px; margin-top:16px">
+    <div class="summary-card-title">Order rules</div>
+    <div class="qk-muted small">What your customers may do with an order.</div>
+    <label class="field" style="margin-top:10px"><span class="field-label">Customers may cancel until</span>
+      <select class="input" id="ruleCancelUntil" ${dis(editable)}>${CANCEL_STEPS.map((s) => `<option value="${s}" ${r.customerCancelUntil === s ? "selected" : ""}>${CANCEL_LABEL[s]}</option>`).join("")}</select>
+      <span class="qk-muted small">Never once the order is ready for the rider. Applies to open orders at once.</span>
+    </label>
+    <div class="field-grid-2">
+      <label class="field"><span class="field-label">Most of one item per order</span><input class="input" type="number" min="1" max="99" id="ruleMaxQty" value="${r.maxQtyPerItem}" ${dis(editable)} /><span class="qk-muted small">1–99. A customer can't add more of one product than this.</span></label>
+      <label class="field"><span class="field-label">Returns accepted within (days of delivery)</span><input class="input" type="number" min="0" max="90" id="ruleReturnDays" value="${r.returnWindowDays}" ${dis(editable)} /><span class="qk-muted small">0–90; 0 = no returns. Unlike the other settings, a change applies at once — also to orders already delivered.</span></label>
+    </div>
+    ${editable ? `<button class="btn btn-primary btn-block" data-action="save-order-rules">Save</button>` : ""}
+  </div>`;
+  }
+  function riderPayCardHTML(editable) {
+    return `
+  <div class="summary-card" style="max-width:420px; margin-top:16px">
+    <div class="summary-card-title">Rider pay</div>
+    <div class="qk-muted small">A flat amount for each completed delivery, shown in the rider app's Earnings. An order keeps the amount it was delivered with.</div>
+    <label class="field" style="margin-top:10px"><span class="field-label">Rider earns per delivery (S$)</span><input class="input" type="number" min="0" max="1000" step="0.1" id="riderFeeInput" value="${riderDeliveryFee()}" ${dis(editable)} /></label>
+    ${editable ? `<button class="btn btn-primary btn-block" data-action="save-rider-pay">Save</button>` : ""}
+  </div>`;
+  }
+  const deliveryPanel = window.adminDeliveryPanel;
+  window.adminDeliveryPanel = (editable) => {
+    let html = deliveryPanel(editable);
+    // K. The last method on: its Disable button is off, with the reason.
+    const on = State.deliverySettings.paymentMethods.filter((m) => m.enabled);
+    if (on.length === 1) {
+      const name = esc(on[0].name);
+      html = html.replace(`data-action="toggle-payment-method" data-name="${name}">Disable`, `data-action="toggle-payment-method" data-name="${name}" disabled title="${LAST_METHOD}">Disable`);
+    }
+    return `${html}${orderRulesCardHTML(editable)}${riderPayCardHTML(editable)}`;
+  };
+  Object.assign(Actions, {
+    "save-order-rules"() {
+      const cancel = document.getElementById("ruleCancelUntil").value;
+      const maxQty = Number(document.getElementById("ruleMaxQty").value);
+      const days = Number(document.getElementById("ruleReturnDays").value);
+      if (!wholeIn(maxQty, 1, 99)) { showToast("Most of one item: must be 1–99", "danger"); return; }
+      if (!wholeIn(days, 0, 90)) { showToast("Returns: must be 0–90 days", "danger"); return; }
+      State.businessRules = { ...businessRules(), customerCancelUntil: cancel, maxQtyPerItem: maxQty, returnWindowDays: days };
+      persist("businessRules"); showToast("Order rules saved"); render();
+    },
+    "save-rider-pay"() {
+      const fee = Number(document.getElementById("riderFeeInput").value);
+      if (!amountIn(fee, 1000)) { showToast("Rider pay: must be S$0–1000", "danger"); return; }
+      State.businessRules = { ...businessRules(), riderDeliveryFee: fee };
+      persist("businessRules"); showToast(`Riders now earn ${money(fee)} per delivery`); render();
+    },
+  });
+
+  /* N. Goodwill limits: the staff credit's own period and a per-staff-member daily limit (D66 d). */
+  window.goodwillCapsCardHTML = (editable) => {
+    const g = goodwillSettings();
+    const field = (id, label, value, min, max, help) => `<label class="field"><span class="field-label">${label}</span><input class="input" type="number" min="${min}" max="${max}" step="1" id="${id}" value="${value}" ${dis(editable)} />${help ? `<span class="qk-muted small">${help}</span>` : ""}</label>`;
+    return `
+  <div class="summary-card" style="max-width:560px;margin-top:16px">
+    <div class="summary-card-title">Goodwill limits</div>
+    <div class="qk-muted small">Two separate limits per customer, each over its own rolling period, so one never eats into the other. The refund part of an unavailable item is always paid in full — only the bonus counts.</div>
+    <div class="field-grid-2" style="margin-top:10px">
+      ${field("gwBonusCap", "Unavailable-item bonus cap (S$)", g.bonusCap, 0, 1000, "The wallet bonus stops once a customer has received this much in the period. 0 = no bonus.")}
+      ${field("gwDays", "Bonus period (days)", g.days, 1, 365)}
+      ${field("gwStaffCap", "Staff goodwill credit cap (S$)", g.staffCap, 0, 1000, "The most your team can add to one customer's wallet from Customers ▸ Add wallet credit.")}
+      ${field("gwStaffDays", "Staff credit period (days)", g.staffDays, 1, 365)}
+    </div>
+    ${field("gwStaffPerDay", "Most one staff member can credit per day (S$)", g.staffPerUserDay, 0, 10000, "Across all customers. Above it only the Super Admin can add credit.")}
+    ${editable ? `<button class="btn btn-primary btn-block" data-action="save-goodwill-caps">Save</button>` : ""}
+  </div>`;
+  };
+  Actions["save-goodwill-caps"] = () => {
+    const num = (id) => Number(document.getElementById(id).value);
+    const next = {
+      ...goodwillSettings(),
+      bonusCap: num("gwBonusCap"), days: num("gwDays"),
+      staffCap: num("gwStaffCap"), staffDays: num("gwStaffDays"), staffPerUserDay: num("gwStaffPerDay"),
+    };
+    if (!amountIn(next.bonusCap, 1000) || !amountIn(next.staffCap, 1000)) { showToast("Caps: must be S$0–1000", "danger"); return; }
+    if (!amountIn(next.staffPerUserDay, 10000)) { showToast("Per staff member per day: must be S$0–10000", "danger"); return; }
+    if (!wholeIn(next.days, 1, 365) || !wholeIn(next.staffDays, 1, 365)) { showToast("Periods: must be 1–365 days", "danger"); return; }
+    State.deliverySettings = { ...State.deliverySettings, goodwill: next };
+    persist("deliverySettings");
+    showToast(`Saved: bonus up to ${money(next.bonusCap)} per ${next.days} days, staff credit up to ${money(next.staffCap)} per ${next.staffDays} days`);
+    render();
+  };
+
+  /* O. Customers ▸ Add wallet credit: the staff period, and what this staff member may still add today. */
+  const isToday = (at) => new Date(at).toDateString() === new Date().toDateString();
+  const creditedToday = (name) =>
+    customerRecords().reduce((s, c) => s + customerMeta(c.key).credits.filter((cr) => cr.by === name && isToday(cr.at)).reduce((t, cr) => t + cr.amount, 0), 0);
+  const dailyLeft = () => {
+    const me = currentUser();
+    if (!me || isSuperAdmin(me)) return Infinity;
+    return Math.max(0, round2(goodwillSettings().staffPerUserDay - creditedToday(me.name)));
+  };
+  const baseModal = window.customerModal;
+  window.customerModal = () => {
+    const m = UI.modal;
+    const g = goodwillSettings();
+    const days = g.days;
+    g.days = g.staffDays; // Round 7's dialog reads the period from here; the staff credit has its own.
+    let html;
+    try { html = baseModal(); } finally { g.days = days; }
+    if (!m || m.kind !== "credit") return html;
+    const today = dailyLeft();
+    if (today === Infinity) return html;
+    const note = `<div class="qk-muted small" style="margin:-4px 0 10px">You can add <b>${money(today)}</b> more today (${money(g.staffPerUserDay)} a day per staff member — above that only the Super Admin).</div>`;
+    return html
+      .replace("This is separate from the bonus on unavailable items.</div>", `This is separate from the bonus on unavailable items.</div>${note}`)
+      .replace(/(name="amount" min="0.5" max=")([0-9.]+)(")/, (_m, a, max, b) => `${a}${Math.min(Number(max), today)}${b}`);
+  };
+  const baseCredit = Submits["save-customer-modal"];
+  Submits["save-customer-modal"] = (form) => {
+    const m = UI.modal;
+    if (!m || m.kind !== "credit") return baseCredit(form);
+    const g = goodwillSettings();
+    const amount = round2(new FormData(form).get("amount"));
+    const used = customerMeta(m.key).credits.filter((cr) => cr.at >= Date.now() - g.staffDays * DAY).reduce((s, cr) => s + cr.amount, 0);
+    if (amount > g.staffCap - used + 0.001) { UI.modal.error = `Only ${money(Math.max(0, g.staffCap - used))} left in this period for this customer`; render(); return; }
+    if (amount > dailyLeft() + 0.001) { UI.modal.error = `You can add ${money(dailyLeft())} more today — above ${money(g.staffPerUserDay)} a day only the Super Admin can add credit`; render(); return; }
+    const days = g.days;
+    g.days = g.staffDays;
+    try { return baseCredit(form); } finally { g.days = days; }
+  };
+
+  /* P. Timing targets: the alert and the express buffer go up to 240 minutes, like the stages. */
+  const timingCard = window.timingCardHTML;
+  window.timingCardHTML = (editable) => timingCard(editable).replace(/max="120"/g, 'max="240"');
+
+  /* Q. Peak-hour time sections: at least one, at most 24, names up to 40 characters. */
+  const baseSections = Submits["save-peak-sections"];
+  Submits["save-peak-sections"] = (form, ev) => {
+    const rows = readPeakRows();
+    const err = !rows.length ? "Keep at least one section"
+      : rows.length > 24 ? "At most 24 sections"
+      : rows.some((r) => String(r.name || "").trim().length > 40) ? "Keep each name to 40 characters" : null;
+    if (err) { UI.modal.rows = rows; UI.modal.error = err; render(); return; }
+    return baseSections(form, ev);
+  };
+
+  /* R. The demo follows the settings: the customer's Cancel and Return buttons, the cart limit, rider earnings. */
+  const baseDetail = window.orderDetailHTML;
+  window.orderDetailHTML = (order) => {
+    let html = baseDetail(order);
+    const r = businessRules();
+    const step = CANCEL_STEPS.indexOf(order.status);
+    if (step < 0 || step > CANCEL_STEPS.indexOf(r.customerCancelUntil)) {
+      html = html.replace(/<button[^>]*data-kind="cancel"[^>]*>[\s\S]*?<\/button>/, "");
+    }
+    if (order.status === "delivered" && !order.returnRequest) {
+      const delivered = [...(order.statusHistory || [])].reverse().find((h) => h.status === "delivered");
+      // The demo's seed orders carry no "delivered" step: their last step (or placing time) stands in for it.
+      const deliveredAt = delivered ? delivered.at : (order.statusHistory || []).reduce((m, h) => Math.max(m, h.at || 0), order.createdAt || 0);
+      const open = r.returnWindowDays > 0 && Date.now() <= deliveredAt + r.returnWindowDays * DAY;
+      if (!open) {
+        const why = r.returnWindowDays > 0 ? `Returns can be requested within ${r.returnWindowDays} day${r.returnWindowDays === 1 ? "" : "s"} of delivery` : "This shop does not accept returns";
+        html = html.replace(/<button[^>]*data-kind="return"[^>]*>[\s\S]*?<\/button>/, `<span class="qk-muted small">${why}</span>`);
+      }
+    }
+    return html;
+  };
+  const baseInc = window.incCart;
+  window.incCart = (id) => {
+    const max = businessRules().maxQtyPerItem;
+    if ((State.cart[id] || 0) >= max) { showToast(`You can order at most ${max} of this item`, "danger"); return; }
+    return baseInc(id);
+  };
+  const fixEarning = (id, wasDelivered) => {
+    const fee = riderDeliveryFee();
+    if (wasDelivered || fee === RIDER_FLAT_FEE) return;
+    let changed = false;
+    State.orders = State.orders.map((o) => {
+      if (o.id !== id || o.status !== "delivered" || o.riderEarning !== RIDER_FLAT_FEE) return o;
+      changed = true;
+      return { ...o, riderEarning: fee };
+    });
+    if (changed) { persist("orders"); render(); }
+  };
+  for (const name of ["set-order-status", "complete-delivery"]) {
+    const base = Actions[name];
+    Actions[name] = (el) => {
+      const id = el.dataset.id;
+      const was = State.orders.find((o) => o.id === id);
+      const result = base(el);
+      fixEarning(id, !!was && was.status === "delivered");
+      return result;
+    };
+  }
+  const baseEarnings = window.riderEarnings;
+  window.riderEarnings = (orders) =>
+    baseEarnings(orders).replace(`${money(RIDER_FLAT_FEE)} earned per completed delivery.`, `${money(riderDeliveryFee())} earned per completed delivery.`);
+
+  /* S. Every Business Settings save is one "business_settings.updated" entry in Setup ▸ Audit log, with what changed. */
+  const SETTINGS_LABEL = {
+    "company.legalName": "Legal company name", "company.tradingAs": "Trading as", "company.address1": "Address line 1",
+    "company.address2": "Address line 2", "company.uen": "UEN", "company.gstRegNo": "GST Reg. No.", "company.sfaLicence": "SFA Licence No.",
+    "company.supportEmail": "Support email", "company.supportPhone": "Support phone", "company.supportHours": "Support hours",
+    "company.whatsappNumber": "WhatsApp number", "company.website": "Website", timezone: "Timezone",
+    "tax.name": "Tax name", "tax.rate": "Tax rate (%)", "tax.inclusive": "Prices include tax", "tax.onDeliveryFee": "GST on the delivery fee",
+    "tax.onExpressCharge": "GST on the express charge", "delivery.fee": "Delivery fee", "delivery.freeDeliveryThreshold": "Free delivery above",
+    "delivery.expressEnabled": "Express delivery", "delivery.expressCharge": "Express charge", paymentMethods: "Payment methods on",
+    "orders.confirmation": "Order confirmation", "orders.customerCancelUntil": "Customers may cancel until", "orders.maxQtyPerItem": "Most of one item",
+    "orders.returnWindowDays": "Returns within (days)", "timing.stageTargets.new": "Accept a new order (min)", "timing.stageTargets.confirmed": "Start picking (min)",
+    "timing.stageTargets.picking": "Picking (min)", "timing.stageTargets.packing": "Packing (min)", "timing.stageTargets.readyForRider": "Waiting for the rider (min)",
+    "timing.stageTargets.pickedUp": "Out for delivery (min)", "timing.notAcceptedAlertMinutes": "\"Not accepted\" alert (min)",
+    "timing.expressDueBufferMinutes": "Express due buffer (min)", "stock.allowNegativeStock": "Negative stock allowed", "stock.costPriceMethod": "Cost price on receiving",
+    "unavailableItems.bonusPercent": "Wallet refund bonus (%)", "unavailableItems.answerMinutes": "Time to answer (min)", "unavailableItems.noAnswer": "If no answer",
+    "goodwill.bonusCapAmount": "Bonus cap", "goodwill.bonusCapDays": "Bonus period (days)", "goodwill.staffCapAmount": "Staff credit cap",
+    "goodwill.staffCapDays": "Staff credit period (days)", "goodwill.staffCapPerUserPerDay": "Staff credit per person per day",
+    "slots.daysAhead": "Days customers can book ahead", "slots.cutoffMinutes": "Stop taking orders before a slot (min)",
+    "riders.deliveryFee": "Rider earns per delivery", timeSections: "Peak-hour time sections",
+  };
+  function settingsSnapshot() {
+    const c = State.companyProfile, t = State.tax, d = State.deliverySettings, r = businessRules();
+    const tm = timingSettings(), g = goodwillSettings(), s = subSettings(), st = State.slotSettings || {};
+    return {
+      "company.legalName": c.name, "company.tradingAs": c.tradingAs, "company.address1": c.address1 || null, "company.address2": c.address2 || null,
+      "company.uen": c.uen || null, "company.gstRegNo": c.gstReg || null, "company.sfaLicence": c.sfaLicence || null, "company.supportEmail": c.email || null,
+      "company.supportPhone": c.phone || null, "company.supportHours": c.supportHours || null, "company.whatsappNumber": c.whatsapp || null,
+      "company.website": c.website || null, timezone: r.timezone,
+      "tax.name": t.name, "tax.rate": t.rate, "tax.inclusive": t.inclusive !== false, "tax.onDeliveryFee": !!t.taxOnDeliveryFee, "tax.onExpressCharge": !!t.taxOnExpressCharge,
+      "delivery.fee": d.deliveryFee, "delivery.freeDeliveryThreshold": d.freeDeliveryThreshold, "delivery.expressEnabled": d.expressEnabled !== false,
+      "delivery.expressCharge": d.expressCharge, paymentMethods: d.paymentMethods.filter((m) => m.enabled).map((m) => m.name),
+      "orders.confirmation": confirmationMode(), "orders.customerCancelUntil": r.customerCancelUntil, "orders.maxQtyPerItem": r.maxQtyPerItem,
+      "orders.returnWindowDays": r.returnWindowDays, "timing.stageTargets.new": tm.new, "timing.stageTargets.confirmed": tm.confirmed,
+      "timing.stageTargets.picking": tm.picking, "timing.stageTargets.packing": tm.packing, "timing.stageTargets.readyForRider": tm.ready_for_rider,
+      "timing.stageTargets.pickedUp": tm.picked_up, "timing.notAcceptedAlertMinutes": tm.confirmAlertMins, "timing.expressDueBufferMinutes": tm.expressBufferMins,
+      "stock.allowNegativeStock": !!d.allowNegativeStock, "stock.costPriceMethod": d.costPriceMethod || "average",
+      "unavailableItems.bonusPercent": s.walletBonusPct, "unavailableItems.answerMinutes": s.answerMins, "unavailableItems.noAnswer": s.noAnswer,
+      "goodwill.bonusCapAmount": g.bonusCap, "goodwill.bonusCapDays": g.days, "goodwill.staffCapAmount": g.staffCap, "goodwill.staffCapDays": g.staffDays,
+      "goodwill.staffCapPerUserPerDay": g.staffPerUserDay, "slots.daysAhead": st.daysAhead, "slots.cutoffMinutes": st.cutoffMins,
+      "riders.deliveryFee": r.riderDeliveryFee, timeSections: (State.peakSections || []).map((p) => `${p.name} ${p.start}–${p.end}`),
+    };
+  }
+  Object.assign(AUDIT_ACTION_TEXT, { "business_settings.updated": ["Business settings", "changed the business settings"] });
+  Object.assign(AUDIT_ENTITY_LABEL, { business_settings: "Business settings" });
+  Object.assign(AUDIT_FIELD_LABEL, SETTINGS_LABEL);
+  const audited = (table, name) => {
+    const base = table[name];
+    if (!base) return;
+    table[name] = function (...args) {
+      const actor = currentUser();
+      const before = settingsSnapshot();
+      const result = base.apply(this, args);
+      const after = settingsSnapshot();
+      const changed = Object.keys(after).filter((k) => !auditSame(before[k], after[k]));
+      if (actor && changed.length) {
+        addAuditEvent({
+          action: "business_settings.updated", entity: "business_settings", entityId: null, actorType: "user", actorId: actor.id,
+          before: Object.fromEntries(changed.map((k) => [k, before[k]])), after: Object.fromEntries(changed.map((k) => [k, after[k]])),
+        });
+      }
+      return result;
+    };
+  };
+  [
+    "save-company-profile", "save-tax", "save-delivery-fee", "toggle-payment-method", "save-express", "save-fee-tax", "save-confirmation-mode",
+    "save-timing", "save-order-rules", "save-rider-pay", "save-stock-rules", "save-cost-method", "save-substitution", "save-goodwill-caps",
+  ].forEach((n) => audited(Actions, n));
+  ["save-peak-sections", "save-slot-templates"].forEach((n) => audited(Submits, n));
+})();
+
 /* ---------------- What's changed ---------------- */
-WHATS_NEW.unshift({ area: "Stock transfers & Home Screen as built (round 11)", items: [
+WHATS_NEW.unshift({ area: "Stock transfers, Home Screen & Business Settings as built (round 11)", items: [
   ["Order cancelled", "Cancelling an order cancels its transfer requests that were not sent yet — Transfers ▸ Done shows them as \"Cancelled · with the order\". One already on the way still arrives: Mark received adds it to the store's stock."],
   ["Mark received", "A transfer for an order covers the short item only while the order is open and the item isn't marked unavailable; otherwise the units simply join the store's stock, and the toast says so."],
   ["Decline with a note", "Stock ▸ Transfers ▸ Decline: a note box next to the reason. The lists show the reason and the note, and who did the last step."],
@@ -389,4 +790,10 @@ WHATS_NEW.unshift({ area: "Stock transfers & Home Screen as built (round 11)", i
   ["Combo price", "Marketing ▸ Home Screen ▸ Deals & Combos: the bundle price must be below what its products cost apart — \"Bundle price must be below S$11.70 — what these products cost apart\". A combo holds at most 10 products."],
   ["Home Screen limits", "At most 20 tiles in a section, 10 promo sections, 20 products in a promo section and 30 combos — the message says to delete one first. Titles up to 80 characters, subtitles up to 200."],
   ["Home Screen in the audit log", "Setup ▸ Audit log shows every Home Screen change: sections switched, edited, added, deleted or reordered; tiles; combos; theme & branding — with before and after."],
+  ["Company Profile", "Setup ▸ Business Settings ▸ Company Profile: new Website, WhatsApp number and Timezone boxes. Legal name, trading-as and UEN are required; the UEN, GST number, email and phones are checked and the problem shows by the box — replace the placeholder UEN (2024XXXXXXA) before saving."],
+  ["Order rules", "Delivery & Payments ▸ Order rules (new): until when customers may cancel (default: until picking starts — never once the order is ready for the rider), the most of one item per order (1–99), and returns within N days of delivery (0 = no returns). The customer app follows them."],
+  ["Rider pay", "Delivery & Payments ▸ Rider pay (new): what a rider earns per completed delivery — was a fixed S$5.00. The rider app's Earnings follow it; an order keeps the amount it was delivered with."],
+  ["Payment methods", "The last payment method that is on can't be switched off — checkout needs one for every order, even one the wallet pays in full."],
+  ["Goodwill limits", "Stock Rules ▸ Goodwill limits: the staff credit has its own period, and a new limit per staff member per day (S$200; above it only the Super Admin). Customers ▸ Add wallet credit shows what you can still add today."],
+  ["Business Settings in the audit log", "Every Business Settings save — including slot days and peak-hour sections — is one entry in Setup ▸ Audit log with what changed."],
 ] });
