@@ -86,6 +86,19 @@
       audit log; Send test goes to you only (your email, your own mobile,
       Firebase as a dry run), at most 5 in 10 minutes.
 
+   Message templates (Setup ▸ Notifications ▸ Message templates) — later
+   again, as P9-8b (D51 b, D84) built it:
+   AA. Each message has its own channels (fixed) and a separate text for
+       each: a tab per channel with its subject (email / push), text,
+       on / off, preview and Reset. The login code and the admin links are
+       always on. The backend's checks: only the message's placeholders,
+       {{code}} first in the login SMS, the reset / invite link kept, the
+       lengths (SMS 480, push 65 / 240, email 150 / 5000).
+   AB. New messages: Order placed (email receipt), Delivery slot reminder
+       (push — Delivery Slots ▸ "Remind customers before their slot"),
+       Cash reminder, Message from the store, Order assigned to you
+       ("Not sent yet" — later screens).
+
    In the real admin app (quickkart-api-service docs/08 §36): the lists are
    GET /admin/stock-transfers?view=to_send|to_receive|waiting|sent|done, the
    badge GET /admin/stock-transfers/counts, "Request N from <store> (has
@@ -756,6 +769,7 @@ State.deliverySettings = {
     "goodwill.bonusCapAmount": "Bonus cap", "goodwill.bonusCapDays": "Bonus period (days)", "goodwill.staffCapAmount": "Staff credit cap",
     "goodwill.staffCapDays": "Staff credit period (days)", "goodwill.staffCapPerUserPerDay": "Staff credit per person per day",
     "slots.daysAhead": "Days customers can book ahead", "slots.cutoffMinutes": "Stop taking orders before a slot (min)",
+    "slots.reminderMinutes": "Slot reminder (min before)",
     "riders.deliveryFee": "Rider earns per delivery", timeSections: "Peak-hour time sections",
   };
   function settingsSnapshot() {
@@ -776,7 +790,7 @@ State.deliverySettings = {
       "stock.allowNegativeStock": !!d.allowNegativeStock, "stock.costPriceMethod": d.costPriceMethod || "average",
       "unavailableItems.bonusPercent": s.walletBonusPct, "unavailableItems.answerMinutes": s.answerMins, "unavailableItems.noAnswer": s.noAnswer,
       "goodwill.bonusCapAmount": g.bonusCap, "goodwill.bonusCapDays": g.days, "goodwill.staffCapAmount": g.staffCap, "goodwill.staffCapDays": g.staffDays,
-      "goodwill.staffCapPerUserPerDay": g.staffPerUserDay, "slots.daysAhead": st.daysAhead, "slots.cutoffMinutes": st.cutoffMins,
+      "goodwill.staffCapPerUserPerDay": g.staffPerUserDay, "slots.daysAhead": st.daysAhead, "slots.cutoffMinutes": st.cutoffMins, "slots.reminderMinutes": st.reminderMins == null ? 60 : st.reminderMins,
       "riders.deliveryFee": r.riderDeliveryFee, timeSections: (State.peakSections || []).map((p) => `${p.name} ${p.start}–${p.end}`),
     };
   }
@@ -863,6 +877,7 @@ State.deliverySettings = {
       <div class="field-grid-2" style="margin-top:12px">
         <label class="field"><span class="field-label">Days customers can book ahead (1–14)</span><input class="input" type="number" min="1" max="14" name="daysAhead" value="${st.daysAhead}" ${dis} /></label>
         <label class="field"><span class="field-label">Stop taking orders before a slot starts (minutes)</span><input class="input" type="number" min="0" max="10080" name="cutoffMins" value="${st.cutoffMins}" ${dis} /><span class="qk-muted small">Customers only — your team can still move an order into a slot until it starts.</span></label>
+        <label class="field"><span class="field-label">Remind customers before their slot (minutes)</span><input class="input" type="number" min="0" max="480" name="reminderMins" value="${st.reminderMins == null ? 60 : st.reminderMins}" ${dis} /><span class="qk-muted small">A push this long before the slot starts — 0 = no reminder. The wording is in Notifications ▸ Message templates.</span></label>
       </div>
       ${editable ? `<div class="form-actions"><button type="button" class="btn btn-outline" data-action="add-slot-template">${ic("plus")} Add slot time</button><button type="submit" class="btn btn-primary">Save slot times</button></div>` : ""}
     </form>
@@ -1077,6 +1092,7 @@ State.deliverySettings = {
       const rows = was.map((t, i) => ({ ...t, start: String(fd.get(`start_${i}`) || ""), end: String(fd.get(`end_${i}`) || ""), capacity: Number(fd.get(`cap_${i}`)) }));
       const daysAhead = Number(fd.get("daysAhead"));
       const cutoffMins = Number(fd.get("cutoffMins"));
+      const reminderMins = Number(fd.get("reminderMins"));
       const seen = new Set();
       let problem = null;
       for (const r of rows) {
@@ -1088,6 +1104,7 @@ State.deliverySettings = {
       }
       if (!problem && !(Number.isInteger(daysAhead) && daysAhead >= 1 && daysAhead <= 14)) problem = "Days ahead must be 1–14";
       if (!problem && !(Number.isInteger(cutoffMins) && cutoffMins >= 0 && cutoffMins <= 10080)) problem = "The cut-off must be 0–10080 minutes";
+      if (!problem && !(Number.isInteger(reminderMins) && reminderMins >= 0 && reminderMins <= 480)) problem = "The reminder must be 0–480 minutes (0 = no reminder)";
       if (problem) { showToast(problem, "danger"); return; }
       // A slot time whose hours change is a new window: it gets a new id, and orders booked in the old one stay there.
       const retiredWindows = { ...(State.slotSettings.retiredWindows || {}) };
@@ -1104,7 +1121,7 @@ State.deliverySettings = {
         if (!old) audit("slot_template.created", r.id, null, { slot: range(r), capacity: r.capacity });
         return r;
       });
-      saveSlotSettings({ templates, retiredWindows, daysAhead, cutoffMins });
+      saveSlotSettings({ templates, retiredWindows, daysAhead, cutoffMins, reminderMins });
       showToast("Slot times saved"); render();
     },
     "add-extra-slot"(form) {
@@ -1300,8 +1317,204 @@ State.deliverySettings = {
   Object.assign(AUDIT_ENTITY_LABEL, { notification_provider: "Notifications" });
 })();
 
+/* ---------------- Later the same day: Message templates as P9-8b built it (D51 b, D84) ---------------- */
+/* In the real admin app (quickkart-api-service docs/08 §41): GET /admin/notifications/templates; PUT and DELETE
+   /admin/notifications/templates/:key/:channel; POST …/:key/:channel/preview. A message has its own channels — fixed
+   by the backend — and a separate text for each; the shop rewords a channel, switches it off (never the login code or
+   the admin links) or resets it. Placeholders are the message's own. */
+(function round11MessageTemplates() {
+  const DEFS = {"messages":[{"key":"auth.otp","name":"Login code","audience":"customer","about":"A customer logs in, changes their mobile or deletes their account.","alwaysOn":true,"placeholders":["code","minutes","shopName"],"startsWith":"{{code}}","channels":{"sms":{"body":"{{code}} is your verification code. It expires in {{minutes}} minutes. Never share this code."}}},{"key":"order.placed","name":"Order placed","audience":"customer","about":"The shop takes an order — at checkout for cash and wallet orders, when the payment succeeds for online ones.","placeholders":["orderNo","total","items","fulfilmentNote","paymentNote","shopName","customerName"],"channels":{"email":{"subject":"We've got your order {{orderNo}}","body":"Hi {{customerName}},\n\nThank you for your order {{orderNo}} from {{shopName}} — {{items}}, {{total}}.\n\n{{fulfilmentNote}}\n{{paymentNote}}\n\nYou can follow your order in the {{shopName}} app."}}},{"key":"order.confirmed","name":"Order confirmed","audience":"customer","about":"The shop confirms an order (at once when confirmation is automatic).","placeholders":["orderNo","total","shopName","customerName"],"channels":{"push":{"subject":"Order confirmed","body":"{{shopName}} has confirmed your order {{orderNo}} ({{total}})."}}},{"key":"order.slot_reminder","name":"Delivery slot reminder","audience":"customer","about":"Before a delivery slot starts — as many minutes before as Business Settings ▸ Slot reminder says.","placeholders":["orderNo","slot","shopName","customerName"],"channels":{"push":{"subject":"Your delivery is coming up","body":"Your order {{orderNo}} from {{shopName}} arrives today between {{slot}}."}}},{"key":"order.out_for_delivery","name":"Out for delivery","audience":"customer","about":"The rider leaves the store with a delivery order.","placeholders":["orderNo","shopName","customerName"],"channels":{"push":{"subject":"On its way","body":"Your order {{orderNo}} is on its way to you."}}},{"key":"order.cash_reminder","name":"Cash reminder","audience":"customer","about":"A cash-on-delivery order leaves the store with the rider.","sentFrom":"cash on delivery (P10-2b / P11-3)","placeholders":["orderNo","cashToCollect","shopName","customerName"],"channels":{"push":{"subject":"Please keep {{cashToCollect}} ready","body":"Your order {{orderNo}} is on its way. Please keep {{cashToCollect}} in cash ready for the rider."}}},{"key":"order.ready_for_pickup","name":"Ready to collect","audience":"customer","about":"A pickup order is packed and waiting at the counter.","placeholders":["orderNo","storeName","shopName","customerName"],"channels":{"push":{"subject":"Ready to collect","body":"Your order {{orderNo}} is ready to collect at {{storeName}}."}}},{"key":"order.delivered","name":"Delivered","audience":"customer","about":"A delivery order is handed over.","placeholders":["orderNo","shopName","customerName"],"channels":{"push":{"subject":"Delivered","body":"Your order {{orderNo}} has been delivered. Thank you for shopping with {{shopName}}!"}}},{"key":"order.collected","name":"Collected","audience":"customer","about":"A pickup order is collected.","placeholders":["orderNo","shopName","customerName"],"channels":{"push":{"subject":"Collected","body":"You have collected order {{orderNo}}. Thank you for shopping with {{shopName}}!"}}},{"key":"order.cancelled","name":"Order cancelled","audience":"customer","about":"An order is cancelled — by the customer, the shop, or because it was not paid in time.","placeholders":["orderNo","reason","refundNote","shopName","customerName"],"channels":{"push":{"subject":"Order cancelled","body":"Your order {{orderNo}} was cancelled: {{reason}}.{{refundNote}}"}}},{"key":"order.item_unavailable","name":"Item unavailable","audience":"customer","about":"The store does not have an item and offers a substitute, wallet credit or a refund.","placeholders":["orderNo","itemName","shopName","customerName"],"channels":{"push":{"subject":"An item is unavailable","body":"{{itemName}} on your order {{orderNo}} is unavailable. Tap to choose a substitute or a refund."}}},{"key":"order.substitution_auto","name":"We chose for you","audience":"customer","about":"The customer did not answer an unavailable-item offer in time, so the shop's rule was applied.","placeholders":["orderNo","itemName","decision","shopName","customerName"],"channels":{"push":{"subject":"We chose for you","body":"No answer in time for {{itemName}} on your order {{orderNo}}, so we chose for you: {{decision}}."}}},{"key":"product.back_in_stock","name":"Back in stock","audience":"customer","about":"A product a customer asked about can be bought again.","placeholders":["productName","shopName","customerName"],"channels":{"push":{"subject":"Back in stock","body":"{{productName}} is back in stock at {{shopName}}. Order it before it runs out!"}}},{"key":"customer.message","name":"Message from the store","audience":"customer","about":"A staff member writes to one customer from the Customers screen.","sentFrom":"the Customers screen (P10-5)","placeholders":["message","shopName","customerName"],"channels":{"email":{"subject":"A message from {{shopName}}","body":"Hi {{customerName}},\n\n{{message}}"},"sms":{"body":"{{shopName}}: {{message}}"},"push":{"subject":"A message from {{shopName}}","body":"{{message}}"}}},{"key":"auth.password_reset","name":"Admin password reset","audience":"staff","about":"A staff member asks to reset their admin password (\"Forgot password\").","alwaysOn":true,"placeholders":["resetLink","minutes","shopName"],"mustContain":"{{resetLink}}","channels":{"email":{"subject":"Reset your {{shopName}} admin password","body":"Someone asked to reset the password of your {{shopName}} admin account.\n\nTo choose a new password, open this link within {{minutes}} minutes. It works once:\n{{resetLink}}\n\nIf it wasn't you, ignore this email — your password stays as it is."}}},{"key":"auth.user_invite","name":"Admin invite","audience":"staff","about":"The Super Admin adds a staff member without typing a password for them.","alwaysOn":true,"placeholders":["inviteLink","hours","shopName"],"mustContain":"{{inviteLink}}","channels":{"email":{"subject":"Your {{shopName}} admin account","body":"You have been given an admin account for {{shopName}}.\n\nTo choose your password, open this link within {{hours}} hours. It works once:\n{{inviteLink}}\n\nThen log in with this email address and your new password. If you did not expect this email, you can ignore it."}}},{"key":"stock.low","name":"Low stock","audience":"staff","about":"A store's count of a product falls to its reorder level — to the staff who manage that store's stock.","placeholders":["productName","sku","storeName","quantity","reorderLevel","shopName","customerName"],"channels":{"email":{"subject":"Low stock at {{storeName}}: {{productName}}","body":"{{productName}} ({{sku}}) is down to {{quantity}} at {{storeName}} — at or below its reorder level of {{reorderLevel}}.\n\nReceive stock on the Stock screen of the admin app. You will hear about this product at {{storeName}} again only after it is back above {{reorderLevel}}."}}},{"key":"rider.assigned","name":"Order assigned to you","audience":"rider","about":"A rider is given an order.","sentFrom":"rider assignment (P10-3 / P11)","placeholders":["orderNo","slot","stops","shopName","customerName"],"channels":{"push":{"subject":"New delivery","body":"Order {{orderNo}} · {{slot}} · {{stops}} stop(s) on your trip. Open the app to see the details."}}}],"info":{"shopName":["Your shop’s name (the trading name)","Kent Mart"],"customerName":["The person’s name (\"there\" when unknown)","Priya"],"code":["The 6-digit login code — must start the SMS","482913"],"minutes":["How many minutes it works","10"],"hours":["How many hours the link works","72"],"resetLink":["The reset link — must stay in","https://admin.kentmart.sg/reset-password?token=…"],"inviteLink":["The link to choose a password — must stay in","https://admin.kentmart.sg/set-password?token=…"],"orderNo":["The order number","QK-0512"],"total":["The amount of the order","S$42.50"],"items":["How many items (\"3 items\")","3 items"],"fulfilmentNote":["Delivery or pickup, as one sentence","Delivery on Mon 6 Oct, 6:00 PM – 7:00 PM."],"paymentNote":["How it is paid, as one sentence","Pay S$42.50 in cash when it arrives."],"slot":["The delivery slot","6:00 PM – 7:00 PM"],"cashToCollect":["The cash to keep ready","S$42.50"],"storeName":["The store","Clementi"],"reason":["Why it was cancelled","the store closed early today"],"refundNote":["Where the money goes — empty when nothing was paid"," Your payment will be refunded to the way you paid."],"itemName":["The item","Fresh Milk 1L"],"decision":["What the shop chose","a wallet credit of S$6.38"],"productName":["The product","Fresh Milk 1L"],"message":["What the staff member wrote","Your order will be about 15 minutes late — sorry!"],"sku":["The product’s SKU","QK-0101"],"quantity":["How many are left","4"],"reorderLevel":["The reorder level","10"],"stops":["Stops on the rider’s trip","3"]}};
+  const MESSAGES = DEFS.messages;
+  const INFO = DEFS.info;
+  const LIMITS = { email: { subject: 150, body: 5000 }, sms: { subject: null, body: 480 }, push: { subject: 65, body: 240 } };
+  const CHANNELS = ["email", "sms", "push"];
+  const PLACEHOLDER = /\{\{\s*([A-Za-z][A-Za-z0-9_]*)\s*\}\}/g;
+  const label = (ch) => (ch === "sms" ? "SMS" : ch === "push" ? "Push" : "Email");
+  const AUDIENCE = { customer: "Customer", staff: "Staff", rider: "Rider" };
+  const byKey = (key) => MESSAGES.find((m) => m.key === key);
+  const chans = (def) => CHANNELS.filter((ch) => def.channels[ch]);
+  const shopName = () => (State.companyProfile && State.companyProfile.tradingAs) || "QuickKart";
+  const audit = (action, entityId, before, after) => {
+    const u = currentUser();
+    if (u) addAuditEvent({ action, entity: action.split(".")[0], entityId, actorType: "user", actorId: u.id, before, after });
+  };
+
+  // The shop's own wording: { key: { channel: { subject, body, enabled } } } — a part equal to the default is not kept.
+  State.messageTemplates = loadLS("messageTemplates", {});
+  if (Array.isArray(PERSIST_KEYS) && !PERSIST_KEYS.includes("messageTemplates")) PERSIST_KEYS.push("messageTemplates");
+  const saved = (key, ch) => ((State.messageTemplates[key] || {})[ch]) || null;
+  const effective = (def, ch) => {
+    const own = saved(def.key, ch);
+    const fallback = def.channels[ch];
+    return {
+      subject: LIMITS[ch].subject === null ? "" : ((own && own.subject) || fallback.subject || ""),
+      body: (own && own.body) || fallback.body,
+      enabled: def.alwaysOn ? true : !own || own.enabled !== false,
+      customised: !!own && !!(own.subject || own.body),
+    };
+  };
+
+  // The backend's checks (D84 b), so the prototype refuses what the API refuses.
+  function problems(def, ch, d) {
+    const errs = [];
+    const lim = LIMITS[ch];
+    const check = (field, v) => {
+      const stripped = v.replace(PLACEHOLDER, "");
+      if (stripped.includes("{{") || stripped.includes("}}")) errs.push(`${field}: write placeholders as {{name}}`);
+      const unknown = [...new Set([...v.matchAll(PLACEHOLDER)].map((m) => m[1]))].filter((p) => !def.placeholders.includes(p));
+      if (unknown.length) errs.push(`${field}: this message has no ${unknown.map((p) => `{{${p}}}`).join(", ")}`);
+    };
+    if (lim.subject !== null) {
+      const s = d.subject.trim();
+      if (!s) errs.push(`${ch === "email" ? "Subject" : "Title"}: required`);
+      else if (s.length > lim.subject) errs.push(`${ch === "email" ? "Subject" : "Title"}: at most ${lim.subject} characters`);
+      if (/[\r\n]/.test(s)) errs.push(`${ch === "email" ? "Subject" : "Title"}: one line only`);
+      check(ch === "email" ? "Subject" : "Title", s);
+    }
+    const b = d.body.trim();
+    if (!b) errs.push("Message: required");
+    else if (b.length > lim.body) errs.push(`Message: at most ${lim.body} characters`);
+    check("Message", b);
+    if (def.startsWith && !b.startsWith(def.startsWith)) errs.push(`Message: must start with ${def.startsWith} — phones fill the code in from the start of the SMS`);
+    if (def.mustContain && !b.includes(def.mustContain)) errs.push(`Message: must contain ${def.mustContain} — without the link the email is useless`);
+    return errs;
+  }
+  const fill = (def, text) =>
+    String(text || "").replace(PLACEHOLDER, (m, k) => (k === "shopName" ? shopName() : INFO[k] ? INFO[k][1] : m));
+  const previewHTML = (def, ch, d) =>
+    `${LIMITS[ch].subject === null ? "" : `<div style="font-weight:700">${esc(fill(def, d.subject))}</div>`}<div style="white-space:pre-wrap">${esc(fill(def, d.body))}</div>`;
+  const errorsHTML = (errs) => (errs.length ? `<div class="field-error">${errs.map(esc).join("<br>")}</div>` : "");
+
+  /* A. The list: each message with its own channels — on, off, or reworded (✎). */
+  window.notifTemplatesHTML = function (editable) {
+    const cfg = State.notificationConfig;
+    return `
+  <div class="qk-muted small" style="margin-bottom:10px">Each message has its own channels, each with its own words. <code>{{placeholders}}</code> are filled in when the message is sent.</div>
+  <div class="admin-table">
+    ${MESSAGES.map((def) => `
+      <div class="admin-row">
+        <div class="admin-row-info">
+          <div class="admin-row-name">${esc(def.name)} <span class="badge badge-gray-soft">${AUDIENCE[def.audience]}</span>${def.sentFrom ? ` <span class="badge badge-yellow-soft" title="Sent once ${esc(def.sentFrom)} is built">Not sent yet</span>` : ""}</div>
+          <div class="qk-muted small">${esc(def.about)}</div>
+        </div>
+        ${chans(def).map((ch) => {
+          const e = effective(def, ch);
+          const on = e.enabled && (!cfg[ch] || cfg[ch].enabled);
+          return `<span class="badge badge-${on ? "green" : "gray"}-soft" title="${cfg[ch] && !cfg[ch].enabled ? "Channel is off" : ""}">${label(ch)}${e.enabled ? "" : " — off"}${e.customised ? " ✎" : ""}</span>`;
+        }).join("")}
+        ${editable ? `<button class="icon-btn" data-action="edit-template" data-key="${def.key}" aria-label="Edit">${ic("edit")}</button>` : ""}
+      </div>`).join("")}
+  </div>`;
+  };
+
+  /* B. The dialog: a tab per channel — its own subject (email / push), text, on / off, preview and Reset. */
+  window.templateFormModal = function () {
+    const m = UI.modal;
+    const def = byKey(m.key);
+    if (!def) return "";
+    const ch = m.channel;
+    const d = m.drafts[ch];
+    const lim = LIMITS[ch];
+    return `
+  <div class="overlay" data-action="close-modal-backdrop">
+    <div class="dialog dialog-static dialog-user" role="dialog" aria-modal="true" data-action="noop">
+      <div class="dialog-head"><span>${esc(def.name)}</span><button class="dialog-close" data-action="close-modal">${ic("close")}</button></div>
+      <form class="dialog-body" data-action="save-template">
+        <div class="qk-muted small" style="margin-bottom:8px">${esc(def.about)}${def.sentFrom ? ` <b>Not sent yet</b> — it comes with ${esc(def.sentFrom)}.` : ""}</div>
+        <div class="pill-row" style="margin-bottom:10px">${chans(def).map((c) => `<button type="button" class="pill ${c === ch ? "active" : ""}" data-action="tpl-channel" data-ch="${c}">${label(c)}${m.drafts[c].enabled ? "" : " (off)"}</button>`).join("")}</div>
+        ${def.alwaysOn
+          ? `<div class="qk-muted small" style="margin-bottom:8px">Always on — ${def.key === "auth.otp" ? "customers log in with this code" : "staff need this link to get into their account"}.</div>`
+          : `<label class="stock-toggle" style="margin-bottom:8px"><input type="checkbox" ${d.enabled ? "checked" : ""} data-action="tpl-enabled" /><span>${d.enabled ? "On" : "Off"} — sent by ${label(ch)}</span></label>`}
+        ${lim.subject === null ? "" : `<label class="field"><span class="field-label">${ch === "email" ? "Email subject" : "Push title"} <span class="qk-muted small" id="tplSubjectCount">${d.subject.length}/${lim.subject}</span></span><input class="input" name="subject" value="${esc(d.subject)}" oninput="onTemplateDraft(this)" /></label>`}
+        <label class="field"><span class="field-label">Message <span class="qk-muted small" id="tplBodyCount">${d.body.length}/${lim.body}</span></span><textarea class="input" name="body" rows="${ch === "email" ? 7 : 4}" oninput="onTemplateDraft(this)">${esc(d.body)}</textarea></label>
+        <div class="qk-muted small">Placeholders: ${def.placeholders.map((p) => `<code title="${esc(INFO[p] ? `${INFO[p][0]} — e.g. ${p === "shopName" ? shopName() : INFO[p][1]}` : p)}">{{${p}}}</code>`).join(" ")}</div>
+        <div class="template-preview"><div class="qk-muted small" style="font-weight:700">Preview</div><div id="templatePreview">${previewHTML(def, ch, d)}</div></div>
+        <div id="templateErrors">${errorsHTML(problems(def, ch, d))}</div>
+        <div class="form-actions">
+          <button type="button" class="btn btn-outline" data-action="reset-template">Reset ${label(ch).toLowerCase()} to default</button>
+          <button type="submit" class="btn btn-primary">Save ${label(ch).toLowerCase()}</button>
+        </div>
+      </form>
+    </div>
+  </div>`;
+  };
+  // Typing: the preview, the counters and the problems follow without re-rendering (the cursor stays).
+  window.onTemplateDraft = function (el) {
+    const m = UI.modal;
+    if (!m || m.type !== "templateForm") return;
+    const def = byKey(m.key);
+    const d = m.drafts[m.channel];
+    d[el.name] = el.value;
+    const lim = LIMITS[m.channel];
+    const set = (id, html) => { const n = document.getElementById(id); if (n) n.innerHTML = html; };
+    set("templatePreview", previewHTML(def, m.channel, d));
+    set("templateErrors", errorsHTML(problems(def, m.channel, d)));
+    set("tplBodyCount", `${d.body.length}/${lim.body}`);
+    if (lim.subject !== null) set("tplSubjectCount", `${d.subject.length}/${lim.subject}`);
+  };
+
+  Actions["edit-template"] = (el) => {
+    const def = byKey(el.dataset.key);
+    if (!def) return;
+    const drafts = {};
+    chans(def).forEach((ch) => { const e = effective(def, ch); drafts[ch] = { subject: e.subject, body: e.body, enabled: e.enabled }; });
+    UI.modal = { type: "templateForm", key: def.key, channel: chans(def)[0], drafts };
+    render();
+  };
+  Actions["tpl-channel"] = (el) => { if (UI.modal) { UI.modal.channel = el.dataset.ch; render(); } };
+  Actions["tpl-enabled"] = (el) => { if (UI.modal) { UI.modal.drafts[UI.modal.channel].enabled = el.checked; render(); } };
+
+  /* C. Save one channel: refused like the API; a part equal to the default keeps no copy; audited. */
+  Submits["save-template"] = () => {
+    const m = UI.modal;
+    const def = byKey(m.key);
+    const ch = m.channel;
+    const d = m.drafts[ch];
+    const errs = problems(def, ch, d);
+    if (errs.length) { showToast(errs[0], "danger"); render(); return; }
+    const fallback = def.channels[ch];
+    const subject = LIMITS[ch].subject === null || d.subject.trim() === fallback.subject ? null : d.subject.trim();
+    const body = d.body.trim() === fallback.body ? null : d.body.trim();
+    const before = effective(def, ch);
+    const all = { ...State.messageTemplates, [def.key]: { ...(State.messageTemplates[def.key] || {}) } };
+    if (!subject && !body && d.enabled) delete all[def.key][ch];
+    else all[def.key][ch] = { subject, body, enabled: d.enabled };
+    State.messageTemplates = all;
+    persist("messageTemplates");
+    const after = effective(def, ch);
+    if (before.subject !== after.subject || before.body !== after.body || before.enabled !== after.enabled) {
+      audit("notification_template.updated", `${def.key}/${ch}`, { channel: ch, subject: before.subject, enabled: before.enabled }, { channel: ch, subject: after.subject, enabled: after.enabled });
+    }
+    showToast(`${def.name} — ${label(ch)} saved`);
+    render();
+  };
+  Actions["reset-template"] = () => {
+    const m = UI.modal;
+    const def = byKey(m.key);
+    const ch = m.channel;
+    if (saved(def.key, ch)) {
+      const all = { ...State.messageTemplates, [def.key]: { ...(State.messageTemplates[def.key] || {}) } };
+      delete all[def.key][ch];
+      State.messageTemplates = all;
+      persist("messageTemplates");
+      audit("notification_template.reset", `${def.key}/${ch}`, null, { channel: ch });
+    }
+    const e = effective(def, ch);
+    m.drafts[ch] = { subject: e.subject, body: e.body, enabled: e.enabled };
+    showToast(`${def.name} — ${label(ch)} back to the default`);
+    render();
+  };
+
+  /* D. The audit log names them. */
+  Object.assign(AUDIT_ACTION_TEXT, {
+    "notification_template.updated": ["Notifications", "changed a message's wording"],
+    "notification_template.reset": ["Notifications", "reset a message to the default"],
+  });
+  Object.assign(AUDIT_ENTITY_LABEL, { notification_template: "Message templates" });
+})();
+
 /* ---------------- What's changed ---------------- */
-WHATS_NEW.unshift({ area: "Stock transfers, Home Screen, Business Settings, Delivery Slots & Notification providers as built (round 11)", items: [
+WHATS_NEW.unshift({ area: "Stock transfers, Home Screen, Business Settings, Delivery Slots & Notifications as built (round 11)", items: [
   ["Order cancelled", "Cancelling an order cancels its transfer requests that were not sent yet — Transfers ▸ Done shows them as \"Cancelled · with the order\". One already on the way still arrives: Mark received adds it to the store's stock."],
   ["Mark received", "A transfer for an order covers the short item only while the order is open and the item isn't marked unavailable; otherwise the units simply join the store's stock, and the toast says so."],
   ["Decline with a note", "Stock ▸ Transfers ▸ Decline: a note box next to the reason. The lists show the reason and the note, and who did the last step."],
@@ -1324,4 +1537,8 @@ WHATS_NEW.unshift({ area: "Stock transfers, Home Screen, Business Settings, Deli
   ["Super Admin only", "Only the Super Admin sees Channels & providers — they decide where login codes and password-reset emails go; others with Notifications see the message templates. Every save, and every switch on or off, emails every Super Admin and shows in Setup ▸ Audit log."],
   ["SMS off", "Switching SMS off stops the SMS messages — never the login codes: customers must always be able to log in."],
   ["Send test", "Uses the saved settings and goes to you only: email to your address, SMS to your own mobile (add it to your profile first), push as a Firebase dry run (nothing delivered). At most 5 tests in 10 minutes."],
+  ["Message templates", "Notifications ▸ Message templates: each message has its own channels, each with its own words — a tab per channel with its subject (email / push), text, On / Off, a live preview and Reset to default. Only the message's own {{placeholders}}; the login code must start with {{code}}, the reset and invite emails keep their link; SMS up to 480 characters (SMS costs you)."],
+  ["Always on", "The login code and the admin password-reset and invite emails can be reworded but never switched off."],
+  ["New messages", "Order placed — an email receipt when you take the order. Delivery slot reminder — a push before the slot. Cash reminder, Message from the store and Order assigned to you are worded now and marked \"Not sent yet\" until their screens are built."],
+  ["Slot reminder", "Delivery Slots ▸ Slot times: \"Remind customers before their slot (minutes)\" — 60 by default, 0 = no reminder."],
 ] });
