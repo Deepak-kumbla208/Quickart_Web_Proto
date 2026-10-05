@@ -99,6 +99,20 @@
        Cash reminder, Message from the store, Order assigned to you
        ("Not sent yet" — later screens).
 
+   Promotions and Coupons (Marketing) — later again, as P9-7 (MR !84,
+   D85) built them:
+   AC. Promotions are home-page slides only — no notification ("Create &
+       show to customers"); a title (≤ 80) and a picture needed, subtitle
+       ≤ 200; at most 20 live; only with the plan's Promotions feature.
+   AD. Coupons: "Starts on" as well as the last day (whole days); total
+       uses, uses per customer and first order only; the backend's checks
+       on the code, the value per type (none for free delivery), the cap
+       (percent only) and the dates, shown by the box.
+   AE. The list: Live / Scheduled / Paused / Expired / Used up, times used
+       and the discount given, a state filter, the export's new columns;
+       the customer's checkout follows the dates and the limits.
+   AF. Promotions and coupons are in Setup ▸ Audit log.
+
    In the real admin app (quickkart-api-service docs/08 §36): the lists are
    GET /admin/stock-transfers?view=to_send|to_receive|waiting|sent|done, the
    badge GET /admin/stock-transfers/counts, "Request N from <store> (has
@@ -1513,8 +1527,472 @@ State.deliverySettings = {
   Object.assign(AUDIT_ENTITY_LABEL, { notification_template: "Message templates" });
 })();
 
+/* ---------------- Later the same day: Promotions and Coupons as P9-7 built them (MR !84, D85) ---------------- */
+/* In the real admin app (quickkart-api-service docs/08 §42): /admin/promotions — only with the business's Promotions
+   feature (`features.promotions` in /admin/auth/me) — and /admin/coupons: GET (paged; a coupon with `status`,
+   `summary`, `timesUsed`, `discountGiven`), POST, PATCH /:id with only what changes, DELETE /:id. A coupon's dates are
+   business days: `startsOn` (from the start of that day) and `expiresOn` (the last day it works). */
+(function round11PromotionsCoupons() {
+  const LIVE_MAX = 20;
+  const TITLE_MAX = 80;
+  const SUBTITLE_MAX = 200;
+  const DESCRIPTION_MAX = 200;
+  const USES_MAX = 1000000;
+  const CODE = /^[A-Z0-9][A-Z0-9_-]{1,29}$/;
+  const AMOUNT = /^\d{1,7}(\.\d{1,2})?$/;
+  const tooMany = `At most ${LIVE_MAX} promotions can be live at once — switch one off or delete one first`;
+
+  /* Business days ↔ moments (the browser's day stands in for the shop's timezone). */
+  const pad = (n) => String(n).padStart(2, "0");
+  const dayOf = (ts) => { const d = new Date(ts); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; };
+  const dayStart = (s) => { const d = new Date(`${s}T00:00:00`); return Number.isNaN(d.getTime()) || dayOf(d.getTime()) !== s ? null : d.getTime(); };
+  const dayAfter = (s) => { const t = dayStart(s); if (t === null) return null; const d = new Date(t); d.setDate(d.getDate() + 1); return d.getTime(); };
+  const lastDay = (expiresAt) => dayOf(expiresAt - 1); // the day of its very last moment
+  const shown = (v) => (typeof v === "string" && v.startsWith("data:") ? "(uploaded picture)" : v ?? null);
+  const by = (u) => ({ actorType: "user", actorId: u.id });
+
+  /* ================= Promotions ================= */
+  const liveCount = () => State.promotions.filter((p) => p.enabled).length;
+  const PROMO_FIELDS = ["title", "subtitle", "image", "enabled"];
+  const snapPromos = () => JSON.parse(JSON.stringify(State.promotions));
+  function recordPromos(before, actor) {
+    if (!actor) return;
+    const was = new Map(before.map((p) => [p.id, p]));
+    const now = new Map(State.promotions.map((p) => [p.id, p]));
+    const pick = (p, keys) => Object.fromEntries(keys.map((k) => [k, p[k] === "" ? null : shown(p[k])]));
+    for (const p of State.promotions) {
+      const o = was.get(p.id);
+      const names = { entity: p.title };
+      if (!o) { addAuditEvent({ action: "promotion.created", entity: "promotion", entityId: String(p.id), ...by(actor), after: pick(p, PROMO_FIELDS.filter((k) => p[k] !== "" && p[k] != null)), names }); continue; }
+      const ch = PROMO_FIELDS.filter((k) => !auditSame(o[k], p[k]));
+      if (ch.length) addAuditEvent({ action: "promotion.updated", entity: "promotion", entityId: String(p.id), ...by(actor), before: pick(o, ch), after: pick(p, ch), names });
+    }
+    for (const o of before) {
+      if (!now.has(o.id)) addAuditEvent({ action: "promotion.deleted", entity: "promotion", entityId: String(o.id), ...by(actor), before: pick(o, ["title", "enabled"]), names: { entity: o.title } });
+    }
+  }
+
+  /* AC. The screen: what a promotion is, how many are live, no "pushed to customers". */
+  window.adminPromotions = function () {
+    const editable = canEdit(currentUser(), "promotions");
+    return `
+    <div class="admin-toolbar">
+      ${editable ? `<button class="btn btn-primary" data-action="new-promo">${ic("plus")} New promotion</button>` : "<span></span>"}
+      <span class="qk-muted small">${liveCount()} of ${LIVE_MAX} live</span>
+    </div>
+    <div class="qk-muted small" style="margin-top:8px">A promotion is an extra slide on the customer home page's top carousel, after the Home Screen's own slides, newest first. Customers see it at once — <b>no notification is sent</b>. Part of your plan's Promotions feature: without it this screen is hidden and customers see no promotions.</div>
+    <div class="admin-table" style="margin-top:12px">
+      ${State.promotions.map((p) => `
+        <div class="admin-row admin-row-promo">
+          ${p.image ? `<img src="${esc(p.image)}" class="admin-row-img" alt="" />` : ""}
+          <div class="admin-row-info"><div class="admin-row-name">${esc(p.title)}</div><div class="qk-muted small">${esc(p.subtitle || "")}</div></div>
+          <span class="badge badge-${p.enabled ? "green" : "yellow"}">${p.enabled ? "Live" : "Paused"}</span>
+          ${editable ? `
+          <button class="btn btn-sm ${p.enabled ? "btn-outline-danger" : "btn-primary-soft"}" data-action="toggle-promo" data-id="${p.id}">${p.enabled ? "Disable" : "Enable"}</button>
+          <button class="icon-btn" data-action="edit-promo" data-id="${p.id}">${ic("edit")}</button>
+          <button class="icon-btn icon-btn-danger" data-action="delete-promo" data-id="${p.id}">${ic("trash")}</button>` : ""}
+        </div>`).join("")}
+      ${State.promotions.length === 0 ? `<div class="empty-state"><div class="empty-title">No promotions yet</div></div>` : ""}
+    </div>`;
+  };
+
+  /* AC. The form: required title and picture, the lengths, the backend's wording. */
+  const basePromoForm = window.promoFormModal;
+  window.promoFormModal = function () {
+    const err = UI.modal && UI.modal.error;
+    const noPicture = !(UI.modal && UI.modal.form && UI.modal.form.image);
+    return basePromoForm()
+      // No picture yet: the stock preview is only a placeholder.
+      .replace('class="form-media-preview"', noPicture ? 'class="form-media-preview" style="opacity:.3"' : 'class="form-media-preview"')
+      .replace("Create & push to customers", "Create & show to customers")
+      .replace(">Banner image URL<", ">Banner picture *<")
+      .replace('<span class="field-label">Title</span>', '<span class="field-label">Title *</span>')
+      .replace('name="title"', `name="title" maxlength="${TITLE_MAX}"`)
+      .replace('name="subtitle"', `name="subtitle" maxlength="${SUBTITLE_MAX}"`)
+      .replace('<div class="form-actions">', `<div class="qk-muted small">Shown on the home page as soon as it is saved. No notification is sent.</div>
+        ${err ? `<div class="field-error">${esc(err)}</div>` : ""}
+        <div class="form-actions">`);
+  };
+
+  const baseSavePromo = Submits["save-promo"];
+  Submits["save-promo"] = (form, ev) => {
+    const fd = new FormData(form);
+    const f = UI.modal.form;
+    const title = String(fd.get("title") || "").trim();
+    const subtitle = String(fd.get("subtitle") || "").trim();
+    const image = String(fd.get("image") || "").trim();
+    const fail = (message) => { UI.modal.form = { ...f, title, subtitle, image: image || f.image }; UI.modal.error = message; render(); };
+    if (!title) return fail("Enter a title");
+    if (title.length > TITLE_MAX) return fail(`Keep the title to ${TITLE_MAX} characters`);
+    if (subtitle.length > SUBTITLE_MAX) return fail(`Keep the subtitle to ${SUBTITLE_MAX} characters`);
+    if (!image && !f.image) return fail("Add a picture — upload one or paste an https:// link");
+    if (!f.id && liveCount() >= LIVE_MAX) return fail(tooMany);
+    const actor = currentUser();
+    const before = snapPromos();
+    // The Round 1 save announced "pushed to customers" — nothing is pushed (D85 a).
+    const keepNotice = window.pushNotice;
+    window.pushNotice = () => {};
+    try { baseSavePromo(form, ev); } finally { window.pushNotice = keepNotice; }
+    if (UI.modal) return; // a later check (Round 10's picture link) kept the form open
+    recordPromos(before, actor);
+    showToast(f.id ? `"${title}" saved` : `"${title}" is on the home page now`);
+  };
+
+  Actions["toggle-promo"] = (el) => {
+    const p = State.promotions.find((x) => x.id === Number(el.dataset.id));
+    if (!p) return;
+    if (!p.enabled && liveCount() >= LIVE_MAX) { showToast(tooMany, "danger"); return; }
+    const actor = currentUser();
+    const before = snapPromos();
+    State.promotions = State.promotions.map((x) => (x.id === p.id ? { ...x, enabled: !p.enabled } : x));
+    persist("promotions");
+    recordPromos(before, actor);
+    showToast(p.enabled ? `"${p.title}" is off the home page` : `"${p.title}" is on the home page again`);
+    render();
+  };
+
+  const baseDeletePromo = Actions["delete-promo"];
+  Actions["delete-promo"] = (el, ev) => {
+    const actor = currentUser();
+    const before = snapPromos();
+    baseDeletePromo(el, ev);
+    recordPromos(before, actor);
+  };
+
+  /* ================= Coupons ================= */
+  // Coupons saved before this round have no dates, limits or first-order flag; WELCOME15 is first-order only, as the
+  // backend's seed has it.
+  const terms = (c) => ({
+    startsAt: null, usageLimitTotal: null, usageLimitPerCustomer: null, description: "",
+    ...c,
+    firstOrderOnly: c.firstOrderOnly ?? c.code === "WELCOME15",
+  });
+  // Orders that used it — cancelled ones too (D41). A new coupon with a deleted one's code starts from 0.
+  const usesOf = (c) => State.orders.filter((o) => o.couponCode === c.code && (!c.createdAt || o.createdAt >= c.createdAt));
+  const figures = (c) => {
+    const uses = usesOf(c);
+    return { timesUsed: uses.length, discountGiven: uses.reduce((s, o) => s + (o.couponDiscount || 0), 0) };
+  };
+  // The first that applies, as the backend answers `status` (D85 e).
+  const statusOf = (raw, now = Date.now()) => {
+    const c = terms(raw);
+    if (!c.enabled) return "paused";
+    if (c.expiresAt && c.expiresAt <= now) return "expired";
+    if (c.startsAt && c.startsAt > now) return "scheduled";
+    if (c.usageLimitTotal != null && figures(c).timesUsed >= c.usageLimitTotal) return "used_up";
+    return "live";
+  };
+  const STATUS = { live: ["Live", "green"], scheduled: ["Scheduled", "blue"], paused: ["Paused", "yellow"], expired: ["Expired", "gray"], used_up: ["Used up", "gray"] };
+  const summaryOf = (c) => {
+    const kind = c.type === "percent" ? `${Number(c.value)}% off${c.maxDiscount ? ` (up to ${money(c.maxDiscount)})` : ""}` : c.type === "flat" ? `${money(c.value)} off` : "Free delivery";
+    return c.minOrder > 0 ? `${kind} · min. order ${money(c.minOrder)}` : kind;
+  };
+  const datesOf = (c) => {
+    const from = c.startsAt ? `From ${fmtDate(c.startsAt)}` : "";
+    const until = c.expiresAt ? `Last day ${fmtDate(dayStart(lastDay(c.expiresAt)))}` : "No expiry";
+    return [from, until].filter(Boolean).join(" · ");
+  };
+  const limitsOf = (c) => [
+    c.usageLimitPerCustomer != null ? `${c.usageLimitPerCustomer} per customer` : "",
+    c.usageLimitTotal != null ? `${c.usageLimitTotal.toLocaleString("en-SG")} in total` : "",
+    c.firstOrderOnly ? "First order only" : "",
+  ].filter(Boolean).join(" · ");
+
+  const COUPON_FIELDS = ["code", "description", "type", "value", "minOrder", "maxDiscount", "startsOn", "expiresOn", "enabled", "usageLimitTotal", "usageLimitPerCustomer", "firstOrderOnly"];
+  const auditView = (raw) => {
+    const c = terms(raw);
+    return { ...c, startsOn: c.startsAt ? dayOf(c.startsAt) : null, expiresOn: c.expiresAt ? lastDay(c.expiresAt) : null, description: c.description || null };
+  };
+  const snapCoupons = () => JSON.parse(JSON.stringify(State.coupons));
+  function recordCoupons(before, actor) {
+    if (!actor) return;
+    const was = new Map(before.map((c) => [c.id, auditView(c)]));
+    const now = new Set(State.coupons.map((c) => c.id));
+    const pick = (c, keys) => Object.fromEntries(keys.map((k) => [k, c[k] ?? null]));
+    for (const raw of State.coupons) {
+      const c = auditView(raw);
+      const o = was.get(c.id);
+      const names = { entity: c.code };
+      if (!o) { addAuditEvent({ action: "coupon.created", entity: "coupon", entityId: String(c.id), ...by(actor), after: pick(c, COUPON_FIELDS.filter((k) => c[k] != null)), names }); continue; }
+      const ch = COUPON_FIELDS.filter((k) => !auditSame(o[k] ?? null, c[k] ?? null));
+      if (ch.length) addAuditEvent({ action: "coupon.updated", entity: "coupon", entityId: String(c.id), ...by(actor), before: pick(o, ch), after: pick(c, ch), names });
+    }
+    for (const o of was.values()) {
+      if (!now.has(o.id)) addAuditEvent({ action: "coupon.deleted", entity: "coupon", entityId: String(o.id), ...by(actor), before: pick(o, ["code", "type", "enabled"]), names: { entity: o.code } });
+    }
+  }
+
+  /* AE. The list: the state of each coupon, its use, a filter. */
+  window.adminCoupons = function () {
+    const editable = canEdit(currentUser(), "coupons");
+    const filter = UI.couponStatusFilter || "all";
+    const list = State.coupons
+      .filter((c) => filter === "all" || statusOf(c) === filter)
+      .slice().sort((a, b) => a.code.localeCompare(b.code));
+    return `
+    <div class="admin-toolbar">
+      ${editable ? `<button class="btn btn-primary" data-action="new-coupon">${ic("plus")} New coupon</button>` : "<span></span>"}
+      <div style="display:flex;gap:8px;align-items:center">
+        <select class="input input-sm" data-action="coupon-status-filter" aria-label="Show">
+          ${[["all", "All coupons"], ...Object.entries(STATUS).map(([k, [label]]) => [k, label])].map(([k, label]) => `<option value="${k}" ${filter === k ? "selected" : ""}>${label}</option>`).join("")}
+        </select>
+        ${exportButtonsHTML("coupons")}
+      </div>
+    </div>
+    <div class="admin-table" style="margin-top:12px">
+      ${list.map((raw) => {
+        const c = terms(raw);
+        const [label, tone] = STATUS[statusOf(c)];
+        const f = figures(c);
+        const limits = limitsOf(c);
+        return `
+        <div class="admin-row">
+          <div class="admin-row-info">
+            <div class="admin-row-name">${esc(c.code)}</div>
+            <div class="qk-muted small">${esc(summaryOf(c))} · ${esc(datesOf(c))}</div>
+            <div class="qk-muted small">${limits ? `${esc(limits)} · ` : ""}Used ${f.timesUsed}×${f.timesUsed ? ` · ${money(f.discountGiven)} off in total` : ""}</div>
+          </div>
+          <span class="badge badge-${tone}">${label}</span>
+          ${editable ? `
+          <button class="btn btn-sm ${c.enabled ? "btn-outline-danger" : "btn-primary-soft"}" data-action="toggle-coupon" data-id="${c.id}">${c.enabled ? "Disable" : "Enable"}</button>
+          <button class="icon-btn" data-action="edit-coupon" data-id="${c.id}">${ic("edit")}</button>
+          <button class="icon-btn icon-btn-danger" data-action="delete-coupon" data-id="${c.id}">${ic("trash")}</button>` : ""}
+        </div>`;
+      }).join("")}
+      ${list.length === 0 ? `<div class="empty-state"><div class="empty-title">${State.coupons.length ? "No coupons in this state" : "No coupons yet"}</div></div>` : ""}
+    </div>`;
+  };
+  Actions["coupon-status-filter"] = (el) => { UI.couponStatusFilter = el.value; render(); };
+
+  /* AD. The form: the new boxes, the boxes each type uses, the problems by the box. */
+  // The form holds what was typed (text), so a problem or a type change never loses it.
+  const formOf = (raw) => {
+    const c = terms(raw);
+    return {
+      id: c.id, code: c.code, description: c.description || "", type: c.type,
+      value: c.type === "freeship" ? "" : String(c.value ?? ""), minOrder: String(c.minOrder || 0),
+      maxDiscount: c.maxDiscount != null ? String(c.maxDiscount) : "",
+      startsOn: c.startsAt ? dayOf(c.startsAt) : "", expiresOn: c.expiresAt ? lastDay(c.expiresAt) : "",
+      usageLimitTotal: c.usageLimitTotal != null ? String(c.usageLimitTotal) : "",
+      usageLimitPerCustomer: c.usageLimitPerCustomer != null ? String(c.usageLimitPerCustomer) : "",
+      firstOrderOnly: !!c.firstOrderOnly, enabled: c.enabled !== false,
+    };
+  };
+  const readForm = (form) => {
+    const fd = new FormData(form);
+    const text = (k) => String(fd.get(k) ?? "");
+    return {
+      code: text("code"), description: text("description"), type: text("type") || "percent", value: text("value"),
+      minOrder: text("minOrder"), maxDiscount: text("maxDiscount"), startsOn: text("startsOn"), expiresOn: text("expiresOn"),
+      usageLimitTotal: text("usageLimitTotal"), usageLimitPerCustomer: text("usageLimitPerCustomer"),
+      firstOrderOnly: fd.get("firstOrderOnly") === "on", enabled: fd.get("enabled") === "on",
+    };
+  };
+  Actions["new-coupon"] = () => {
+    UI.modal = { type: "couponForm", form: formOf({ code: "", type: "percent", value: 10, minOrder: 0, maxDiscount: null, enabled: true, firstOrderOnly: false }), errors: {} };
+    render();
+  };
+  Actions["edit-coupon"] = (el) => {
+    const c = State.coupons.find((x) => x.id === Number(el.dataset.id));
+    if (!c) return;
+    UI.modal = { type: "couponForm", form: formOf(c), errors: {} };
+    render();
+  };
+  Actions["coupon-type"] = (el) => {
+    UI.modal.form = { ...UI.modal.form, ...readForm(el.closest("form")) };
+    render();
+  };
+
+  window.couponFormModal = function () {
+    const f = UI.modal.form;
+    const err = UI.modal.errors || {};
+    const box = (name, label, attrs, hint) => `
+      <label class="field"><span class="field-label">${label}</span><input class="input ${err[name] ? "invalid" : ""}" name="${name}" value="${esc(f[name] ?? "")}" ${attrs} /></label>
+      ${err[name] ? `<div class="field-error">${esc(err[name])}</div>` : hint ? `<div class="qk-muted small" style="margin:-8px 0 4px">${hint}</div>` : ""}`;
+    return `
+    <div class="overlay" data-action="close-modal-backdrop">
+      <div class="dialog dialog-static" role="dialog" aria-modal="true" data-action="noop">
+        <div class="dialog-head"><span>${f.id ? "Edit coupon" : "New coupon"}</span><button class="dialog-close" data-action="close-modal">${ic("close")}</button></div>
+        <form class="dialog-body" data-action="save-coupon">
+          ${box("code", "Coupon code *", 'placeholder="e.g. QUICK10" maxlength="30" style="text-transform:uppercase" autocomplete="off"', "2–30 letters, digits, - and _ — saved in capitals.")}
+          ${box("description", "Description", `placeholder="Shown to customers in their coupon list" maxlength="${DESCRIPTION_MAX}"`)}
+          <div class="field-grid-2">
+            <label class="field"><span class="field-label">Type</span>
+              <select class="input" name="type" data-action="coupon-type">
+                <option value="percent" ${f.type === "percent" ? "selected" : ""}>Percent off</option>
+                <option value="flat" ${f.type === "flat" ? "selected" : ""}>Flat amount off</option>
+                <option value="freeship" ${f.type === "freeship" ? "selected" : ""}>Free delivery</option>
+              </select>
+            </label>
+            ${f.type === "freeship"
+              ? `<div class="field"><span class="field-label">Value</span><div class="qk-muted small" style="padding-top:8px">None — the delivery fee is waived.</div></div>`
+              : `<div>${box("value", f.type === "percent" ? "Percent off *" : "Amount off (S$) *", `inputmode="decimal" placeholder="${f.type === "percent" ? "0.01–100" : "e.g. 5"}"`)}</div>`}
+          </div>
+          <div class="field-grid-2">
+            <div>${box("minOrder", "Min. order (S$)", 'inputmode="decimal"', "On the cart after BOGO and combos.")}</div>
+            <div>${f.type === "percent" ? box("maxDiscount", "Max discount (S$)", 'inputmode="decimal" placeholder="No cap"', "Optional cap on the % off.") : ""}</div>
+          </div>
+          <div class="field-grid-2">
+            <div>${box("startsOn", "Starts on", 'type="date"', "Empty = from now. Before it customers don't see it.")}</div>
+            <div>${box("expiresOn", "Last day", 'type="date"', "Works to the end of this day. Empty = never expires.")}</div>
+          </div>
+          <div class="field-grid-2">
+            <div>${box("usageLimitTotal", "Total uses", 'type="number" min="1" max="1000000" step="1" placeholder="No limit"', "By all customers together.")}</div>
+            <div>${box("usageLimitPerCustomer", "Uses per customer", 'type="number" min="1" max="1000000" step="1" placeholder="No limit"')}</div>
+          </div>
+          <label class="stock-toggle-lg"><input type="checkbox" name="firstOrderOnly" ${f.firstOrderOnly ? "checked" : ""} /><span>First order only — every order a customer ever placed counts, cancelled ones too</span></label>
+          <label class="stock-toggle-lg"><input type="checkbox" name="enabled" ${f.enabled !== false ? "checked" : ""} /><span>Active — customers can apply this code</span></label>
+          ${f.id && figures(terms(State.coupons.find((c) => c.id === f.id) || {})).timesUsed ? `<div class="qk-muted small">This coupon has been used — orders already placed keep their bill.</div>` : ""}
+          <div class="form-actions">
+            <button type="button" class="btn btn-outline btn-block" data-action="close-modal">Cancel</button>
+            <button type="submit" class="btn btn-primary btn-block">${f.id ? "Save changes" : "Create coupon"}</button>
+          </div>
+        </form>
+      </div>
+    </div>`;
+  };
+
+  /* AD. The save: the backend's checks (D85 b, c). */
+  Submits["save-coupon"] = (form) => {
+    const raw = readForm(form);
+    const f = UI.modal.form;
+    const existing = f.id ? State.coupons.find((c) => c.id === f.id) : null;
+    const errors = {};
+    const code = raw.code.trim().toUpperCase();
+    if (!code) errors.code = "Enter a coupon code";
+    else if (!CODE.test(code)) errors.code = "2–30 letters, digits, - and _, starting with a letter or digit";
+    else if (State.coupons.some((c) => c.code.toUpperCase() === code && c.id !== f.id)) errors.code = "Another coupon already uses this code";
+    const description = raw.description.trim();
+    if (description.length > DESCRIPTION_MAX) errors.description = `Keep it to ${DESCRIPTION_MAX} characters`;
+    const amount = (key, text, fallback) => {
+      const s = text.trim() || fallback;
+      if (s === "") return null;
+      if (!AMOUNT.test(s)) { errors[key] = 'Enter an amount such as "12.50"'; return null; }
+      return Number(s);
+    };
+    const type = raw.type;
+    let value = 0;
+    if (type !== "freeship") {
+      value = amount("value", raw.value, "");
+      if (value === null && !errors.value) errors.value = "Enter the value";
+      else if (type === "percent" && (value <= 0 || value > 100)) errors.value = "A percentage from 0.01 to 100";
+      else if (type === "flat" && value <= 0) errors.value = "Must be more than 0";
+    }
+    const minOrder = amount("minOrder", raw.minOrder, "0");
+    let maxDiscount = null;
+    if (type === "percent") {
+      maxDiscount = amount("maxDiscount", raw.maxDiscount, "");
+      if (maxDiscount !== null && maxDiscount <= 0) errors.maxDiscount = "Must be more than 0 — or leave it empty for no cap";
+    }
+    // A date box still showing the saved day keeps the saved moment — only a changed day is saved anew.
+    const was = existing ? formOf(existing) : null;
+    const startsSame = !!was && raw.startsOn === was.startsOn;
+    const expiresSame = !!was && raw.expiresOn === was.expiresOn;
+    const startsAt = startsSame ? existing.startsAt ?? null : raw.startsOn ? dayStart(raw.startsOn) : null;
+    if (raw.startsOn && startsAt === null) errors.startsOn = "Must be a real date";
+    const expiresAt = expiresSame ? existing.expiresAt ?? null : raw.expiresOn ? dayAfter(raw.expiresOn) : null;
+    if (raw.expiresOn && expiresAt === null) errors.expiresOn = "Must be a real date";
+    // An expiry that is set must be today or later; an old coupon's past expiry stays while other fields change.
+    const expiryChanged = !expiresSame;
+    if (expiryChanged && expiresAt !== null && expiresAt <= Date.now()) errors.expiresOn = "Must be today or later";
+    if (startsAt !== null && expiresAt !== null && startsAt >= expiresAt && !errors.startsOn) errors.startsOn = "Must be on or before the last day";
+    const uses = (key) => {
+      const s = raw[key].trim();
+      if (!s) return null;
+      const n = Number(s);
+      if (!Number.isInteger(n) || n < 1 || n > USES_MAX) { errors[key] = "A whole number from 1 to 1,000,000 — or empty for no limit"; return null; }
+      return n;
+    };
+    const usageLimitTotal = uses("usageLimitTotal");
+    const usageLimitPerCustomer = uses("usageLimitPerCustomer");
+    if (Object.keys(errors).length) {
+      UI.modal.form = { ...f, ...raw };
+      UI.modal.errors = errors;
+      render();
+      return;
+    }
+
+    const data = {
+      code, description, type, value, minOrder, maxDiscount, startsAt, expiresAt,
+      usageLimitTotal, usageLimitPerCustomer, firstOrderOnly: raw.firstOrderOnly, enabled: raw.enabled,
+    };
+    const actor = currentUser();
+    const before = snapCoupons();
+    if (existing) {
+      State.coupons = State.coupons.map((c) => (c.id === f.id ? { ...c, ...data } : c));
+    } else {
+      const id = State.coupons.length ? Math.max(...State.coupons.map((c) => c.id)) + 1 : 1;
+      State.coupons.push({ ...data, id, createdAt: Date.now() });
+    }
+    persist("coupons");
+    recordCoupons(before, actor);
+    UI.modal = null;
+    showToast(existing ? `${code} updated` : `${code} created`);
+    render();
+  };
+
+  for (const name of ["toggle-coupon", "delete-coupon"]) {
+    const base = Actions[name];
+    Actions[name] = (el, ev) => {
+      const actor = currentUser();
+      const before = snapCoupons();
+      base(el, ev);
+      recordCoupons(before, actor);
+    };
+  }
+
+  /* AE. The export: the backend's columns. */
+  EXPORTS.coupons = () => ({
+    name: "coupons",
+    columns: ["Code", "Type", "Value", "Min order", "Max discount", "Status", "Starts", "Expires", "Total uses limit", "Per customer limit", "First order only", "Times used", "Discount given", "Description", "Added"],
+    rows: State.coupons.slice().sort((a, b) => a.code.localeCompare(b.code)).map((raw) => {
+      const c = terms(raw);
+      const f = figures(c);
+      return [c.code, c.type, Number(c.value || 0).toFixed(2), Number(c.minOrder || 0).toFixed(2), c.maxDiscount != null ? Number(c.maxDiscount).toFixed(2) : "",
+        statusOf(c), c.startsAt ? dayOf(c.startsAt) : "", c.expiresAt ? lastDay(c.expiresAt) : "", c.usageLimitTotal ?? "", c.usageLimitPerCustomer ?? "",
+        c.firstOrderOnly ? "Yes" : "No", f.timesUsed, f.discountGiven.toFixed(2), c.description || "", c.createdAt ? fmtDateTime(c.createdAt) : ""];
+    }),
+  });
+
+  /* AE. The customer's checkout follows the dates and the limits, in the backend's order and words. */
+  window.couponEligibility = function (coupon, subtotal) {
+    if (!coupon) return { ok: false, reason: "Invalid coupon code" };
+    const c = terms(coupon);
+    const no = (reason) => ({ ok: false, reason });
+    const now = Date.now();
+    if (!c.enabled) return no("This coupon is no longer active");
+    if (c.startsAt && c.startsAt > now) return no("This coupon is not active yet");
+    if (c.expiresAt && c.expiresAt <= now) return no("This coupon has expired");
+    const uses = usesOf(c);
+    if (c.usageLimitTotal != null && uses.length >= c.usageLimitTotal) return no("This coupon has been fully claimed");
+    const me = State.session && State.session.role === "customer" ? State.session.name : null;
+    if (me && c.usageLimitPerCustomer != null && uses.filter((o) => o.customerName === me).length >= c.usageLimitPerCustomer) {
+      return no("You have already used this coupon");
+    }
+    if (me && c.firstOrderOnly && State.orders.some((o) => o.customerName === me)) return no("This coupon is only for your first order");
+    if (subtotal < (c.minOrder || 0)) return no(`Add ${money(c.minOrder - subtotal)} more to use ${c.code}`);
+    return { ok: true };
+  };
+
+  /* AF. The audit log names them. */
+  Object.assign(AUDIT_ACTION_TEXT, {
+    "promotion.created": ["Promotions", "added promotion"],
+    "promotion.updated": ["Promotions", "changed promotion"],
+    "promotion.deleted": ["Promotions", "deleted promotion"],
+    "coupon.created": ["Coupons", "added coupon"],
+    "coupon.updated": ["Coupons", "changed coupon"],
+    "coupon.deleted": ["Coupons", "deleted coupon"],
+  });
+  Object.assign(AUDIT_ENTITY_LABEL, { promotion: "Promotions", coupon: "Coupons" });
+  Object.assign(AUDIT_FIELD_LABEL, {
+    code: "Code", description: "Description", type: "Type", value: "Value", minOrder: "Min. order", maxDiscount: "Max discount",
+    startsOn: "Starts on", expiresOn: "Last day", usageLimitTotal: "Total uses", usageLimitPerCustomer: "Uses per customer",
+    firstOrderOnly: "First order only",
+  });
+})();
+
 /* ---------------- What's changed ---------------- */
-WHATS_NEW.unshift({ area: "Stock transfers, Home Screen, Business Settings, Delivery Slots & Notifications as built (round 11)", items: [
+WHATS_NEW.unshift({ area: "Stock transfers, Home Screen, Business Settings, Delivery Slots, Notifications, Promotions & Coupons as built (round 11)", items: [
   ["Order cancelled", "Cancelling an order cancels its transfer requests that were not sent yet — Transfers ▸ Done shows them as \"Cancelled · with the order\". One already on the way still arrives: Mark received adds it to the store's stock."],
   ["Mark received", "A transfer for an order covers the short item only while the order is open and the item isn't marked unavailable; otherwise the units simply join the store's stock, and the toast says so."],
   ["Decline with a note", "Stock ▸ Transfers ▸ Decline: a note box next to the reason. The lists show the reason and the note, and who did the last step."],
@@ -1541,4 +2019,10 @@ WHATS_NEW.unshift({ area: "Stock transfers, Home Screen, Business Settings, Deli
   ["Always on", "The login code and the admin password-reset and invite emails can be reworded but never switched off."],
   ["New messages", "Order placed — an email receipt when you take the order. Delivery slot reminder — a push before the slot. Cash reminder, Message from the store and Order assigned to you are worded now and marked \"Not sent yet\" until their screens are built."],
   ["Slot reminder", "Delivery Slots ▸ Slot times: \"Remind customers before their slot (minutes)\" — 60 by default, 0 = no reminder."],
+  ["Promotions", "Marketing ▸ Promotions: a promotion is an extra slide on the home page's top carousel. No notification is sent, so the button now reads \"Create & show to customers\". A title (up to 80 characters) and a picture are needed; at most 20 can be live at once."],
+  ["Coupon dates", "Marketing ▸ Coupons: a coupon can start on a later day (\"Starts on\") as well as end (\"Last day\") — whole days. Before it starts customers don't see it, and its code says \"This coupon is not active yet\"."],
+  ["Coupon limits", "New boxes: total uses, uses per customer (empty = no limit) and First order only — checkout already followed them in the backend. WELCOME15 is first-order only, as in the backend's seed."],
+  ["Coupon list", "Each coupon shows Live, Scheduled, Paused, Expired or Used up, how often it was used and the discount it gave; a filter by state. The export has the new columns."],
+  ["Coupon rules", "Code 2–30 letters, digits, - and _ (saved in capitals); percent 0.01–100, flat above 0; free delivery has no value and the cap is for percent coupons only; problems show by the box."],
+  ["Promotions & coupons in the audit log", "Setup ▸ Audit log shows promotions and coupons added, changed, switched on or off and deleted."],
 ] });
