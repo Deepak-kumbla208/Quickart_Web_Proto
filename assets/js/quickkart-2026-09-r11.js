@@ -75,6 +75,17 @@
    X. Slot times, a day's capacity, close / reopen, one-off slots and moved
       orders are in Setup ▸ Audit log.
 
+   Notification providers (Setup ▸ Notifications) — later again, as P9-8a
+   (D65, D83) built it: there is NO QuickKart shared provider.
+   Y. Every card is the business's own account (the "Use QuickKart's shared
+      provider" choice is gone), with "Set up" / "Not set up" — not set up
+      sends nothing, and without SMS customers can't log in. SMS off stops
+      the SMS messages, never the login codes.
+   Z. Channels & providers is the Super Admin's only (others see the
+      templates); every save or switch emails every Super Admin and is in the
+      audit log; Send test goes to you only (your email, your own mobile,
+      Firebase as a dry run), at most 5 in 10 minutes.
+
    In the real admin app (quickkart-api-service docs/08 §36): the lists are
    GET /admin/stock-transfers?view=to_send|to_receive|waiting|sent|done, the
    badge GET /admin/stock-transfers/counts, "Request N from <store> (has
@@ -1153,8 +1164,141 @@ State.deliverySettings = {
   Object.assign(AUDIT_FIELD_LABEL, { slot: "Slot", capacity: "Capacity", closed: "Closed" });
 })();
 
+/* ---------------- Later the same day: Notification providers as P9-8a built it (D65, D83) ---------------- */
+/* In the real admin app (quickkart-api-service docs/08 §40): GET /admin/notifications/providers; PUT and PATCH
+   /admin/notifications/providers/:channel; POST …/:channel/test — the Super Admin only. There is no QuickKart shared
+   provider (D83): each business sets up its own email, SMS and Firebase; a channel without one sends nothing, and
+   without SMS customers can't log in. */
+(function round11NotificationProviders() {
+  const TEST_LIMIT = 5;
+  const TEST_WINDOW_MS = 10 * 60 * 1000;
+  const label = (ch) => (ch === "sms" ? "SMS" : ch === "push" ? "Push" : "Email");
+  const filled = (v) => v !== undefined && v !== null && String(v).trim() !== "";
+  const maskEmail = (e) => (e && e.includes("@") ? `${e[0]}***${e.slice(e.lastIndexOf("@"))}` : "");
+  const audit = (action, entityId, before, after) => {
+    const u = currentUser();
+    if (u) addAuditEvent({ action, entity: action.split(".")[0], entityId, actorType: "user", actorId: u.id, before, after });
+  };
+
+  /* A. No shared provider: every card is the business's own account (the old "Use QuickKart's shared provider"
+     choice is gone). */
+  (() => {
+    const cfg = State.notificationConfig || {};
+    const next = { ...cfg };
+    let changed = false;
+    ["email", "sms", "push"].forEach((ch) => {
+      if (next[ch] && next[ch].mode !== "own") { next[ch] = { ...next[ch], mode: "own" }; changed = true; }
+    });
+    if (changed) { State.notificationConfig = next; persist("notificationConfig"); }
+  })();
+
+  // A provider is saved when its required boxes are (the backend says "configured").
+  const configured = (ch, c) => {
+    if (ch === "push") return filled(c.projectId) && !!c.serviceAccountSet;
+    if (ch === "sms") return filled(c.accountId) && !!c.tokenSet && filled(c.senderId);
+    switch (c.provider) {
+      case "SendGrid": return !!c.apiKeySet && filled(c.fromEmail);
+      case "Mailgun": return filled(c.domain) && !!c.apiKeySet && filled(c.fromEmail);
+      case "Amazon SES": return filled(c.accountId) && !!c.secretAccessKeySet && filled(c.fromEmail);
+      case "Postmark": return !!c.serverTokenSet && filled(c.fromEmail);
+      default: return filled(c.host) && filled(c.username) && !!c.passwordSet && filled(c.fromEmail);
+    }
+  };
+  const NOT_SET_UP = {
+    email: "Not set up yet — nothing is sent by email (order emails, password-reset links) until you add your provider.",
+    sms: "Not set up yet — <b>customers can't log in</b> until you add an SMS provider: login codes go only by SMS.",
+    push: "Not set up yet — push needs your own Firebase project and your own branded app build.",
+  };
+  const OFF = {
+    email: "Off — nothing is sent by email, whatever the templates say.",
+    sms: "Off — no SMS messages are sent, whatever the templates say. <b>Login codes still go</b> while a provider is set up — customers must always be able to log in.",
+    push: "Off — no push notifications are sent, whatever the templates say.",
+  };
+
+  /* B. The card: the business's own fields always; "Set up" / "Not set up" next to the title. */
+  window.notifChannelCard = function (ch, title, icon, editable, ownFields) {
+    const c = State.notificationConfig[ch];
+    const dis = editable ? "" : "disabled";
+    const ready = configured(ch, c);
+    return `
+  <div class="summary-card notif-card ${c.enabled ? "" : "is-off"}">
+    <div class="notif-card-head">
+      <div class="summary-card-title" style="margin:0">${ic(icon)} ${title} <span class="badge ${ready ? "badge-green-soft" : "badge-yellow-soft"}">${ready ? "Set up" : "Not set up"}</span></div>
+      <label class="stock-toggle"><input type="checkbox" ${c.enabled ? "checked" : ""} data-action="toggle-notif-channel" data-ch="${ch}" ${dis} /><span>${c.enabled ? "On" : "Off"}</span></label>
+    </div>
+    ${c.enabled ? `
+    ${ready ? "" : `<div class="notice notice-warn" style="margin:8px 0">${ic("alert")}<span>${NOT_SET_UP[ch]}</span></div>`}
+    <form data-action="save-notif-channel" data-ch="${ch}">
+      ${ownFields(c, dis)}
+      ${editable ? `<div class="form-actions"><button type="button" class="btn btn-outline" data-action="test-notif-channel" data-ch="${ch}">Send test</button><button type="submit" class="btn btn-primary">Save ${title.toLowerCase()}</button></div>` : ""}
+    </form>` : `<div class="qk-muted small">${OFF[ch]}</div>`}
+  </div>`;
+  };
+
+  /* C. The providers are the Super Admin's only — they decide where login codes and password-reset emails go. Anyone
+     else with Notifications sees the message templates only. */
+  window.adminNotifications = function () {
+    const me = currentUser();
+    const owner = isSuperAdmin(me);
+    const tab = owner ? UI.notifTab || "channels" : "templates";
+    const editable = canEdit(me, "notifications");
+    return `
+  <div class="pill-row">
+    ${owner ? `<button class="pill ${tab === "channels" ? "active" : ""}" data-action="notif-tab" data-tab="channels">Channels &amp; providers</button>` : ""}
+    <button class="pill ${tab === "templates" ? "active" : ""}" data-action="notif-tab" data-tab="templates">Message templates</button>
+  </div>
+  ${tab === "channels" ? `<div class="notice notice-ok" style="margin-bottom:14px">${ic("bell")}<span>Your business's <b>own</b> accounts — there is no QuickKart shared provider. One setting for all ${State.branches.length} stores. Passwords and keys are stored encrypted and are <b>never shown again</b> after saving. Only the Super Admin sees this tab, and every change emails every Super Admin.</span></div>` : ""}
+  ${tab === "templates" ? notifTemplatesHTML(editable) : notifChannelsHTML(owner)}`;
+  };
+
+  /* D. Saves and the on / off switch: audited; every Super Admin is told by email. */
+  const save = Actions["save-notif-channel"];
+  Actions["save-notif-channel"] = (form) => {
+    const ch = form.dataset.ch;
+    const before = JSON.stringify(State.notificationConfig[ch]);
+    save(form);
+    const now = State.notificationConfig[ch];
+    if (JSON.stringify(now) === before) return; // refused (missing boxes) or nothing changed
+    audit("notification_provider.updated", ch, null, { channel: ch, provider: now.provider || "Firebase" });
+    showToast(`${label(ch)} settings saved — every Super Admin gets an email about the change`);
+  };
+  const toggle = Actions["toggle-notif-channel"];
+  Actions["toggle-notif-channel"] = (el) => {
+    const ch = el.dataset.ch;
+    const was = !!State.notificationConfig[ch].enabled;
+    toggle(el);
+    if (was === !!State.notificationConfig[ch].enabled) return;
+    audit("notification_provider.updated", ch, { channel: ch, enabled: was }, { channel: ch, enabled: !was });
+    showToast(`${label(ch)} switched ${was ? "off" : "on"} — every Super Admin gets an email about it`);
+  };
+
+  /* E. Send test: with the saved settings, to you only; 5 per 10 minutes; a plain pass / fail. */
+  Actions["test-notif-channel"] = (el) => {
+    const ch = el.dataset.ch;
+    const c = State.notificationConfig[ch];
+    const me = currentUser() || {};
+    if (!configured(ch, c)) { showToast("Save a provider for this channel first, then send a test", "danger"); return; }
+    if (ch === "sms" && !filled(me.mobile)) { showToast("The test SMS goes only to you — add your mobile number to your own profile first", "danger"); return; }
+    const recent = (UI.notifTests || []).filter((t) => Date.now() - t < TEST_WINDOW_MS);
+    if (recent.length >= TEST_LIMIT) { showToast("Too many tests — wait a few minutes and try again", "danger"); return; }
+    UI.notifTests = [...recent, Date.now()];
+    audit("notification_provider.tested", ch, null, { channel: ch, provider: c.provider || "Firebase", ok: true });
+    const msg = ch === "push"
+      ? "Firebase accepted the settings (a dry run — nothing was delivered)"
+      : `Test ${ch === "sms" ? "SMS" : "email"} sent to ${ch === "sms" ? `****${String(me.mobile).slice(-4)}` : maskEmail(me.email)}`;
+    showToast(`${msg} (prototype — nothing is really sent)`);
+  };
+
+  /* F. The audit log names them. */
+  Object.assign(AUDIT_ACTION_TEXT, {
+    "notification_provider.updated": ["Notifications", "changed a notification provider"],
+    "notification_provider.tested": ["Notifications", "sent a notification test"],
+  });
+  Object.assign(AUDIT_ENTITY_LABEL, { notification_provider: "Notifications" });
+})();
+
 /* ---------------- What's changed ---------------- */
-WHATS_NEW.unshift({ area: "Stock transfers, Home Screen, Business Settings & Delivery Slots as built (round 11)", items: [
+WHATS_NEW.unshift({ area: "Stock transfers, Home Screen, Business Settings, Delivery Slots & Notification providers as built (round 11)", items: [
   ["Order cancelled", "Cancelling an order cancels its transfer requests that were not sent yet — Transfers ▸ Done shows them as \"Cancelled · with the order\". One already on the way still arrives: Mark received adds it to the store's stock."],
   ["Mark received", "A transfer for an order covers the short item only while the order is open and the item isn't marked unavailable; otherwise the units simply join the store's stock, and the toast says so."],
   ["Decline with a note", "Stock ▸ Transfers ▸ Decline: a note box next to the reason. The lists show the reason and the note, and who did the last step."],
@@ -1173,4 +1317,8 @@ WHATS_NEW.unshift({ area: "Stock transfers, Home Screen, Business Settings & Del
   ["One-off slots", "A one-off slot's capacity box changes its own capacity, it starts empty, and it can't be deleted while orders are booked in it — move them first."],
   ["Move to…", "Move an order to any open slot of the store that isn't full or started, on any of its days — staff aren't held to the customer's cut-off. Orders edit may move too. The customer is not told: let them know."],
   ["Another date", "Delivery Slots ▸ \"Open another date\": any day up to 60 days ahead, e.g. to close a slot on a holiday."],
+  ["No QuickKart shared provider", "Setup ▸ Notifications ▸ Channels & providers: each business uses its own email (SMTP, SendGrid, Amazon SES, Mailgun, Postmark), SMS (Twilio, Vonage, Amazon SNS) and Firebase — the \"Use QuickKart's shared provider\" choice is gone. A card says \"Not set up\" until its provider is saved: nothing is sent on it, and without SMS customers can't log in."],
+  ["Super Admin only", "Only the Super Admin sees Channels & providers — they decide where login codes and password-reset emails go; others with Notifications see the message templates. Every save, and every switch on or off, emails every Super Admin and shows in Setup ▸ Audit log."],
+  ["SMS off", "Switching SMS off stops the SMS messages — never the login codes: customers must always be able to log in."],
+  ["Send test", "Uses the saved settings and goes to you only: email to your address, SMS to your own mobile (add it to your profile first), push as a Firebase dry run (nothing delivered). At most 5 tests in 10 minutes."],
 ] });
