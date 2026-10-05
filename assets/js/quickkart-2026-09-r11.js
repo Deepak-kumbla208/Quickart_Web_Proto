@@ -1262,6 +1262,9 @@ State.deliverySettings = {
     audit("notification_provider.updated", ch, null, { channel: ch, provider: now.provider || "Firebase" });
     showToast(`${label(ch)} settings saved — every Super Admin gets an email about the change`);
   };
+  // A real form submit goes through Submits — Round 7 registered its handler under Actions only, so the browser kept
+  // using the Round 1 save (no provider, no "saved" flags). Both names now run the same handler.
+  Submits["save-notif-channel"] = Actions["save-notif-channel"];
   const toggle = Actions["toggle-notif-channel"];
   Actions["toggle-notif-channel"] = (el) => {
     const ch = el.dataset.ch;
