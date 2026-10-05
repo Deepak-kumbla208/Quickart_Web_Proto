@@ -58,6 +58,23 @@
       buttons, the cart's per-item limit, the rider's earnings.
    S. Every Business Settings save is one entry in Setup ▸ Audit log.
 
+   Delivery Slots (Delivery Masters ▸ Delivery Slots) — later again, as P9-6b
+   (MR !81, D59) built it:
+   T. Slot times: changed only by the Super Admin or Business Settings edit;
+      1–9999 orders a slot; a slot ends after it starts ("00:00" = midnight);
+      a window listed twice refused; the cut-off up to 10080 minutes. A slot
+      time whose hours change is a new window — orders booked in the old one
+      stay there, listed as "No longer offered" under their day.
+   U. A store's day: the override box on a one-off slot is its own capacity
+      (no Reset); a one-off slot can't be deleted while booked, can't repeat
+      a window the day has, and starts empty (no demo bookings).
+   V. Move to…: any open, not-full, not-started slot of the store on any of
+      its days (staff are not held to the customer's cut-off); Orders edit
+      may move too; "The customer is not told" next to it.
+   W. "Open another date": any date up to 60 days ahead.
+   X. Slot times, a day's capacity, close / reopen, one-off slots and moved
+      orders are in Setup ▸ Audit log.
+
    In the real admin app (quickkart-api-service docs/08 §36): the lists are
    GET /admin/stock-transfers?view=to_send|to_receive|waiting|sent|done, the
    badge GET /admin/stock-transfers/counts, "Request N from <store> (has
@@ -780,8 +797,364 @@ State.deliverySettings = {
   ["save-peak-sections", "save-slot-templates"].forEach((n) => audited(Submits, n));
 })();
 
+/* ---------------- Later the same day: Delivery Slots as P9-6b built it (MR !81, D59) ---------------- */
+/* In the real admin app (quickkart-api-service docs/08 §39): GET / PUT /admin/delivery-slots/templates (the whole list);
+   GET /admin/delivery-slots/:storeId (the days; ?format=xlsx) and …/:storeId/:date (up to 60 days); PUT / DELETE
+   …/:date/:window/override; POST …/close and …/reopen; POST …/:date/extra and DELETE …/:date/:window; GET …/orders;
+   POST /admin/orders/:orderId/move-slot. A slot is named by its times: a slot time whose hours change is a new window,
+   and orders booked in the old one stay there ("No longer offered"). */
+(function round11DeliverySlots() {
+  const DAY = 86400000;
+  const MAX_CAPACITY = 9999;
+  const HORIZON_DAYS = 60;
+  const endsAfterStart = (s, e) => (e > s) || (e === "00:00" && s !== "00:00");
+  const range = (s) => fmtSlotRange(s);
+  const todayIso = () => isoDate(new Date());
+  const canEditTimes = () => { const u = currentUser(); return !!u && (isSuperAdmin(u) || canEdit(u, "tax")); };
+  const canEditSlots = () => canEdit(currentUser(), "slots");
+  const canMove = () => { const u = currentUser(); return !!u && (canEdit(u, "slots") || canEdit(u, "orders")); };
+  const audit = (action, entityId, before, after, names) => {
+    const u = currentUser();
+    if (u) addAuditEvent({ action, entity: action.split(".")[0], entityId, actorType: "user", actorId: u.id, before, after, names });
+  };
+  const started = (date, slot) => {
+    if (date !== todayIso()) return date < todayIso();
+    const [h, m] = slot.start.split(":").map(Number);
+    const at = new Date(); at.setHours(h, m, 0, 0);
+    return Date.now() >= at.getTime();
+  };
+  const dateLabel = (date) => slotDayLabel(date);
+  // Windows that were slot times once — the "No longer offered" rows name them by their hours.
+  const retiredWindow = (slotId) => (State.slotSettings.retiredWindows || {})[slotId] || null;
+  const ordersIn = (key) => State.orders.filter((o) => o.slotKey === key && o.status !== "cancelled");
+
+  /* A–C. The Slot times card: changed only by the Super Admin or Business Settings edit; 1–9999 orders a slot; a slot
+     ends after it starts ("00:00" = midnight); the cut-off up to a week (10080 minutes). */
+  function templatesCardHTML() {
+    const st = State.slotSettings;
+    const editable = canEditTimes();
+    const dis = editable ? "" : "disabled";
+    return `
+  <div class="summary-card">
+    <div class="summary-card-title">Slot times — used every day, at every store</div>
+    <div class="qk-muted small" style="margin-bottom:10px">Each row is a delivery window customers can pick. Capacity is how many orders one store accepts in that window (1–9999); change a single day's number below with an override. A slot that ends at midnight ends at 00:00.${editable ? "" : " Only the Super Admin or someone with Business Settings at edit can change slot times."}</div>
+    <form data-action="save-slot-templates">
+      <div class="slot-tpl-grid">
+        <div class="slot-tpl-head"><span>From</span><span>To</span><span>Orders per slot</span><span></span></div>
+        ${st.templates.map((t, i) => `
+          <div class="slot-tpl-row">
+            <input class="input" type="time" name="start_${i}" value="${esc(t.start)}" ${dis} />
+            <input class="input" type="time" name="end_${i}" value="${esc(t.end)}" ${dis} />
+            <input class="input" type="number" min="1" max="${MAX_CAPACITY}" name="cap_${i}" value="${t.capacity}" ${dis} />
+            ${editable ? `<button type="button" class="icon-btn icon-btn-danger" data-action="remove-slot-template" data-idx="${i}" aria-label="Remove">${ic("trash")}</button>` : "<span></span>"}
+          </div>`).join("")}
+      </div>
+      <div class="field-grid-2" style="margin-top:12px">
+        <label class="field"><span class="field-label">Days customers can book ahead (1–14)</span><input class="input" type="number" min="1" max="14" name="daysAhead" value="${st.daysAhead}" ${dis} /></label>
+        <label class="field"><span class="field-label">Stop taking orders before a slot starts (minutes)</span><input class="input" type="number" min="0" max="10080" name="cutoffMins" value="${st.cutoffMins}" ${dis} /><span class="qk-muted small">Customers only — your team can still move an order into a slot until it starts.</span></label>
+      </div>
+      ${editable ? `<div class="form-actions"><button type="button" class="btn btn-outline" data-action="add-slot-template">${ic("plus")} Add slot time</button><button type="submit" class="btn btn-primary">Save slot times</button></div>` : ""}
+    </form>
+  </div>`;
+  }
+
+  /* D–F. A store's day: the override box (a one-off slot's own capacity), Close / Reopen, a one-off slot deleted only
+     when nobody is booked, "No longer offered" windows, Move to… any open, not-full, not-started slot of the store. */
+  function moveOptionsHTML(branch, fromKey) {
+    const dates = [...new Set([...slotDays().map((d) => d.date), UI.slotOtherDate].filter(Boolean))];
+    return dates.map((date) => {
+      const opts = slotsFor(branch.id, date)
+        .map((s) => ({ s, inf: slotInfo(branch.id, date, s) }))
+        .filter(({ s, inf }) => inf.key !== fromKey && !inf.closed && inf.booked < inf.cap && !started(date, s))
+        .map(({ s, inf }) => `<option value="${inf.key}">${esc(range(s))} (${inf.booked}/${inf.cap})</option>`)
+        .join("");
+      return opts ? `<optgroup label="${esc(dateLabel(date))}">${opts}</optgroup>` : "";
+    }).join("");
+  }
+  function ordersListHTML(branch, key, orders) {
+    const movable = canMove();
+    return `<div class="slot-orders">
+      ${orders.length ? orders.map((o) => `<div class="row"><span>#${o.id} · ${esc(o.customerName)} <span class="badge badge-${STATUS_META[o.status].tone}-soft">${STATUS_META[o.status].label}</span></span>
+        ${movable && ["new", "confirmed", "picking", "packing", "ready_for_rider"].includes(o.status) ? `<select class="input input-sm" data-action="move-slot-order" data-id="${o.id}"><option value="">Move to…</option>${moveOptionsHTML(branch, key)}</select>` : ""}</div>`).join("")
+        : `<div class="qk-muted small">No prototype orders in this slot yet (the booked number includes demo bookings).</div>`}
+      ${orders.length && movable ? `<div class="qk-muted small" style="margin-top:6px">${ic("alert")} The customer is not told when you move their order — call or message them.</div>` : ""}
+    </div>`;
+  }
+  window.adminSlotDayCard = (branch, d, editable) => {
+    const slots = slotsFor(branch.id, d.date);
+    const infos = slots.map((s) => ({ s, inf: slotInfo(branch.id, d.date, s) }));
+    const offered = new Set(slots.map((s) => s.id));
+    const retired = {};
+    State.orders.forEach((o) => {
+      if (o.status === "cancelled" || !o.slotKey) return;
+      const [store, date, slotId] = String(o.slotKey).split("|");
+      if (Number(store) === branch.id && date === d.date && !offered.has(slotId)) (retired[slotId] = retired[slotId] || []).push(o);
+    });
+    const retiredIds = Object.keys(retired);
+    const totalBooked = infos.reduce((n, x) => n + x.inf.booked, 0) + retiredIds.reduce((n, id) => n + retired[id].length, 0);
+    const totalCap = infos.filter((x) => !x.inf.closed).reduce((n, x) => n + x.inf.cap, 0);
+    return `
+  <div class="summary-card slot-day-card">
+    <div class="summary-card-title">${esc(d.label)} <span class="qk-muted small" style="font-weight:600">${d.date} · ${totalBooked}/${totalCap} orders booked</span></div>
+    <div class="slot-admin-rows">
+      ${infos.map(({ s, inf }) => {
+        const orders = ordersIn(inf.key);
+        const open = UI.openSlotKey === inf.key;
+        return `
+        <div class="slot-admin-row">
+          <div class="slot-admin-time"><b>${range(s)}</b>${s.extra ? ` <span class="badge badge-blue-soft">One-off</span>` : ""}</div>
+          <div class="slot-admin-bar">
+            <div class="fill-track"><div class="fill-bar fill-${inf.level}" style="width:${Math.max(inf.fill, 2)}%"></div></div>
+            <span class="small"><b>${inf.booked}</b> / ${inf.cap} booked · ${pct(inf.fill)}</span>
+          </div>
+          <span class="badge slot-badge fill-${inf.level}">${SLOT_LEVEL_LABEL[inf.level]}</span>
+          ${editable ? `
+          <label class="slot-override" title="${s.extra ? "This one-off slot's capacity" : "Capacity for this slot on this day only"}">
+            <input class="input" type="number" min="0" max="${MAX_CAPACITY}" placeholder="${s.capacity}" value="${s.extra ? s.capacity : inf.overridden ? inf.cap : ""}" data-action="set-slot-override" data-key="${inf.key}" />
+            ${s.extra ? `<span class="qk-muted small">Capacity</span>` : inf.overridden ? `<button class="link-btn" data-action="clear-slot-override" data-key="${inf.key}">Reset</button>` : `<span class="qk-muted small">Override</span>`}
+          </label>
+          <button class="btn btn-sm ${inf.closed ? "btn-primary-soft" : "btn-outline"}" data-action="toggle-slot-closed" data-key="${inf.key}">${inf.closed ? "Reopen" : "Close"}</button>
+          ${s.extra ? `<button class="icon-btn icon-btn-danger" data-action="remove-extra-slot" data-store="${branch.id}" data-date="${d.date}" data-id="${s.id}" aria-label="Delete one-off slot">${ic("trash")}</button>` : ""}` : ""}
+          <button class="link-btn" data-action="toggle-slot-orders" data-key="${inf.key}">${open ? "Hide" : "Orders"} (${orders.length})</button>
+        </div>
+        ${open ? ordersListHTML(branch, inf.key, orders) : ""}`;
+      }).join("")}
+      ${retiredIds.map((slotId) => {
+        const key = slotKey(branch.id, d.date, slotId);
+        const w = retiredWindow(slotId);
+        const open = UI.openSlotKey === key;
+        return `
+        <div class="slot-admin-row">
+          <div class="slot-admin-time"><b>${w ? range(w) : "A removed slot"}</b> <span class="badge badge-yellow-soft">No longer offered</span></div>
+          <div class="slot-admin-bar"><span class="small qk-muted">${retired[slotId].length} order${retired[slotId].length === 1 ? "" : "s"} still booked — move ${retired[slotId].length === 1 ? "it" : "them"} or deliver as booked</span></div>
+          <button class="link-btn" data-action="toggle-slot-orders" data-key="${key}">${open ? "Hide" : "Orders"} (${retired[slotId].length})</button>
+        </div>
+        ${open ? ordersListHTML(branch, key, retired[slotId]) : ""}`;
+      }).join("")}
+    </div>
+    ${editable ? `
+    <form class="slot-extra-form" data-action="add-extra-slot" data-store="${branch.id}" data-date="${d.date}">
+      <span class="small qk-muted">Add a one-off slot for ${esc(d.label.toLowerCase())}:</span>
+      <input class="input" type="time" name="start" required /><input class="input" type="time" name="end" required />
+      <input class="input" type="number" min="1" max="${MAX_CAPACITY}" name="capacity" placeholder="Orders" required />
+      <button type="submit" class="btn btn-sm btn-primary-soft">${ic("plus")} Add</button>
+    </form>` : ""}
+  </div>`;
+  };
+
+  /* E. Another date, up to 60 days ahead — e.g. to close a slot on a holiday. */
+  window.adminSlots = () => {
+    const branchIds = scopedBranchIds();
+    const editable = canEditSlots();
+    if (!branchIds || branchIds.length !== 1) {
+      return `${templatesCardHTML()}<div style="margin-top:16px">${storePickerHTML("Manage slots", "Bookings and capacity are per store. Pick a store to see how full each slot is and to override a day's capacity.")}</div>`;
+    }
+    const branch = findBranch(branchIds[0]);
+    const days = slotDays();
+    const max = isoDate(new Date(Date.now() + HORIZON_DAYS * DAY));
+    const other = UI.slotOtherDate && !days.some((d) => d.date === UI.slotOtherDate) ? { date: UI.slotOtherDate, label: dateLabel(UI.slotOtherDate) } : null;
+    return `
+  <div class="admin-toolbar">
+    <div class="qk-muted small">Bookings at <b>${esc(branch.name)}</b>. Customers see the colours, not the numbers; a full slot can't be picked.</div>
+    ${exportButtonsHTML("slots")}
+  </div>
+  <div class="row" style="gap:8px;align-items:center;margin-bottom:10px">
+    <span class="small qk-muted">Open another date:</span>
+    <input class="input input-sm" type="date" min="${todayIso()}" max="${max}" value="${esc(UI.slotOtherDate || "")}" data-action="pick-slot-date" style="max-width:170px" />
+    ${UI.slotOtherDate ? `<button class="link-btn" data-action="clear-slot-date">Close it</button>` : ""}
+  </div>
+  ${slotLegendHTML(true)}
+  ${days.map((d) => adminSlotDayCard(branch, d, editable)).join("")}
+  ${other ? adminSlotDayCard(branch, other, editable) : ""}
+  <div style="margin-top:16px">${templatesCardHTML()}</div>`;
+  };
+
+  /* The handlers, each with the backend's checks and an audit entry. */
+  const isExtraKey = (key) => {
+    const [store, date, slotId] = key.split("|");
+    return (State.slotSettings.extras[`${store}|${date}`] || []).some((e) => e.id === slotId);
+  };
+  const slotName = (key) => {
+    const f = findSlotByKey(key);
+    return f ? `${findBranch(f.storeId).name} · ${f.date} · ${range(f.slot)}` : key;
+  };
+  Object.assign(Actions, {
+    "pick-slot-date"(el) {
+      const v = el.value;
+      const max = isoDate(new Date(Date.now() + HORIZON_DAYS * DAY));
+      if (v && (v < todayIso() || v > max)) { showToast(`Pick a date from today to ${max}`, "danger"); return; }
+      UI.slotOtherDate = v || null; render();
+    },
+    "clear-slot-date"() { UI.slotOtherDate = null; render(); },
+    "set-slot-override"(el) {
+      const key = el.dataset.key;
+      const [store, date, slotId] = key.split("|");
+      const raw = el.value.trim();
+      const cap = Math.floor(Number(raw));
+      if (raw !== "" && (!Number.isFinite(cap) || cap < 0 || cap > MAX_CAPACITY)) { showToast(`Capacity must be 0–${MAX_CAPACITY}`, "danger"); render(); return; }
+      if (isExtraKey(key)) {
+        if (raw === "") { render(); return; } // a one-off slot always has its own capacity
+        const k = `${store}|${date}`;
+        const was = (State.slotSettings.extras[k] || []).find((e) => e.id === slotId).capacity;
+        if (was === cap) return;
+        saveSlotSettings({ extras: { ...State.slotSettings.extras, [k]: State.slotSettings.extras[k].map((e) => (e.id === slotId ? { ...e, capacity: cap } : e)) } });
+        audit("delivery_slot.capacity_changed", key, { slot: slotName(key), capacity: was }, { slot: slotName(key), capacity: cap });
+        showToast("One-off slot capacity updated"); render(); return;
+      }
+      const overrides = { ...State.slotSettings.overrides };
+      const was = overrides[key] ?? null;
+      if (raw === "") delete overrides[key]; else overrides[key] = cap;
+      if ((overrides[key] ?? null) === was) return;
+      saveSlotSettings({ overrides });
+      audit(raw === "" ? "delivery_slot.capacity_reset" : "delivery_slot.capacity_changed", key, { slot: slotName(key), capacity: was }, { slot: slotName(key), capacity: raw === "" ? null : cap });
+      showToast("Capacity for this slot on this day updated"); render();
+    },
+    "clear-slot-override"(el) {
+      const key = el.dataset.key;
+      const overrides = { ...State.slotSettings.overrides };
+      if (!(key in overrides)) return;
+      const was = overrides[key];
+      delete overrides[key]; saveSlotSettings({ overrides });
+      audit("delivery_slot.capacity_reset", key, { slot: slotName(key), capacity: was }, { slot: slotName(key), capacity: null });
+      render();
+    },
+    "toggle-slot-closed"(el) {
+      const key = el.dataset.key;
+      const closed = { ...State.slotSettings.closed };
+      const closing = !closed[key];
+      if (closing) closed[key] = true; else delete closed[key];
+      saveSlotSettings({ closed });
+      audit(closing ? "delivery_slot.closed" : "delivery_slot.reopened", key, { slot: slotName(key), closed: !closing }, { slot: slotName(key), closed: closing });
+      showToast(closing ? "Slot closed for this day — booked orders keep it" : "Slot reopened"); render();
+    },
+    "remove-extra-slot"(el) {
+      const k = `${el.dataset.store}|${el.dataset.date}`;
+      const key = `${k}|${el.dataset.id}`;
+      const info = findSlotByKey(key);
+      const booked = info ? slotInfo(info.storeId, info.date, info.slot).booked : 0;
+      if (booked > 0) { showToast(`${booked} order${booked === 1 ? " is" : "s are"} booked in this slot — move ${booked === 1 ? "it" : "them"} to another slot first`, "danger"); return; }
+      const name = slotName(key);
+      saveSlotSettings({ extras: { ...State.slotSettings.extras, [k]: (State.slotSettings.extras[k] || []).filter((s) => s.id !== el.dataset.id) } });
+      audit("delivery_slot.one_off_removed", key, { slot: name }, null);
+      showToast("One-off slot deleted"); render();
+    },
+    "move-slot-order"(el) {
+      const to = el.value; if (!to) return;
+      const o = State.orders.find((x) => x.id === el.dataset.id); if (!o) return;
+      const target = findSlotByKey(to);
+      if (!target) return;
+      const inf = slotInfo(target.storeId, target.date, target.slot);
+      const problem = inf.closed ? "That slot is closed for the day — reopen it first"
+        : started(target.date, target.slot) ? "That slot has already started"
+        : inf.booked >= inf.cap ? `That slot is full — ${inf.booked} of ${inf.cap} booked` : null;
+      if (problem) { showToast(problem, "danger"); render(); return; }
+      const fromName = o.slotKey ? (findSlotByKey(o.slotKey) ? slotLabelFromKey(o.slotKey) : (() => { const w = retiredWindow(String(o.slotKey).split("|")[2]); return w ? range(w) : "a removed slot"; })()) : "";
+      const from = o.slotKey;
+      State.slotBookings = { ...State.slotBookings, [from]: Math.max((State.slotBookings[from] || 0) - 1, 0), [to]: (State.slotBookings[to] || 0) + 1 };
+      State.orders = State.orders.map((x) => (x.id === o.id ? { ...x, slotKey: to, scheduledSlot: slotLabelFromKey(to) } : x));
+      persist("slotBookings"); persist("orders");
+      audit("order.slot_moved", o.id, { slot: fromName }, { slot: slotLabelFromKey(to) }, { entity: `#${o.id}` });
+      showToast(`#${o.id} moved to ${slotLabelFromKey(to)} — the customer is not told, let them know`); render();
+    },
+  });
+
+  Object.assign(Submits, {
+    "save-slot-templates"(form) {
+      if (!canEditTimes()) return;
+      const fd = new FormData(form);
+      const was = State.slotSettings.templates;
+      const rows = was.map((t, i) => ({ ...t, start: String(fd.get(`start_${i}`) || ""), end: String(fd.get(`end_${i}`) || ""), capacity: Number(fd.get(`cap_${i}`)) }));
+      const daysAhead = Number(fd.get("daysAhead"));
+      const cutoffMins = Number(fd.get("cutoffMins"));
+      const seen = new Set();
+      let problem = null;
+      for (const r of rows) {
+        if (!r.start || !r.end || !endsAfterStart(r.start, r.end)) { problem = 'Each slot must end after it starts ("00:00" = midnight)'; break; }
+        if (!Number.isInteger(r.capacity) || r.capacity < 1 || r.capacity > MAX_CAPACITY) { problem = `Orders per slot must be 1–${MAX_CAPACITY}`; break; }
+        const w = `${r.start}-${r.end}`;
+        if (seen.has(w)) { problem = `${range(r)} is listed twice`; break; }
+        seen.add(w);
+      }
+      if (!problem && !(Number.isInteger(daysAhead) && daysAhead >= 1 && daysAhead <= 14)) problem = "Days ahead must be 1–14";
+      if (!problem && !(Number.isInteger(cutoffMins) && cutoffMins >= 0 && cutoffMins <= 10080)) problem = "The cut-off must be 0–10080 minutes";
+      if (problem) { showToast(problem, "danger"); return; }
+      // A slot time whose hours change is a new window: it gets a new id, and orders booked in the old one stay there.
+      const retiredWindows = { ...(State.slotSettings.retiredWindows || {}) };
+      const wasById = new Map(was.map((t) => [t.id, t]));
+      const templates = rows.map((r) => {
+        const old = wasById.get(r.id);
+        if (old && (old.start !== r.start || old.end !== r.end)) {
+          retiredWindows[old.id] = { start: old.start, end: old.end };
+          const id = `s${Date.now()}${Math.floor(Math.random() * 1000)}`;
+          audit("slot_template.updated", id, { slot: range(old), capacity: old.capacity }, { slot: range(r), capacity: r.capacity });
+          return { ...r, id };
+        }
+        if (old && old.capacity !== r.capacity) audit("slot_template.updated", r.id, { slot: range(old), capacity: old.capacity }, { slot: range(r), capacity: r.capacity });
+        if (!old) audit("slot_template.created", r.id, null, { slot: range(r), capacity: r.capacity });
+        return r;
+      });
+      saveSlotSettings({ templates, retiredWindows, daysAhead, cutoffMins });
+      showToast("Slot times saved"); render();
+    },
+    "add-extra-slot"(form) {
+      const fd = new FormData(form);
+      const start = String(fd.get("start") || ""), end = String(fd.get("end") || ""), capacity = Number(fd.get("capacity"));
+      if (!start || !end || !endsAfterStart(start, end)) { showToast('The slot must end after it starts ("00:00" = midnight)', "danger"); return; }
+      if (!Number.isInteger(capacity) || capacity < 1 || capacity > MAX_CAPACITY) { showToast(`Orders per slot must be 1–${MAX_CAPACITY}`, "danger"); return; }
+      const storeId = Number(form.dataset.store), date = form.dataset.date;
+      if (slotsFor(storeId, date).some((s) => s.start === start && s.end === end)) { showToast(`${range({ start, end })} is already a slot that day`, "danger"); return; }
+      const k = `${storeId}|${date}`;
+      const id = `x${Date.now()}`;
+      saveSlotSettings({ extras: { ...State.slotSettings.extras, [k]: [...(State.slotSettings.extras[k] || []), { id, start, end, capacity }] } });
+      audit("delivery_slot.one_off_added", `${k}|${id}`, null, { slot: slotName(`${k}|${id}`), capacity });
+      showToast("One-off slot added"); render();
+    },
+  });
+  // Adding and removing a row save at once in the prototype: audited then. A removed slot time keeps its hours on
+  // record, so orders still booked in it are listed by them.
+  const baseAdd = Actions["add-slot-template"];
+  Actions["add-slot-template"] = (el) => {
+    if (!canEditTimes()) return;
+    const result = baseAdd(el);
+    const t = State.slotSettings.templates[State.slotSettings.templates.length - 1];
+    if (t) audit("slot_template.created", t.id, null, { slot: range(t), capacity: t.capacity });
+    return result;
+  };
+  const baseRemove = Actions["remove-slot-template"];
+  Actions["remove-slot-template"] = (el) => {
+    if (!canEditTimes()) return;
+    const t = State.slotSettings.templates[Number(el.dataset.idx)];
+    const before = State.slotSettings.templates.length;
+    const result = baseRemove(el);
+    if (t && State.slotSettings.templates.length < before) {
+      saveSlotSettings({ retiredWindows: { ...(State.slotSettings.retiredWindows || {}), [t.id]: { start: t.start, end: t.end } } });
+      audit("slot_template.deleted", t.id, { slot: range(t), capacity: t.capacity }, null);
+    }
+    return result;
+  };
+  // One-off slots start empty: the demo bookings that colour the slot times never fill them.
+  const baseDemo = window.demoBooked;
+  window.demoBooked = (key, defaultCap) => (isExtraKey(key) ? 0 : baseDemo(key, defaultCap));
+
+  /* G. The audit log names them. */
+  Object.assign(AUDIT_ACTION_TEXT, {
+    "slot_template.created": ["Slot times", "added a slot time"],
+    "slot_template.updated": ["Slot times", "changed a slot time"],
+    "slot_template.deleted": ["Slot times", "removed a slot time"],
+    "delivery_slot.capacity_changed": ["Delivery slots", "changed a day's capacity"],
+    "delivery_slot.capacity_reset": ["Delivery slots", "reset a day's capacity"],
+    "delivery_slot.closed": ["Delivery slots", "closed a slot for a day"],
+    "delivery_slot.reopened": ["Delivery slots", "reopened a slot"],
+    "delivery_slot.one_off_added": ["Delivery slots", "added a one-off slot"],
+    "delivery_slot.one_off_removed": ["Delivery slots", "deleted a one-off slot"],
+    "order.slot_moved": ["Orders", "moved an order to another slot"],
+  });
+  Object.assign(AUDIT_ENTITY_LABEL, { slot_template: "Slot times", delivery_slot: "Delivery slots", order: "Orders" });
+  Object.assign(AUDIT_FIELD_LABEL, { slot: "Slot", capacity: "Capacity", closed: "Closed" });
+})();
+
 /* ---------------- What's changed ---------------- */
-WHATS_NEW.unshift({ area: "Stock transfers, Home Screen & Business Settings as built (round 11)", items: [
+WHATS_NEW.unshift({ area: "Stock transfers, Home Screen, Business Settings & Delivery Slots as built (round 11)", items: [
   ["Order cancelled", "Cancelling an order cancels its transfer requests that were not sent yet — Transfers ▸ Done shows them as \"Cancelled · with the order\". One already on the way still arrives: Mark received adds it to the store's stock."],
   ["Mark received", "A transfer for an order covers the short item only while the order is open and the item isn't marked unavailable; otherwise the units simply join the store's stock, and the toast says so."],
   ["Decline with a note", "Stock ▸ Transfers ▸ Decline: a note box next to the reason. The lists show the reason and the note, and who did the last step."],
@@ -796,4 +1169,8 @@ WHATS_NEW.unshift({ area: "Stock transfers, Home Screen & Business Settings as b
   ["Payment methods", "The last payment method that is on can't be switched off — checkout needs one for every order, even one the wallet pays in full."],
   ["Goodwill limits", "Stock Rules ▸ Goodwill limits: the staff credit has its own period, and a new limit per staff member per day (S$200; above it only the Super Admin). Customers ▸ Add wallet credit shows what you can still add today."],
   ["Business Settings in the audit log", "Every Business Settings save — including slot days and peak-hour sections — is one entry in Setup ▸ Audit log with what changed."],
+  ["Slot times", "Delivery Slots ▸ Slot times: only the Super Admin or Business Settings edit can change them; each slot takes 1–9999 orders and ends after it starts (00:00 = midnight). Change a slot's hours and the orders already booked in the old window stay there — the day lists them as \"No longer offered\"."],
+  ["One-off slots", "A one-off slot's capacity box changes its own capacity, it starts empty, and it can't be deleted while orders are booked in it — move them first."],
+  ["Move to…", "Move an order to any open slot of the store that isn't full or started, on any of its days — staff aren't held to the customer's cut-off. Orders edit may move too. The customer is not told: let them know."],
+  ["Another date", "Delivery Slots ▸ \"Open another date\": any day up to 60 days ahead, e.g. to close a slot on a holiday."],
 ] });
