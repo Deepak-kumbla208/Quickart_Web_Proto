@@ -2808,7 +2808,7 @@ function viewOrders() {
 function orderDetailHTML(order) {
   const partner = findPartner(order.deliveryPartnerId);
   const canCancel = [...PREP_STATUSES, "ready_for_rider"].includes(order.status);
-  const canReturn = order.status === "delivered" && !order.returnRequest;
+  const canReturn = order.status === "delivered" && (!order.returnRequest || order.returnRequest.status === "rejected");
   return `
   <div class="summary-card">
     <div class="order-detail-head">
