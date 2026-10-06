@@ -644,7 +644,7 @@ function orderDrawerHTML() {
             <span class="pick-qty">${it.qty}×</span>
             <span class="pick-name">${esc(it.name)}${it.resolution === "swap" ? " <span class='badge badge-blue-soft'>Swapped</span>" : it.resolution ? " <span class='badge badge-gray-soft'>Refunded</span>" : ""}<span class="qk-muted small">${esc(it.unit || "")}${cat ? ` · ${esc(cat)}` : ""}</span></span>
             <span class="qk-num">${money(it.price * it.qty)}</span>
-            ${picking && editable && !picked[idx] && !it.resolution ? `<button class="link-btn link-danger small" data-action="mark-item-unavailable" data-id="${o.id}" data-idx="${idx}">Not available</button>` : ""}
+            ${["picking", "packing"].includes(o.status) && editable && !it.resolution ? `<button class="link-btn link-danger small" data-action="mark-item-unavailable" data-id="${o.id}" data-idx="${idx}">Not available</button>` : ""}
           </div>
           ${shortLineHTML(o, it, idx, editable)}`;
         }).join("")}
