@@ -847,13 +847,13 @@ function adminCustomersV2() {
     search: "Name or mobile…",
     fields: [
 
-      { key: "last", label: "Last order", all: "Any time", options: [["7", "In the last 7 days"], ["30", "In the last 30 days"], ["30plus", "Not in 30+ days"], ["90plus", "Not in 90+ days"]] },
-      { key: "spend", label: "Total spent", options: [["0-50", "Under S$50"], ["50-200", "S$50 – 200"], ["200-500", "S$200 – 500"], ["500-0", "S$500 +"]] },
+      { key: "last", label: "Last order", all: "Any time", options: [["30plus", "Lapsed — not in 30+ days"], ["90plus", "Lapsed — not in 90+ days"]] },
+      { key: "spend", label: "Total spent", options: [["50-0", "S$50 or more"], ["200-0", "S$200 or more"], ["500-0", "S$500 or more"]] },
       { key: "orders", label: "Orders", options: [["1", "1 order"], ["2-5", "2 – 5"], ["6+", "6 +"]] },
       { key: "store", label: "Usual store", options: State.branches.map((b) => [String(b.id), b.name]) },
       { key: "flag", label: "Show only", all: "Everyone", options: [["open", "Has an open order"], ["refund", "Refund / return pending"], ["wallet", "Has wallet balance"], ["blocked", "Blocked"]] },
     ],
-    sort: [["last", "Last order"], ["spent", "Total spent"], ["orders", "Most orders"], ["name", "Name A–Z"]],
+    sort: [["last", "Last order"], ["newest", "Newest customers"], ["spent", "Total spent"], ["orders", "Most orders"], ["wallet", "Wallet balance"], ["name", "Name A–Z"]],
   })}
   <div id="fres-customers">${customersResultsHTML()}</div>`;
 }

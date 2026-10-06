@@ -36,6 +36,11 @@
       for a cash order) and how much (up to what can still be given back); approved, rejected and completed message the
       customer and are in the audit log. The customer side now follows the store: the stage no longer advances by itself,
       nothing credits the wallet on its own, and a rejected return can be asked for again.
+   G. (later the same day) The Customers screen as P10-5 built it (D66, D94): the figures are the backend's — orders = not
+      cancelled, spent = delivered orders only; the filters are the API's (lapsed 30 / 90 days, spend as a minimum) and the
+      sorts gain Newest customers and Wallet balance; staff notes can be deleted by their author only; a goodwill credit and a
+      block take a free-text reason (3–300 characters; a block's is staff-only); a message goes out on any of the channels at
+      once, 3–480 characters, with the day's limits (5 a customer, 50 a staff member); every action is in the audit log.
    C. The card's note changes from "switching to automatic confirms them" to
       what now happens: you are asked; and in Automatic mode it says how
       many are still waiting.
@@ -726,6 +731,195 @@
   Object.assign(AUDIT_FIELD_LABEL, { status: "Stage", note: "Note", refundTo: "Refund to", amount: "Amount", toPayment: "To the original payment", toWallet: "To the wallet" });
 })();
 
+/* ---------------- Later the same day: the Customers screen as P10-5 built it (D66, D94) ---------------- */
+/* In the real admin app (quickkart-api-service docs/08 §51): GET /admin/customers (search, lapsed 30 / 90, minSpent, min / max
+   orders, usual store, open order, refund pending, wallet, blocked; sorts newest / name / lastOrder / spent / orders / wallet;
+   ?format=), …/summary, …/:id; POST …/notes and DELETE …/notes/:noteId (only the author); …/block { reason } and …/unblock;
+   …/goodwill-credit { amount, reason }; …/message { channels, body }. Round 3, 7 and 11 already built the screen; these are
+   the differences. */
+(function round12Customers() {
+  const MESSAGES_PER_CUSTOMER_DAY = 5;
+  const MESSAGES_PER_STAFF_DAY = 50;
+  const actorRef = () => ({ actorType: "user", actorId: (currentUser() || {}).id });
+  const meName = () => (currentUser() || {}).name || "Admin";
+  const customerAudit = (action, key, before, after) =>
+    addAuditEvent({ action, entity: "customer", entityId: key, ...actorRef(), before, after, names: { entity: key } });
+  const isToday = (at) => new Date(at).toDateString() === new Date().toDateString();
+
+  Object.assign(AUDIT_ACTION_TEXT, {
+    "customer.note_added": ["Customers", "added a staff note for"],
+    "customer.note_deleted": ["Customers", "deleted a staff note for"],
+    "customer.blocked": ["Customers", "blocked"],
+    "customer.unblocked": ["Customers", "unblocked"],
+    "customer.goodwill_credited": ["Customers", "gave a goodwill credit to"],
+    "customer.message_sent": ["Customers", "sent a message to"],
+  });
+  Object.assign(AUDIT_ENTITY_LABEL, { customer: "Customers" });
+  Object.assign(AUDIT_FIELD_LABEL, { reason: "Reason", channels: "Sent by", amount: "Amount" });
+
+  /* A. The figures are the backend's: orders = not cancelled; spent = the delivered orders' total; the average is over those;
+        the last order is over the orders that count. (It used to add up every order that was not cancelled, delivered or not.) */
+  const recordsBefore = customerRecords;
+  window.customerRecords = () =>
+    recordsBefore().map((c) => {
+      const kept = c.orders.filter((o) => o.status !== "cancelled");
+      const delivered = c.orders.filter((o) => o.status === "delivered");
+      const spent = round2(delivered.reduce((s, o) => s + o.total, 0));
+      return {
+        ...c,
+        orderCount: kept.length,
+        totalSpent: spent,
+        aov: delivered.length ? spent / delivered.length : 0,
+        lastOrderAt: kept.length ? Math.max(...kept.map((o) => o.createdAt)) : c.lastOrderAt,
+      };
+    });
+  // The sorts the backend adds: the newest customers, and the biggest wallet.
+  const filteredBefore = customersFiltered;
+  window.customersFiltered = (all) => {
+    const list = filteredBefore(all);
+    const sort = F("customers").sort;
+    if (sort === "newest") return list.slice().sort((a, b) => b.firstOrderAt - a.firstOrderAt);
+    if (sort === "wallet") return list.slice().sort((a, b) => b.walletBalance - a.walletBalance);
+    return list;
+  };
+  const screenBefore = customerDetailHTML;
+  window.customerDetailHTML = (key) => {
+    let html = screenBefore(key);
+    html = html.replace("Excludes cancelled", "Delivered orders only");
+    // Only the person who wrote a note can delete it.
+    const me = meName();
+    (customerMeta(key).notes || []).forEach((n) => {
+      if (n.by !== me) return;
+      const line = `<div class="qk-muted small">${esc(n.by)} · ${fmtDateTime(n.at)}</div>`;
+      html = html.replace(
+        line,
+        `<div class="qk-muted small">${esc(n.by)} · ${fmtDateTime(n.at)} · <button type="button" class="link-btn link-danger small" data-action="delete-customer-note" data-key="${esc(key)}" data-at="${n.at}">Delete</button></div>`,
+      );
+    });
+    return html.replace("Notes are only seen by staff.", "Only staff see notes, and only the person who wrote one can delete it.");
+  };
+  Actions["delete-customer-note"] = (el) => {
+    const key = el.dataset.key;
+    const at = Number(el.dataset.at);
+    const note = customerMeta(key).notes.find((n) => n.at === at && n.by === meName());
+    if (!note) { showToast("Only the person who wrote a note can delete it", "danger"); return; }
+    saveCustomerMeta(key, { notes: customerMeta(key).notes.filter((n) => n !== note) });
+    customerAudit("customer.note_deleted", key, null, null);
+    showToast("Note deleted");
+    render();
+  };
+  const noteBefore = Submits["add-customer-note"];
+  Submits["add-customer-note"] = (form) => {
+    const key = form.dataset.key;
+    const before = customerMeta(key).notes.length;
+    noteBefore(form);
+    if (customerMeta(key).notes.length > before) customerAudit("customer.note_added", key, null, null);
+  };
+
+  /* B. The dialogs. A reason is free text (3–300 characters) for a credit and for a block — it used to be a pick-list; a block's
+        reason is for staff only. A message goes out on any of the three channels at once, with the day's limits. */
+  const creditedToday = (name) =>
+    customerRecords().reduce((s, c) => s + customerMeta(c.key).credits.filter((cr) => cr.by === name && isToday(cr.at)).reduce((t, cr) => t + cr.amount, 0), 0);
+  const sentToday = (key) => customerMeta(key).messages.filter((m) => isToday(m.at)).length;
+  const sentByMeToday = () => customerRecords().reduce((n, c) => n + customerMeta(c.key).messages.filter((m) => m.by === meName() && isToday(m.at)).length, 0);
+  const periodUsed = (key) => {
+    const g = goodwillSettings();
+    return customerMeta(key).credits.filter((cr) => cr.at >= Date.now() - g.staffDays * 86400000).reduce((s, cr) => s + cr.amount, 0);
+  };
+  const customerLeft = (key) => Math.max(0, round2(goodwillSettings().staffCap - periodUsed(key)));
+  const dailyLeft = () => {
+    const me = currentUser();
+    if (!me || isSuperAdmin(me)) return Infinity;
+    return Math.max(0, round2(goodwillSettings().staffPerUserDay - creditedToday(me.name)));
+  };
+  const reasonOk = (v) => String(v || "").trim().length >= 3 && String(v || "").trim().length <= 300;
+
+  window.customerModal = () => {
+    const m = UI.modal;
+    const c = customerRecords().find((x) => x.key === m.key);
+    if (!c) return "";
+    const g = goodwillSettings();
+    const left = customerLeft(c.key);
+    const today = dailyLeft();
+    const max = Math.min(left, today);
+    const title = { credit: "Add wallet credit", message: "Send a message", block: "Block customer", unblock: "Unblock customer" }[m.kind];
+    const channelOn = (ch) => !(State.notificationConfig[ch] && !State.notificationConfig[ch].enabled);
+    const body =
+      m.kind === "credit"
+        ? `
+    <div class="qk-muted small" style="margin-bottom:10px">Goodwill credit goes straight into ${esc(c.name)}'s wallet and shows in their wallet history with who gave it and why. This customer can be given ${money(g.staffCap)} in ${g.staffDays} days — <b>${money(left)}</b> left; <b>nobody can go above it, not even the Super Admin</b>. It is counted apart from the bonus on unavailable items.</div>
+    ${today === Infinity ? "" : `<div class="qk-muted small" style="margin:-4px 0 10px">You can add <b>${money(today)}</b> more today (${money(g.staffPerUserDay)} a day per staff member — above that only the Super Admin).</div>`}
+    <label class="field"><span class="field-label">Amount (S$) *</span><input class="input" type="number" name="amount" min="0.01" max="${max}" step="0.01" required ${max > 0 ? "" : "disabled"} /></label>
+    <label class="field"><span class="field-label">Reason * (3–300 characters)</span><input class="input" name="reason" minlength="3" maxlength="300" required list="gwReasons" placeholder="e.g. Order QK00012 arrived cold" /></label>
+    <datalist id="gwReasons"><option value="Late delivery"></option><option value="Damaged item"></option><option value="Wrong item"></option><option value="Missing item"></option><option value="Service recovery"></option></datalist>`
+        : m.kind === "message"
+          ? `
+    <div class="field-label">Send by * <span class="qk-muted small">(any of them)</span></div>
+    <div class="stock-toggle-lg" style="gap:14px;margin-bottom:8px">${["Push", "SMS", "Email"].map((ch) => `<label><input type="checkbox" name="channels" value="${ch}" ${channelOn(ch.toLowerCase()) ? "" : "disabled"} /> ${ch}</label>`).join(" ")}</div>
+    <label class="field"><span class="field-label">Message * (3–480 characters)</span><textarea class="input" name="text" rows="3" minlength="3" maxlength="480" required placeholder="e.g. Sorry, your order is running 15 minutes late."></textarea></label>
+    <div class="qk-muted small">One-off service messages, in the shop's own "Message from the store" wording. A way ${esc(c.name)} cannot be reached on (no email on file, no device) is skipped. Limits per day: <b>${MESSAGES_PER_CUSTOMER_DAY - sentToday(c.key)}</b> more to ${esc(c.name)}, <b>${MESSAGES_PER_STAFF_DAY - sentByMeToday()}</b> more from you.</div>`
+          : m.kind === "block"
+            ? `
+    <div class="notice notice-warn" style="margin-bottom:10px">${ic("alert")}<span>${esc(c.name)} will still be able to log in, browse and follow their open orders, but cannot place a new one. Open orders are not cancelled.</span></div>
+    <label class="field"><span class="field-label">Reason * (3–300 characters — only staff see it)</span><textarea class="input" name="reason" rows="2" minlength="3" maxlength="300" required placeholder="e.g. Three refused cash deliveries"></textarea></label>
+    <div class="qk-muted small">The customer is told to contact the shop — never the reason.</div>`
+            : `<div class="qk-muted small">${esc(c.name)} will be able to place orders again; the staff reason is cleared.</div>`;
+    return `
+  <div class="overlay" data-action="close-modal-backdrop">
+    <div class="dialog dialog-static" role="dialog" aria-modal="true" data-action="noop">
+      <div class="dialog-head"><span>${title} · ${esc(c.name)}</span><button class="dialog-close" data-action="close-modal">${ic("close")}</button></div>
+      <form class="dialog-body" data-action="save-customer-modal">
+        ${body}
+        ${m.error ? `<div class="field-error">${esc(m.error)}</div>` : ""}
+        <div class="form-actions"><button type="button" class="btn btn-outline" data-action="close-modal">Cancel</button><button type="submit" class="btn ${m.kind === "block" ? "btn-outline-danger" : "btn-primary"}" ${m.kind === "credit" && !(max > 0) ? "disabled" : ""}>${title}</button></div>
+      </form>
+    </div>
+  </div>`;
+  };
+
+  Submits["save-customer-modal"] = (form) => {
+    const m = UI.modal;
+    if (!m) return;
+    const fd = new FormData(form);
+    const by = meName();
+    const fail = (message) => { UI.modal = { ...m, error: message }; render(); };
+    if (m.kind === "credit") {
+      const amount = round2(Number(fd.get("amount")));
+      const reason = String(fd.get("reason") || "").trim();
+      if (!(amount > 0)) return fail("Enter an amount above 0");
+      if (!reasonOk(reason)) return fail("Give a reason (3–300 characters)");
+      if (amount > customerLeft(m.key) + 0.001) return fail(`This customer can be given ${money(customerLeft(m.key))} more right now — nobody can go above their limit`);
+      if (amount > dailyLeft() + 0.001) return fail(`You can add ${money(dailyLeft())} more today — above ${money(goodwillSettings().staffPerUserDay)} a day only the Super Admin can add credit`);
+      saveCustomerMeta(m.key, { credits: [...customerMeta(m.key).credits, { at: Date.now(), by, amount, reason }] });
+      if (m.key === State.demoCustomerName) { State.wallet = round2(State.wallet + amount); persist("wallet"); }
+      customerAudit("customer.goodwill_credited", m.key, null, { amount: money(amount), reason });
+      showToast(`${money(amount)} added to ${m.key}'s wallet`);
+    } else if (m.kind === "message") {
+      const channels = fd.getAll("channels").map(String);
+      const text = String(fd.get("text") || "").trim();
+      if (!channels.length) return fail("Choose at least one way to reach the customer");
+      if (text.length < 3 || text.length > 480) return fail("Write a message (3–480 characters)");
+      if (sentToday(m.key) >= MESSAGES_PER_CUSTOMER_DAY) return fail(`${m.key} has already been sent ${MESSAGES_PER_CUSTOMER_DAY} messages today — try again tomorrow`);
+      if (sentByMeToday() >= MESSAGES_PER_STAFF_DAY) return fail(`You have already sent ${MESSAGES_PER_STAFF_DAY} messages today — try again tomorrow`);
+      saveCustomerMeta(m.key, { messages: [{ at: Date.now(), by, channel: channels.join(" + "), text }, ...customerMeta(m.key).messages] });
+      customerAudit("customer.message_sent", m.key, null, { channels: channels.join(", ") });
+      showToast(`${channels.join(" + ")} message sent to ${m.key} (prototype — nothing is really sent)`);
+    } else if (m.kind === "block") {
+      const reason = String(fd.get("reason") || "").trim();
+      if (!reasonOk(reason)) return fail("Give a reason (3–300 characters)");
+      saveCustomerMeta(m.key, { blocked: { at: Date.now(), by, reason } });
+      customerAudit("customer.blocked", m.key, null, { reason });
+      showToast(`${m.key} blocked — they cannot place orders`, "danger");
+    } else {
+      saveCustomerMeta(m.key, { blocked: null });
+      customerAudit("customer.unblocked", m.key, null, null);
+      showToast(`${m.key} unblocked`);
+    }
+    UI.modal = null;
+    render();
+  };
+})();
+
 /* ---------------- What's changed ---------------- */
 WHATS_NEW.unshift({ area: "Round 12 — confirmation switch, unavailable items, assigning riders", items: [
   ["Manual → Automatic asks", "Settings ▸ Delivery & Payments ▸ Order confirmation: switching from Manual to Automatic while orders wait for Accept now asks — \"Accept N orders and switch\" or \"Switch, leave them waiting\" (it used to accept them silently). With none waiting it saves straight away."],
@@ -737,4 +931,6 @@ WHATS_NEW.unshift({ area: "Round 12 — confirmation switch, unavailable items, 
   ["Returns queue (P10-4)", "Orders has a new Returns view: open and per-stage counts, a search, and each request with its reason, order and customer. Buttons follow the stage — Start review, Approve, Start processing, Complete…, Reject… — forward only, and a return is completed only after it was approved."],
   ["Reject and Complete", "Reject needs a reason, which the customer is told. Complete on a refund asks where the money goes — Wallet, or the original payment first (any rest to the wallet; not for a cash order) — and how much, up to what can still be given back; a replacement completes with no money. The order becomes Returned."],
   ["The customer's side", "A return no longer moves or refunds by itself: the stage is what the store set. Approved, rejected and completed send a message (reword them under Message templates) and are in the audit log; a rejected return can be asked for again."],
+  ["Customers (P10-5)", "Total spent and the average order now count delivered orders only (orders = not cancelled). Filters: Last order is now Lapsed — not in 30+ / 90+ days, and Total spent is a minimum; sorts add Newest customers and Wallet balance."],
+  ["Notes, credit, block, message", "A note can be deleted only by whoever wrote it. A wallet credit and a block take a free-text reason (3–300 characters) — a block's is for staff only and the customer is never shown it. A message can go by Push, SMS and Email at once (3–480 characters) with the day's limits: 5 to a customer and 50 from a staff member. Everything is in the audit log."],
 ] });
