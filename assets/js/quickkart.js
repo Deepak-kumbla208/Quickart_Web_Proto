@@ -143,6 +143,8 @@ function comboEligible(combo) { return combo.itemIds.every((id) => (State.cart[i
 function comboIndividualTotal(combo) {
   return combo.itemIds.reduce((s, id) => { const it = findItem(id); return s + (it ? it.price : 0); }, 0);
 }
+// A combo's limit (type + quantity) as the form sent it. Round 13 supplies it; nothing before it had one.
+function comboCapFields(fd) { return {}; }
 function comboSavings(combo) { return Math.max(comboIndividualTotal(combo) - combo.bundlePrice, 0); }
 function activeCombos() { return allCombos().filter(comboEligible); }
 function activeComboSavings() { return activeCombos().reduce((s, c) => s + comboSavings(c), 0); }
@@ -2277,6 +2279,35 @@ function comboNudgeHTML() {
   }).join("");
 }
 
+// One cart line. `note` is an extra line under the price (Round 13: "2 of 3 are in the combo").
+function cartLineHTML(i, note = "") {
+  const bogo = isBogo(i.id);
+  const payQty = bogo ? Math.ceil(i.qty / 2) : i.qty;
+  return `
+  <div class="cart-line">
+    <img src="${i.image}" alt="" class="cart-line-img" />
+    <div class="cart-line-info">
+      <div class="cart-line-name">${esc(cartLineName(i))}${bogo ? `<span class="badge badge-green" style="margin-left:6px">BOGO</span>` : ""}</div>
+      <div class="cart-line-unit qk-muted">${esc(i.unit)}</div>
+      <div class="cart-line-price-row qk-num">
+        <span class="cart-line-price-now">${money(i.price)}</span>
+        ${i.mrp > i.price ? `<span class="cart-line-price-mrp">${money(i.mrp)}</span>` : ""}
+      </div>
+      ${bogo ? `<div class="qk-muted small">Buy 1 Get 1 Free — pay for ${payQty}</div>` : ""}
+      ${note}
+    </div>
+    <div class="qty-stepper">
+      <button data-action="dec-cart" data-id="${i.id}">${ic("minus")}</button>
+      <span>${i.qty}</span>
+      <button data-action="inc-cart" data-id="${i.id}">${ic("plus")}</button>
+    </div>
+  </div>`;
+}
+// The cart's lines, in the order they are shown. Round 13 groups the lines of a combo into bundle cards.
+function cartLinesHTML(t) {
+  return t.cartItems.map((i) => cartLineHTML(i)).join("");
+}
+
 function viewCart() {
   const t = cartTotals();
   const addr = getSelectedAddress();
@@ -2297,28 +2328,7 @@ function viewCart() {
     <div class="cart-items-col">
       <div class="items-strip-title" style="margin-bottom:2px">${t.cartCount} item${t.cartCount > 1 ? "s" : ""} in your cart</div>
       <div class="cart-lines">
-        ${t.cartItems.map((i) => {
-          const bogo = isBogo(i.id);
-          const payQty = bogo ? Math.ceil(i.qty / 2) : i.qty;
-          return `
-          <div class="cart-line">
-            <img src="${i.image}" alt="" class="cart-line-img" />
-            <div class="cart-line-info">
-              <div class="cart-line-name">${esc(cartLineName(i))}${bogo ? `<span class="badge badge-green" style="margin-left:6px">BOGO</span>` : ""}</div>
-              <div class="cart-line-unit qk-muted">${esc(i.unit)}</div>
-              <div class="cart-line-price-row qk-num">
-                <span class="cart-line-price-now">${money(i.price)}</span>
-                ${i.mrp > i.price ? `<span class="cart-line-price-mrp">${money(i.mrp)}</span>` : ""}
-              </div>
-              ${bogo ? `<div class="qk-muted small">Buy 1 Get 1 Free — pay for ${payQty}</div>` : ""}
-            </div>
-            <div class="qty-stepper">
-              <button data-action="dec-cart" data-id="${i.id}">${ic("minus")}</button>
-              <span>${i.qty}</span>
-              <button data-action="inc-cart" data-id="${i.id}">${ic("plus")}</button>
-            </div>
-          </div>`;
-        }).join("")}
+        ${cartLinesHTML(t)}
       </div>
       ${comboNudgeHTML()}
       <button class="btn btn-outline" data-action="go" data-route="shop">${ic("chevronLeft")} Add more items</button>
@@ -5936,7 +5946,7 @@ const Submits = {
     if (!title) { UI.modal.error = "Title is required"; render(); return; }
     if (!itemIds.length) { UI.modal.error = "Pick at least one product for this bundle"; render(); return; }
     if (bundlePrice <= 0) { UI.modal.error = "Bundle price must be greater than S$0"; render(); return; }
-    const data = { title, subtitle: (fd.get("subtitle") || "").trim(), image: (fd.get("image") || "").trim(), bundlePrice, itemIds };
+    const data = { title, subtitle: (fd.get("subtitle") || "").trim(), image: (fd.get("image") || "").trim(), bundlePrice, itemIds, ...comboCapFields(fd) };
     let combos;
     if (comboId === "new") {
       const existing = section.combos || [];

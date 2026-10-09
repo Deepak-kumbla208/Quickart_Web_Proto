@@ -571,3 +571,12 @@ button.cust-row:hover { border-color: #C4D5E4; box-shadow: var(--shadow-xs); }
 .tr-decline .input { width: auto; }
 .tr-empty { padding: 6px 0; }
 @media (max-width: 800px) { .tr-row { grid-template-columns: 1fr 1fr; } .tr-act { grid-column: 1 / -1; justify-content: flex-start; } }
+
+/* Round 13 — a combo's lines as one bundle card in the cart (D100) */
+.combo-bundle { background: var(--tint-success); border-bottom: 1px solid var(--line); border-left: 4px solid var(--success); }
+.combo-bundle:last-child { border-bottom: none; }
+.combo-bundle-head { display: flex; align-items: center; justify-content: space-between; gap: 8px 12px; flex-wrap: wrap; padding: 12px 16px 2px; }
+.combo-bundle-title { display: flex; align-items: center; gap: 8px; font-size: 15px; }
+.combo-bundle-save { font-size: 13px; font-weight: 700; color: var(--success-ink); }
+.combo-bundle .cart-line { background: transparent; }
+.combo-bundle-foot { padding: 0 16px 12px; }

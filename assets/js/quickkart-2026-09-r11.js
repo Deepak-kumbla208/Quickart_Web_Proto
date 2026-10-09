@@ -368,7 +368,7 @@
 
   const SECTION_FIELDS = ["enabled", "title", "subtitle", "image", "poolKey", "itemIds"];
   const TILE_FIELDS = ["title", "subtitle", "image", "icon", "catId", "tag"];
-  const COMBO_FIELDS = ["title", "subtitle", "image", "bundlePrice", "itemIds"];
+  const COMBO_FIELDS = ["title", "subtitle", "image", "bundlePrice", "itemIds", "capType", "capQty"];
   const snap = () => JSON.parse(JSON.stringify({ sections: State.homeSections, site: State.siteCustomization || {} }));
   const labelOf = (s) => homeSectionLabel(s);
   // An uploaded picture is a long data: address — the log says so instead of storing it again.
