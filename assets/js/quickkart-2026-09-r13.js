@@ -3,12 +3,10 @@
    cart and a limit on each combo, as the backend built them (P9-5b,
    BE-ADM-025, D100) on quickkart-api-service. Every change of the day is here.
 
-   A. The CART shows a combo as ONE BUNDLE CARD: the lines of its products
-      sit together under the combo's name, a "Combo" badge and "You save
-      S$x" (× N when more than one full set). Each product keeps its own
-      − / +. A line of 3 with only 2 inside the bundle says "2 of 3 are in
-      the combo". Remove a product and the card dissolves back into plain
-      lines (the combo no longer applies). (API: lines[].comboId, comboUnits.)
+   A. The CART shows a combo as ONE COMPACT ROW — name, "Combo" badge, bundle price, "You save S$x", a "View items" dropdown
+      (the products and how many, view only) and a − / + for the WHOLE bundle (× N). Units beyond the full sets are
+      ordinary lines underneath, with their own − / +; add the missing products and they join a bundle (× 2). Remove the
+      last bundle and the row goes. (API: lines[].comboId, comboUnits.)
    B. EACH FULL SET earns the saving (one of every product), up to the
       combo's limit — it used to be one combo per cart however many the
       customer held. A product counts for one combo only; the combo with the
@@ -25,7 +23,7 @@
       when there is a limit. The combo's row shows the limit and how many
       bundles have been earned. A change is in the audit log.
    D. THE CART SAYS WHEN A LIMIT CUT OR STOPPED A COMBO ("Snack Time Combo:
-      limit 1 per day") and the bundle card shows "Limit … · N more allowed".
+      limit 1 per day") and the combo row shows "Limit … · N more allowed".
       A limit never blocks the order: if nothing is left the order is still
       placed, without the combo discount. (API: appliedCombos[].cap, capped,
       comboNotices[] — NOT an issue.)
@@ -117,6 +115,7 @@
     const applied = [];
     const notices = [];
     const units = {};
+    const consumed = {};
     candidates.forEach(({ combo, perSet }) => {
       const full = Math.min(...combo.itemIds.map((id) => left[id] || 0));
       if (full < 1) return;
@@ -126,6 +125,7 @@
       if (earned < 1) return;
       combo.itemIds.forEach((id) => {
         left[id] -= earned;
+        consumed[id] = (consumed[id] || 0) + earned;
         if (!units[id]) units[id] = { comboId: combo.id, units: earned };
       });
       applied.push({
@@ -137,40 +137,87 @@
         cap: limit === null ? null : { remaining: Math.max(0, limit - earned) },
       });
     });
-    return { applied, notices, units };
+    return { applied, notices, units, consumed };
   };
   // The bill, the order and the toast read these two — now per full set.
   window.activeCombos = () => comboAllocation().applied.map((a) => ({ ...a.combo, sets: a.sets }));
   window.activeComboSavings = () => comboAllocation().applied.reduce((s, a) => s + a.discount, 0);
 
   // ---------------------------------------------------------------- A. the cart
+  // A combo is ONE compact row: its name, the bundle price, "You save", a dropdown for its items and a − / + for the
+  // WHOLE bundle (× N). Units beyond the full sets are ordinary lines underneath; they join a bundle when the missing
+  // products are added too.
+  UI.comboOpen = UI.comboOpen || {};
   window.cartLinesHTML = function cartLinesHTMLR13(t) {
-    const { applied, units } = comboAllocation();
-    const inCombo = (i) => units[i.id];
+    const { applied, consumed } = comboAllocation();
     const cards = applied
       .map((a) => {
-        const members = t.cartItems.filter((i) => units[i.id] && units[i.id].comboId === a.combo.id);
+        const members = a.combo.itemIds.map((id) => t.cartItems.find((i) => i.id === id)).filter(Boolean);
         if (!members.length) return "";
+        const id = esc(a.combo.id);
+        const open = !!UI.comboOpen[a.combo.id];
+        const bundle = cents(a.combo.bundlePrice * a.sets);
+        const apart = cents(comboIndividualTotal(a.combo) * a.sets);
+        const full = a.cap && a.cap.remaining < 1;
         const foot = a.cap
           ? `Limit: ${esc(limitText(a.combo))} · ${a.cap.remaining > 0 ? `${a.cap.remaining} more allowed` : "limit reached"}`
           : "";
         return `
-        <div class="combo-bundle" data-combo-bundle="${esc(a.combo.id)}">
-          <div class="combo-bundle-head">
-            <div class="combo-bundle-title">${ic("sparkle")}<b>${esc(a.combo.title)}</b><span class="badge badge-green">Combo</span>${a.sets > 1 ? `<span class="badge badge-green-soft">× ${a.sets}</span>` : ""}</div>
-            <div class="combo-bundle-save">You save ${money(a.discount)}</div>
+        <div class="combo-bundle" data-combo-bundle="${id}">
+          <div class="cart-line combo-bundle-row">
+            <img src="${esc(a.combo.image || members[0].image)}" alt="" class="cart-line-img" />
+            <div class="cart-line-info">
+              <div class="cart-line-name">${esc(a.combo.title)}<span class="badge badge-green" style="margin-left:6px">Combo</span></div>
+              <div class="cart-line-unit qk-muted">${members.length} items${a.sets > 1 ? ` · × ${a.sets}` : ""}</div>
+              <div class="cart-line-price-row qk-num">
+                <span class="cart-line-price-now">${money(bundle)}</span>
+                <span class="cart-line-price-mrp">${money(apart)}</span>
+              </div>
+              <div class="combo-bundle-save">You save ${money(a.discount)}</div>
+              <button type="button" class="link-btn combo-bundle-toggle" data-action="toggle-combo-items" data-id="${id}" aria-expanded="${open}">${open ? "Hide items" : "View items"} <span class="combo-chevron ${open ? "is-open" : ""}">${ic("chevronDown")}</span></button>
+            </div>
+            <div class="qty-stepper">
+              <button data-action="dec-combo" data-id="${id}" aria-label="Remove one bundle">${ic("minus")}</button>
+              <span>${a.sets}</span>
+              <button data-action="inc-combo" data-id="${id}" aria-label="Add one bundle" ${full ? 'disabled title="Limit reached"' : ""}>${ic("plus")}</button>
+            </div>
           </div>
-          ${members
-            .map((i) => {
-              const inside = units[i.id].units;
-              return cartLineHTML(i, inside < i.qty ? `<div class="qk-muted small">${inside} of ${i.qty} are in the combo</div>` : "");
-            })
-            .join("")}
+          ${open ? `<ul class="combo-bundle-items">${members.map((i) => `<li><span>${a.sets} × ${esc(cartLineName(i))}</span><span class="qk-muted">${esc(i.unit)}</span></li>`).join("")}</ul>` : ""}
           ${foot ? `<div class="combo-bundle-foot qk-muted small">${foot}</div>` : ""}
         </div>`;
       })
       .join("");
-    return cards + t.cartItems.filter((i) => !inCombo(i)).map((i) => cartLineHTML(i)).join("");
+    // What is left over after the full sets: ordinary lines, with their own − / +.
+    const loose = t.cartItems
+      .map((i) => ({ ...i, qty: i.qty - (consumed[i.id] || 0) }))
+      .filter((i) => i.qty > 0)
+      .map((i) => cartLineHTML(i))
+      .join("");
+    return cards + loose;
+  };
+
+  Actions["toggle-combo-items"] = (el) => {
+    UI.comboOpen[el.dataset.id] = !UI.comboOpen[el.dataset.id];
+    render();
+  };
+  // − / + on the row change the WHOLE bundle: one of every product.
+  const comboOf = (el) => allCombos().find((c) => c.id === el.dataset.id);
+  Actions["inc-combo"] = (el) => {
+    const combo = comboOf(el);
+    if (!combo) return;
+    combo.itemIds.forEach((id) => { State.cart[id] = (State.cart[id] || 0) + 1; });
+    persist("cart");
+    render();
+  };
+  Actions["dec-combo"] = (el) => {
+    const combo = comboOf(el);
+    if (!combo) return;
+    combo.itemIds.forEach((id) => {
+      const q = (State.cart[id] || 0) - 1;
+      if (q <= 0) delete State.cart[id]; else State.cart[id] = q;
+    });
+    persist("cart");
+    render();
   };
 
   // Under the lines: a limit that cut or stopped a combo (never a reason the order cannot be placed), then the
@@ -289,9 +336,9 @@
 
 /* ---------------- What's changed ---------------- */
 WHATS_NEW.unshift({ area: "Round 13 — combo bundles and combo limits", items: [
-  ["Bundle card in the cart", "The products of a combo sit together in one card — the combo's name, a Combo badge and \"You save S$x\" (× N for more than one full set). Each product keeps its own − / +. A product with only some of its units inside says \"2 of 3 are in the combo\". Take a product out and the card falls apart back into plain lines. (API: lines[].comboId and comboUnits.)"],
+  ["A combo is one row in the cart", "The combo's name, a Combo badge, the bundle price and \"You save S$x\", with a View items dropdown (the products, view only) and a − / + that add or remove the WHOLE bundle (× N). Units beyond the full sets are ordinary lines underneath with their own − / +; add the missing products and they join the combo (× 2). (API: lines[].comboId and comboUnits.)"],
   ["Each full set earns the saving", "One of every product is a bundle. Two bundles save twice; before, one combo per cart however many you held. A product counts for one combo only — the combo that saves more takes it first."],
   ["A limit on each combo (admin)", "Marketing ▸ Home Screen ▸ Deals & Combos ▸ Add / Edit combo: Limit (No limit · Per order · Per customer, per day · One time per customer · Total across all customers) and a Limit quantity — required exactly when there is a limit, a whole number from 1 to 1 000 000. The combo's row shows the limit and how many bundles have been earned. A change is in the audit log."],
-  ["What the customer sees", "The bundle card says \"Limit: 1 per day · limit reached\" and a message under the lines says what was cut (\"Snack Time Combo: today's limit of 1 is used\"). A limit never blocks the order: it is placed without the combo discount on the extra bundles. (API: appliedCombos[].cap and capped, comboNotices[] — not an issue.)"],
+  ["What the customer sees", "The combo row says \"Limit: 1 per day · limit reached\" and a message under the lines says what was cut (\"Snack Time Combo: today's limit of 1 is used\"). A limit never blocks the order: it is placed without the combo discount on the extra bundles. (API: appliedCombos[].cap and capped, comboNotices[] — not an issue.)"],
   ["Cancelling gives it back", "A cancelled order's bundles count again for the day, for the customer and for a total limit; a delivered order's return does not. An order shows \"Snack Time Combo × 2\" when it earned two."],
 ] });
