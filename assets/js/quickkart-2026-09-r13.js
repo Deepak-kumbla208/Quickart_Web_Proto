@@ -31,7 +31,7 @@
       does not). The order shows "Snack Time Combo × 2" when it earned two.
    F. (later the same day) THE HOME SCREEN'S COMBO CARD: once the combo is in the cart the "Add combo" tick becomes the product
       cards' − / + for the WHOLE bundle; the + keeps adding bundles until the limit is reached, then it is greyed out and the
-      card says "Limit: … · limit reached". A combo not in the cart keeps "Add combo".
+      card says "Limit: … · limit reached". A combo not in the cart keeps "Add combo" — greyed out, with the limit said, when this customer has already used its limit (the real app knows from GET /customer/home: cap.remaining).
    ==================================================================== */
 
 (function round13ComboBundles() {
@@ -206,7 +206,17 @@
   window.comboCardHTML = function comboCardHTMLR13(combo) {
     const html = comboCardBefore(combo);
     const a = comboAllocation().applied.find((x) => x.combo.id === combo.id);
-    if (!a) return html;
+    if (!a) {
+      // Not in the cart (or not earning anything), and the limit is already used: say so up front, as the real app can
+      // (GET /customer/home gives every combo cap.remaining for the asker). "Add combo" is greyed out.
+      if (allowanceOf(combo) !== 0) return html;
+      const disabled = html.replace(
+        /<button class="btn [^"]*" data-action="add-combo"[^>]*>/,
+        '<button class="btn btn-outline btn-sm" data-action="add-combo" data-id="' + esc(combo.id) + '" disabled title="Limit reached">',
+      );
+      const note = `<div class="combo-card-limit qk-muted small">Limit: ${esc(limitText(combo))} · limit reached</div>`;
+      return disabled.replace(/\s*<\/div>\s*$/, `${note}</div>`);
+    }
     const full = a.cap && a.cap.remaining < 1;
     const id = esc(combo.id);
     const stepper = `
@@ -364,6 +374,6 @@ WHATS_NEW.unshift({ area: "Round 13 — combo bundles and combo limits", items: 
   ["Each full set earns the saving", "One of every product is a bundle. Two bundles save twice; before, one combo per cart however many you held. A product counts for one combo only — the combo that saves more takes it first."],
   ["A limit on each combo (admin)", "Marketing ▸ Home Screen ▸ Deals & Combos ▸ Add / Edit combo: Limit (No limit · Per order · Per customer, per day · One time per customer · Total across all customers) and a Limit quantity — required exactly when there is a limit, a whole number from 1 to 1 000 000. The combo's row shows the limit and how many bundles have been earned. A change is in the audit log."],
   ["What the customer sees", "The combo row says \"Limit: 1 per day · limit reached\" and a message under the lines says what was cut (\"Snack Time Combo: today's limit of 1 is used\"). A limit never blocks the order: it is placed without the combo discount on the extra bundles. (API: appliedCombos[].cap and capped, comboNotices[] — not an issue.)"],
-  ["Add more bundles from the home screen", "A combo that is in the cart no longer shows a tick: its card on the home screen has the − / + for the whole bundle, and the + keeps adding bundles until the limit is reached, then it is greyed out (\"Limit: 1 per day · limit reached\")."],
+  ["Add more bundles from the home screen", "A combo that is in the cart no longer shows a tick: its card on the home screen has the − / + for the whole bundle, and the + keeps adding bundles until the limit is reached, then it is greyed out (\"Limit: 1 per day · limit reached\"). A combo not in the cart whose limit this customer has already used shows Add combo greyed out, with the limit said."],
   ["Cancelling gives it back", "A cancelled order's bundles count again for the day, for the customer and for a total limit; a delivered order's return does not. An order shows \"Snack Time Combo × 2\" when it earned two."],
 ] });
