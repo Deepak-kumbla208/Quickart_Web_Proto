@@ -29,6 +29,9 @@
       comboNotices[] — NOT an issue.)
    E. A CANCELLED ORDER GIVES ITS BUNDLES BACK (a delivered order's return
       does not). The order shows "Snack Time Combo × 2" when it earned two.
+   F. (later the same day) THE HOME SCREEN'S COMBO CARD: once the combo is in the cart the "Add combo" tick becomes the product
+      cards' − / + for the WHOLE bundle; the + keeps adding bundles until the limit is reached, then it is greyed out and the
+      card says "Limit: … · limit reached". A combo not in the cart keeps "Add combo".
    ==================================================================== */
 
 (function round13ComboBundles() {
@@ -196,6 +199,27 @@
     return cards + loose;
   };
 
+  // The home screen's combo card: once the combo is in the cart the "Add combo" tick becomes the same − / + the product
+  // cards have, for the WHOLE bundle. The + keeps adding bundles until the limit is reached (then it is greyed out,
+  // as in the cart); a combo that is not in the cart, or not complete, keeps "Add combo".
+  const comboCardBefore = comboCardHTML;
+  window.comboCardHTML = function comboCardHTMLR13(combo) {
+    const html = comboCardBefore(combo);
+    const a = comboAllocation().applied.find((x) => x.combo.id === combo.id);
+    if (!a) return html;
+    const full = a.cap && a.cap.remaining < 1;
+    const id = esc(combo.id);
+    const stepper = `
+      <div class="qty-stepper">
+        <button data-action="dec-combo" data-id="${id}" aria-label="Remove one bundle">${ic("minus")}</button>
+        <span>${a.sets}</span>
+        <button data-action="inc-combo" data-id="${id}" aria-label="Add one bundle" ${full ? 'disabled title="Limit reached"' : ""}>${ic("plus")}</button>
+      </div>`;
+    const swapped = html.replace(/\s*<button class="btn [^"]*" data-action="add-combo"[\s\S]*?<\/button>/, stepper);
+    const note = full ? `<div class="combo-card-limit qk-muted small">Limit: ${esc(limitText(combo))} · limit reached</div>` : "";
+    return note ? swapped.replace(/\s*<\/div>\s*$/, `${note}</div>`) : swapped;
+  };
+
   Actions["toggle-combo-items"] = (el) => {
     UI.comboOpen[el.dataset.id] = !UI.comboOpen[el.dataset.id];
     render();
@@ -340,5 +364,6 @@ WHATS_NEW.unshift({ area: "Round 13 — combo bundles and combo limits", items: 
   ["Each full set earns the saving", "One of every product is a bundle. Two bundles save twice; before, one combo per cart however many you held. A product counts for one combo only — the combo that saves more takes it first."],
   ["A limit on each combo (admin)", "Marketing ▸ Home Screen ▸ Deals & Combos ▸ Add / Edit combo: Limit (No limit · Per order · Per customer, per day · One time per customer · Total across all customers) and a Limit quantity — required exactly when there is a limit, a whole number from 1 to 1 000 000. The combo's row shows the limit and how many bundles have been earned. A change is in the audit log."],
   ["What the customer sees", "The combo row says \"Limit: 1 per day · limit reached\" and a message under the lines says what was cut (\"Snack Time Combo: today's limit of 1 is used\"). A limit never blocks the order: it is placed without the combo discount on the extra bundles. (API: appliedCombos[].cap and capped, comboNotices[] — not an issue.)"],
+  ["Add more bundles from the home screen", "A combo that is in the cart no longer shows a tick: its card on the home screen has the − / + for the whole bundle, and the + keeps adding bundles until the limit is reached, then it is greyed out (\"Limit: 1 per day · limit reached\")."],
   ["Cancelling gives it back", "A cancelled order's bundles count again for the day, for the customer and for a total limit; a delivered order's return does not. An order shows \"Snack Time Combo × 2\" when it earned two."],
 ] });
