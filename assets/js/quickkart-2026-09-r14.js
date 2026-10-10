@@ -35,6 +35,10 @@
       a gateway that takes it (GrabPay: "Razorpay doesn't offer GrabPay").
    I. The audit log records a change by NAME only (never a key) and a test; every
       Super Admin is emailed about a change.
+   J. (later the same day) CARDS SIDE BY SIDE: Business Settings (all four tabs) and Payments stacked every
+      card in one narrow column and left the right side empty. The cards now flow into as many columns as fit
+      (each at least 420 px; three on a wide screen) and the page uses the screen's width instead of the admin
+      pages' 1100 px cap. Payments packs its four cards into columns. No other admin page changes.
    ==================================================================== */
 
 (function round14PaymentGateway() {
@@ -130,7 +134,8 @@
   ${isOn() ? "" : `<div class="notice notice-warn" style="margin-bottom:14px">${ic("alert")}<span>${saved
       ? "Online payments are <b>off</b> — PayNow and Card are hidden at checkout. <b>Cash on Delivery and orders paid in full from the wallet still work.</b> Your saved keys stay, so refunds and late payments still work."
       : "No gateway is set up — PayNow, GrabPay and Card are hidden at checkout. <b>Cash on Delivery and orders paid in full from the wallet still work.</b>"}</span></div>`}
-  <div class="summary-card notif-card ${saved && !g.enabled ? "is-off" : ""}" style="max-width:640px">
+  <div class="settings-grid packed">
+  <div class="summary-card notif-card ${saved && !g.enabled ? "is-off" : ""}">
     <div class="notif-card-head">
       <div class="summary-card-title" style="margin:0">${ic("card")} Payment gateway
         <span class="badge ${saved ? "badge-green-soft" : "badge-yellow-soft"}">${saved ? "Set up" : "Not set up"}</span>
@@ -151,16 +156,16 @@
     </form>
   </div>
   ${saved ? `
-  <div class="summary-card" style="max-width:640px; margin-top:16px">
+  <div class="summary-card">
     <div class="summary-card-title">Your webhook address</div>
     <div class="qk-muted small">Private to your business and it never changes. Paste it into Razorpay's webhook settings — Razorpay tells QuickKart here when a payment is paid or declined.</div>
     <div style="display:flex; gap:8px; margin-top:10px"><input class="input" readonly value="${esc(url)}" style="flex:1; font-family:monospace; font-size:12px" onfocus="this.select()" /><button type="button" class="btn btn-outline" data-action="copy-payment-webhook">Copy</button></div>
   </div>` : ""}
-  <div class="summary-card" style="max-width:640px; margin-top:16px">
+  <div class="summary-card">
     <div class="summary-card-title">Set-up checklist</div>
     <ol class="qk-muted small" style="margin:8px 0 0 18px; padding:0; line-height:1.6">${SETUP_STEPS.map((s) => `<li>${s}</li>`).join("")}</ol>
   </div>
-  <div class="summary-card" style="max-width:640px; margin-top:16px">
+  <div class="summary-card">
     <div class="summary-card-title">Good to know — Razorpay's own rules</div>
     <ul class="qk-muted small" style="margin:8px 0 0 18px; padding:0; line-height:1.6">
       <li>The <b>PayNow QR is valid for 10 minutes</b>; your customer has 15 minutes to pay an order. If the QR lapses they tap <b>Pay</b> again.</li>
@@ -168,6 +173,7 @@
       <li>Refunds go back to the customer's original method; QuickKart makes each refund once, even if it has to retry.</li>
       <li>Every change here is in the <b>Audit log</b> (what changed — never a key) and <b>every Super Admin is emailed</b> about it.</li>
     </ul>
+  </div>
   </div>`;
   };
 
@@ -276,6 +282,30 @@
     return html;
   };
 
+  /* ---------------- 7b. Cards side by side (J) ---------------- */
+  // The Business Settings tabs (and the Payments screen) stacked every card in one narrow column on the left and left the
+  // right side empty. Now the cards flow into as many columns as fit (each at least 420 px wide), side by side.
+  (() => {
+    const css = document.createElement("style");
+    css.textContent = `
+      .settings-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(420px, 100%), 1fr)); gap: 16px; align-items: start; }
+      .settings-grid > .summary-card { max-width: none !important; margin: 0 !important; }
+      /* A page of unequal cards (Payments) packs them into columns, so a short card sits under another and not beside a gap. */
+      .settings-grid.packed { display: block; column-width: 420px; column-gap: 16px; }
+      .settings-grid.packed > .summary-card { break-inside: avoid; margin: 0 0 16px !important; }
+      /* The admin pages are capped at 1100 px; a page of cards uses the width the screen has. */
+      .dash-body:has(.settings-grid) { max-width: 1600px; }
+    `;
+    document.head.appendChild(css);
+    // The tab buttons stay on top, full width; everything under them is the grid.
+    const baseBusiness = window.adminBusinessSettings;
+    window.adminBusinessSettings = () => {
+      const html = baseBusiness();
+      const end = html.indexOf("</div>") + "</div>".length; // the end of the tab-button row
+      return `${html.slice(0, end)}<div class="settings-grid">${html.slice(end)}</div>`;
+    };
+  })();
+
   /* ---------------- 8. The audit log names them (I) ---------------- */
   Object.assign(AUDIT_ACTION_TEXT, {
     "payment_provider.updated": ["Payments", "changed the payment gateway"],
@@ -292,4 +322,5 @@ WHATS_NEW.unshift({ area: "Round 14 — your own payment gateway (Razorpay)", it
   ["Send test, audit log and emails", "Send test checks the saved keys without charging anything (5 per 10 minutes). Every change is in the Audit log — what changed, never a key — and every Super Admin is emailed about it."],
   ["Changing the keys can be refused", "While customers are still paying or refunds are waiting, replacing the keys is refused (\"The gateway cannot be replaced yet … Try again when they are done.\"). Switching On / Off and the first save are never refused. (Said on the card; the prototype has no payment in progress to refuse.)"],
   ["Business Settings ▸ Payment Methods", "Says that PayNow, GrabPay and Card also need a gateway that takes them, and marks a method customers don't see (\"Razorpay doesn't offer GrabPay\")."],
+  ["Cards side by side", "Business Settings (Company Profile, Tax, Delivery & Payments, Stock Rules) and Payments no longer stack every card in one narrow column on the left: the cards sit side by side — three across on a wide screen — and use the width of the screen. Only these pages change."],
 ] });
