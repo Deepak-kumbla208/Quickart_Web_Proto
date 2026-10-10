@@ -278,6 +278,7 @@ function ordersBase() {
       const iss = orderIssues(o);
       if (f.issue === "unavailable" && !iss.unavailable) return false;
       if (f.issue === "return" && !iss.returnReq) return false;
+      if (f.issue === "refund_failed" && !iss.refundFailed) return false; // Round 14 (D102)
       if (f.issue === "late" && !(orderTiming(o) || {}).late) return false;
       if (f.issue === "short" && !orderShortLines(o).length) return false; // Round 5
     }
@@ -501,7 +502,7 @@ function adminOrdersV2() {
         { key: "pay", label: "Payment", options: [...State.deliverySettings.paymentMethods.map((m) => [m.name, m.name]), ["QuickKart Wallet", "QuickKart Wallet"]] },
         { key: "payStatus", label: "Paid?", options: [["paid", "Paid / collected"], ["collect", "Cash to collect"], ["refunded", "Refunded / void"]] },
         { key: "rider", label: "Rider", options: [["none", "Not assigned"], ...riders.map((p) => [String(p.id), p.name])] },
-        { key: "issue", label: "Issues", options: [["late", "Late"], ["short", "Short at store"], ["unavailable", "Item unavailable"], ["return", "Return requested"]] },
+        { key: "issue", label: "Issues", options: [["late", "Late"], ["short", "Short at store"], ["unavailable", "Item unavailable"], ["return", "Return requested"], ["refund_failed", "Refund failed"]] },
       ],
       sort: [["urgent", "Most urgent first"], ["newest", "Newest first"], ["oldest", "Oldest first"], ["slot", "Slot time"], ["amount", "Amount (high → low)"]],
     })}

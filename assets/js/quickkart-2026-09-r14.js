@@ -39,6 +39,10 @@
       card in one narrow column and left the right side empty. The cards now flow into as many columns as fit
       (each at least 420 px; three on a wide screen) and the page uses the screen's width instead of the admin
       pages' 1100 px cap. Payments packs its four cards into columns. No other admin page changes.
+   K. (later the same day) A REFUND THAT COULD NOT BE MADE (P10-6a / b, D102): the banner "A refund could not be made" on the order drawer and in
+      Orders ▸ Returns, with three buttons — Try again · Refund to wallet instead (asks first; no bonus; the customer is told) · Mark as settled
+      outside QuickKart (a note, 3–300 characters). Orders ▸ Issues ▸ "Refund failed". Two demo refunds are seeded once.
+         API: POST /admin/refunds/{payment|part}/:id/retry | to-wallet | settled-outside; refundProblem on the order, the return and the queue.
    ==================================================================== */
 
 (function round14PaymentGateway() {
@@ -314,8 +318,164 @@
   Object.assign(AUDIT_ENTITY_LABEL, { payment_provider: "Payments" });
 })();
 
+/* ---------------- Later the same day: a refund that could not be made — the banner and the three buttons (P10-6a / b, D102) ---------------- */
+/* In the real admin app (quickkart-api-service docs/08 §63–§64): a refund to the original payment can be refused by the gateway (the
+   payment is too old, the gateway balance is too low) or not finish in 24 hours. Then the order, the return and the Returns queue carry
+   `refundProblem { id, kind, amount, reason, message, failedAt, actions[] }` and staff choose: Try again · Refund to wallet instead ·
+   Mark as settled outside QuickKart (a note, 3–300 characters). POST /admin/refunds/{payment|part}/:id/retry | to-wallet | settled-outside —
+   Orders edit, the refund's store. Every Super Admin is emailed once per failed refund; the customer only hears of it when the wallet gets
+   the money. A failed refund is not in Needs action: Orders ▸ Issues ▸ "Refund failed" and the Returns view find it. */
+(function round14FailedRefunds() {
+  const REASON_TEXT = {
+    refused: "the payment gateway refused it (for example the payment is too old, or the gateway account balance is too low)",
+    not_completed: "it was not completed within 24 hours",
+    gateway_not_set_up: "no payment gateway is saved for the business",
+    gateway_changed: "the payment was taken through a different gateway than the one saved now",
+  };
+  const problemOf = (o) => (o && o.refundProblem && !o.refundProblem.resolved ? o.refundProblem : null);
+  window.refundProblemOf = problemOf;
+  const actorRef = () => ({ actorType: "user", actorId: (currentUser() || {}).id });
+  const refundAudit = (action, o, before, after) =>
+    addAuditEvent({ action, entity: "refund", entityId: `${o.refundProblem.kind}-${o.id}`, ...actorRef(), before, after, names: { entity: `#${o.id}` } });
+
+  /* A. Demo data once: a part refund on an approved refund return, and a whole refund on a cancelled online order. */
+  (function seedFailedRefunds() {
+    if (loadLS("migrated_2026_10_r14_failed_refunds", false)) return;
+    const part = State.orders.find((o) => o.returnRequest && o.returnRequest.resolution === "refund" && o.returnRequest.status === "approved" && !isCod(o));
+    const whole = State.orders.find((o) => o.status === "cancelled" && !isCod(o) && (!part || o.id !== part.id));
+    const make = (kind, amount, reason, ago) => ({ kind, amount: round2(amount), reason, failedAt: Date.now() - ago });
+    State.orders = State.orders.map((o) => {
+      if (part && o.id === part.id) return { ...o, refundProblem: make("part", Math.min(o.total || 0, 8.4), "refused", 3 * 3600000) };
+      if (whole && o.id === whole.id) return { ...o, refundProblem: make("payment", o.total || 0, "not_completed", 26 * 3600000) };
+      return o;
+    });
+    persist("orders");
+    saveLS("migrated_2026_10_r14_failed_refunds", true);
+  })();
+
+  /* B. The banner: what failed, why, and the three buttons (a view-only admin sees the banner without them). */
+  function bannerHTML(o) {
+    const p = problemOf(o);
+    if (!p) return "";
+    const editable = canEdit(currentUser(), "orders");
+    return `
+    <div class="notice notice-warn" style="margin:8px 0;display:block">
+      <div>${ic("alert")} <b>A refund could not be made</b> · ${money(p.amount)}${p.kind === "payment" ? " (the whole payment)" : ""} · ${timeAgo(p.failedAt)}</div>
+      <div class="small" style="margin:4px 0 8px">The refund of ${money(p.amount)} could not be made: ${esc(REASON_TEXT[p.reason] || REASON_TEXT.refused)}. The customer has not been told. Every Super Admin was emailed.</div>
+      ${editable ? `<div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button type="button" class="btn btn-sm btn-primary" data-action="rf-retry" data-id="${o.id}">Try again</button>
+        <button type="button" class="btn btn-sm btn-outline" data-action="rf-wallet" data-id="${o.id}">Refund to wallet instead</button>
+        <button type="button" class="btn btn-sm btn-outline" data-action="rf-settle" data-id="${o.id}">Mark as settled outside QuickKart</button>
+      </div>` : ""}
+    </div>`;
+  }
+
+  /* C. In the order drawer, above its buttons. */
+  const drawerBefore = window.orderDrawerHTML;
+  window.orderDrawerHTML = () => {
+    const html = drawerBefore();
+    const o = State.orders.find((x) => x.id === UI.orderDrawerId);
+    const banner = bannerHTML(o);
+    return banner ? html.replace('<div class="drawer-actions">', `${banner}<div class="drawer-actions">`) : html;
+  };
+
+  /* D. In Orders ▸ Returns: a header with the count ("refundFailed" of the overview) and each failed refund under it. */
+  const returnsBefore = window.ordersReturnsHTML;
+  window.ordersReturnsHTML = function () {
+    const html = returnsBefore();
+    const failed = State.orders.filter((o) => problemOf(o));
+    if (!failed.length) return html;
+    const block = `
+    <div class="summary-card" style="margin:10px 0">
+      <div class="summary-card-title">Refunds that could not be made <span class="badge badge-red-soft">${failed.length}</span></div>
+      ${failed.map((o) => `<div style="margin:6px 0"><b><button class="link-btn" data-action="open-order" data-id="${o.id}">#${esc(o.id)}</button> · ${esc(o.customerName || o.contactName || "")}</b>${bannerHTML(o)}</div>`).join("")}
+    </div>`;
+    return block + html;
+  };
+
+  /* E. The Orders console: Issues ▸ Refund failed (the filter is in Round 3's list; a failed refund is not in Needs action). */
+  const issuesBefore = window.orderIssues;
+  window.orderIssues = (o) => ({ ...issuesBefore(o), refundFailed: Boolean(problemOf(o)) });
+
+  /* F. The actions. Try again clears the banner (the worker makes the refund again); the other two ask first. */
+  const find = (id) => State.orders.find((x) => x.id === id);
+  const resolve = (o, how, extra) => {
+    State.orders = State.orders.map((x) => (x.id === o.id ? { ...x, refundProblem: { ...x.refundProblem, resolved: { how, at: Date.now(), by: actorName(), ...extra } } } : x));
+    persist("orders");
+  };
+  Actions["rf-retry"] = (el) => {
+    const o = find(el.dataset.id);
+    if (!o || !problemOf(o)) return;
+    refundAudit("refund.retried", o, { state: "Failed" }, { state: "Waiting — tried again", amount: money(o.refundProblem.amount) });
+    resolve(o, "retry", {});
+    showToast("The refund will be tried again in a moment.");
+    render();
+  };
+  Actions["rf-wallet"] = (el) => { UI.modal = { type: "refundAct", how: "wallet", orderId: el.dataset.id }; render(); };
+  Actions["rf-settle"] = (el) => { UI.modal = { type: "refundAct", how: "settled", orderId: el.dataset.id }; render(); };
+  Actions["rf-keep"] = () => { const n = document.getElementById("rfNote"); if (n) UI.modal.note = n.value; };
+  Actions["rf-confirm"] = () => {
+    const m = UI.modal;
+    const o = find(m.orderId);
+    if (!o || !problemOf(o)) { UI.modal = null; render(); return; }
+    const p = o.refundProblem;
+    if (m.how === "wallet") {
+      UI.modal = null;
+      State.wallet = round2(State.wallet + p.amount); // no bonus
+      persist("wallet");
+      refundAudit("refund.redirected_to_wallet", o, { state: "Failed" }, { state: "Added to the wallet", amount: money(p.amount) });
+      resolve(o, "wallet", {});
+      pushNotice(`Your refund of ${money(p.amount)} for order #${o.id} was added to your wallet.`);
+      showToast(`${money(p.amount)} was added to the customer's wallet.`);
+    } else {
+      const note = ((document.getElementById("rfNote") || {}).value ?? m.note ?? "").trim();
+      if (note.length < 3 || note.length > 300) { UI.modal = { ...m, note, error: "Say how it was settled (3–300 characters)" }; render(); return; }
+      UI.modal = null;
+      refundAudit("refund.settled_outside", o, { state: "Failed" }, { state: "Settled outside QuickKart", amount: money(p.amount), note });
+      resolve(o, "settled", { note });
+      showToast("Marked as settled outside QuickKart. Nothing was moved.");
+    }
+    render();
+  };
+
+  /* G. The two dialogs. */
+  function refundActModal() {
+    const m = UI.modal;
+    const o = find(m.orderId);
+    const p = problemOf(o);
+    if (!p) return "";
+    const wallet = m.how === "wallet";
+    const err = m.error ? `<div class="notice notice-warn" style="margin-bottom:10px">${ic("alert")}<span>${esc(m.error)}</span></div>` : "";
+    return `
+  <div class="overlay" data-action="close-modal-backdrop">
+    <div class="dialog dialog-static" role="dialog" aria-modal="true" data-action="noop">
+      <div class="dialog-head"><span>${wallet ? "Refund to the wallet instead" : "Settled outside QuickKart"} · #${esc(o.id)}</span><button class="dialog-close" data-action="close-modal" aria-label="Close">${ic("close")}</button></div>
+      <div class="dialog-body">
+        ${err}
+        ${wallet
+          ? `<div style="margin-bottom:10px">${money(p.amount)} will be added to the customer's wallet (no bonus) and the customer gets a message. <b>This cannot be undone.</b></div>
+             <div class="qk-muted small">QuickKart first asks the payment gateway whether it already made this refund — if it did, it is recorded as refunded and nothing is added to the wallet.</div>`
+          : `<div class="qk-muted small" style="margin-bottom:8px">For a refund you paid another way (a bank transfer, cash). Nothing moves in QuickKart — the note is kept with the refund and in the Audit log.</div>
+             <label class="field"><span class="field-label">How was it settled? (3–300 characters)</span><textarea class="input" id="rfNote" data-action="rf-keep" rows="3" maxlength="300">${esc(m.note || "")}</textarea></label>`}
+        <div class="form-actions"><button type="button" class="btn btn-outline" data-action="close-modal">Back</button><button type="button" class="btn btn-primary" data-action="rf-confirm">${wallet ? `Add ${money(p.amount)} to the wallet` : "Mark as settled"}</button></div>
+      </div>
+    </div>
+  </div>`;
+  }
+  const modalBefore = window.extraModal;
+  window.extraModal = (type) => (type === "refundAct" ? refundActModal() : modalBefore(type));
+
+  Object.assign(AUDIT_ACTION_TEXT, {
+    "refund.retried": ["Refunds", "tried a failed refund again on order"],
+    "refund.redirected_to_wallet": ["Refunds", "put a failed refund into the customer's wallet on order"],
+    "refund.settled_outside": ["Refunds", "marked a failed refund as settled outside QuickKart on order"],
+  });
+  Object.assign(AUDIT_ENTITY_LABEL, { refund: "Refunds" });
+})();
+
 /* ---------------- What's changed ---------------- */
-WHATS_NEW.unshift({ area: "Round 14 — your own payment gateway (Razorpay)", items: [
+WHATS_NEW.unshift({ area: "Round 14 — your own payment gateway (Razorpay) and failed refunds", items: [
+  ["A refund that could not be made", "When the payment gateway refuses a refund to the original payment (the payment is too old, the gateway balance is too low) or it is not done in 24 hours, the order and Orders ▸ Returns show \"A refund could not be made\" with three buttons: Try again · Refund to wallet instead (asks first, no bonus, the customer is told) · Mark as settled outside QuickKart (a note is required). Every Super Admin is emailed once; Orders ▸ Issues ▸ Refund failed lists them."],
   ["Setup ▸ Payments (Super Admin only)", "Your business's own Razorpay account: Key ID, Key secret and Webhook secret. The money goes straight to your Razorpay account — QuickKart never holds it. The two secrets are write-only: once saved they show \"•••• saved — type to replace\", are never shown again, and a later save leaves them as they are when the box is empty. Test mode / Live is read from the Key ID (a live server refuses a test key)."],
   ["Off, and what the customer sees", "Off stops new PayNow and Card payments only — your saved keys stay, so refunds and late payments still work. With no gateway on, checkout lists Cash on Delivery only; Cash on Delivery and an order the wallet pays in full never need a gateway. Razorpay offers PayNow and Card in Singapore — not GrabPay."],
   ["Webhook address and set-up checklist", "Your private webhook address (Copy button) to paste into Razorpay's webhook settings, with the five steps: API keys, webhook + your own secret + the events payment.captured and payment.failed, PayNow switched on, payment capture on Automatic, Send test."],
