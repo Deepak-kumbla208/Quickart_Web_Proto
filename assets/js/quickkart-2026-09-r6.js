@@ -345,7 +345,7 @@ function transfersHTML(branchId) {
   const setStatus = Actions["set-order-status"];
   Actions["set-order-status"] = (el) => {
     const o = State.orders.find((x) => x.id === el.dataset.id);
-    const packing = el.dataset.status === "ready_for_rider" || (o && o.fulfillment === "pickup" && o.status === "packing" && el.dataset.status === "delivered");
+    const packing = el.dataset.status === "ready_for_rider";
     if (o && packing) {
       const waiting = o.items.filter(pendingLine).length;
       const short = orderShortLines(o).length;

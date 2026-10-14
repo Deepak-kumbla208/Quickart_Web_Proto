@@ -308,9 +308,9 @@ function ordersFiltered() {
    dark stores use: every order races a stage target (accept → pick → pack →
    dispatch), so the page is organised around what's late, what's next and
    who's free. Targets are minutes per stage; a per-business setting later. */
-const STAGE_SLA_MIN = { new: 3, confirmed: 5, picking: 8, packing: 5, ready_for_rider: 10, picked_up: 30 };
+const STAGE_SLA_MIN = { new: 3, confirmed: 5, picking: 13, ready_for_rider: 10, picked_up: 30 };
 const COLD_CATS = ["Dairy & Eggs", "Meat & Seafood", "Frozen Foods"];
-const PIPELINE = [["new", "New"], ["confirmed", "Confirmed"], ["picking", "Picking"], ["packing", "Packing"], ["ready_for_rider", "Ready to dispatch"], ["picked_up", "Out for delivery"], ["delivered", "Delivered"]];
+const PIPELINE = [["new", "New"], ["confirmed", "Confirmed"], ["picking", "Preparing"], ["ready_for_rider", "Ready to dispatch"], ["picked_up", "Out for delivery"], ["delivered", "Delivered"]];
 function fmtDur(mins) {
   const m = Math.max(0, Math.round(mins));
   if (m < 60) return `${m}m`;
@@ -386,7 +386,7 @@ function opsKpisHTML(inScope) {
   const atRisk = open.filter((o) => { const s = orderSla(o); const t = orderTiming(o); return (s && s.state !== "ok") || (t && t.late); });
   const packTimes = todays.map((o) => { const r = statusAt(o, "ready_for_rider") || (o.fulfillment === "pickup" ? statusAt(o, "delivered") : null); return r ? (r - o.createdAt) / 60000 : null; }).filter((x) => x != null);
   const avgPack = packTimes.length ? packTimes.reduce((a, b) => a + b, 0) / packTimes.length : null;
-  const packTarget = STAGE_SLA_MIN.new + STAGE_SLA_MIN.confirmed + STAGE_SLA_MIN.picking + STAGE_SLA_MIN.packing;
+  const packTarget = STAGE_SLA_MIN.new + STAGE_SLA_MIN.confirmed + STAGE_SLA_MIN.picking;
   const deliveredToday = inScope.filter((o) => o.status === "delivered" && (statusAt(o, "delivered") || o.createdAt) >= today);
   const onTime = deliveredToday.filter((o) => {
     const at = statusAt(o, "delivered") || o.createdAt;
@@ -440,8 +440,7 @@ function opsRailHTML(inScope) {
   };
   const stageRows = [
     ["Accept", avgBetween("created", "confirmed"), STAGE_SLA_MIN.new],
-    ["Pick", avgBetween("confirmed", "packing"), STAGE_SLA_MIN.confirmed + STAGE_SLA_MIN.picking],
-    ["Pack", avgBetween("packing", "ready_for_rider"), STAGE_SLA_MIN.packing],
+    ["Prepare", avgBetween("confirmed", "ready_for_rider"), STAGE_SLA_MIN.confirmed + STAGE_SLA_MIN.picking],
     ["Dispatch", avgBetween("ready_for_rider", "picked_up"), STAGE_SLA_MIN.ready_for_rider],
     ["Deliver", avgBetween("picked_up", "delivered"), STAGE_SLA_MIN.picked_up],
   ];
@@ -559,11 +558,11 @@ function ordersBySlotHTML(list) {
     </div>`;
   }).join("");
 }
-const BOARD_COLUMNS = ["new", "confirmed", "picking", "packing", "ready_for_rider", "picked_up"];
+const BOARD_COLUMNS = ["new", "confirmed", "picking", "ready_for_rider", "picked_up"];
 function boardNextStep(o) {
-  if (o.fulfillment === "pickup" && o.status === "packing") return { status: "delivered", label: "Mark picked up" };
   if (PREP_STATUSES.includes(o.status)) return { status: TIMELINE_STEPS[TIMELINE_STEPS.indexOf(o.status) + 1], label: ADVANCE_LABEL[o.status] };
-  if (o.status === "ready_for_rider") return o.fulfillment === "pickup" ? null : { status: "picked_up", label: "Mark picked up" };
+  // D108: a pickup order waits at ready_for_rider ("Ready for Pickup") and is collected from there.
+  if (o.status === "ready_for_rider") return { status: o.fulfillment === "pickup" ? "delivered" : "picked_up", label: "Mark picked up" };
   if (o.status === "picked_up") return { status: "delivered", label: "Mark delivered" };
   return null;
 }
@@ -645,7 +644,7 @@ function orderDrawerHTML() {
             <span class="pick-qty">${it.qty}×</span>
             <span class="pick-name">${esc(it.name)}${it.resolution === "swap" ? " <span class='badge badge-blue-soft'>Swapped</span>" : it.resolution ? " <span class='badge badge-gray-soft'>Refunded</span>" : ""}<span class="qk-muted small">${esc(it.unit || "")}${cat ? ` · ${esc(cat)}` : ""}</span></span>
             <span class="qk-num">${money(it.price * it.qty)}</span>
-            ${["picking", "packing"].includes(o.status) && editable && !it.resolution ? `<button class="link-btn link-danger small" data-action="mark-item-unavailable" data-id="${o.id}" data-idx="${idx}">Not available</button>` : ""}
+            ${["picking"].includes(o.status) && editable && !it.resolution ? `<button class="link-btn link-danger small" data-action="mark-item-unavailable" data-id="${o.id}" data-idx="${idx}">Not available</button>` : ""}
           </div>
           ${shortLineHTML(o, it, idx, editable)}`;
         }).join("")}
@@ -697,8 +696,8 @@ function opsStepperHTML(o) {
     return `<div class="stepper-void">${ic("alert")} ${esc(STATUS_META[o.status].label)}${at ? ` · ${fmtDateTime(at)}` : ""}</div>`;
   }
   const steps = o.fulfillment === "pickup"
-    ? [["new", "Placed"], ["confirmed", "Accepted"], ["picking", "Picking"], ["packing", "Packed"], ["delivered", "Collected"]]
-    : [["new", "Placed"], ["confirmed", "Accepted"], ["picking", "Picking"], ["packing", "Packed"], ["ready_for_rider", "Ready"], ["picked_up", "Out"], ["delivered", "Delivered"]];
+    ? [["new", "Placed"], ["confirmed", "Accepted"], ["picking", "Preparing"], ["ready_for_rider", "Ready"], ["delivered", "Collected"]]
+    : [["new", "Placed"], ["confirmed", "Accepted"], ["picking", "Preparing"], ["ready_for_rider", "Ready"], ["picked_up", "Out"], ["delivered", "Delivered"]];
   const curIdx = steps.findIndex(([k]) => k === o.status);
   let prevAt = null;
   return `<ol class="stepper">${steps.map(([k, label], i) => {
@@ -716,7 +715,7 @@ function addDemoLiveOrders() {
   const branch = State.branches.find((b) => b.active && (!ids || ids.includes(b.id))) || State.branches[0];
   const riders = State.partners.filter((p) => p.branchId === branch.id && p.active !== false);
   const people = [["Aarav Mehta", "91234501", "12 Tampines St 41, #05-123, Singapore 521012"], ["Siti Nurhaliza", "82345602", "88 Bedok North Rd, #10-08, Singapore 460088"], ["Wei Jie", "93456703", "5 Jurong West Ave 1, #02-14, Singapore 640005"], ["Priya Nair", "84567804", "230 Ang Mo Kio Ave 3, #12-345, Singapore 560230"], ["Marcus Lim", "95678905", "18 Bedok North Ave 4, #07-112, Singapore 460018"], ["Farah Yusof", "86789006", "10 Tampines Central 1, #08-22, Singapore 529536"]];
-  const plan = [["new", 1, []], ["new", 4, []], ["confirmed", 6, [["confirmed", 4]]], ["picking", 9, [["confirmed", 7], ["picking", 5]]], ["packing", 13, [["confirmed", 12], ["picking", 10], ["packing", 2]]], ["ready_for_rider", 24, [["confirmed", 22], ["picking", 20], ["packing", 14], ["ready_for_rider", 12]]]];
+  const plan = [["new", 1, []], ["new", 4, []], ["confirmed", 6, [["confirmed", 4]]], ["picking", 9, [["confirmed", 7], ["picking", 5]]], ["picking", 13, [["confirmed", 12], ["picking", 10]]], ["ready_for_rider", 24, [["confirmed", 22], ["picking", 20], ["ready_for_rider", 12]]]];
   const now = Date.now();
   const today = isoDate(new Date());
   const slot = State.slotSettings.templates.find((t) => { const [h] = t.start.split(":").map(Number); return h > new Date().getHours(); });

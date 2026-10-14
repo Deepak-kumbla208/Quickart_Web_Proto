@@ -44,7 +44,7 @@
    K. Payment methods: the last one on cannot be switched off — checkout
       needs one for every order, even one the wallet pays in full.
    L. Delivery & Payments ▸ Order rules (new card): customers may cancel
-      until (new / confirmed / picking / packing — never once it is ready
+      until (new / confirmed / preparing — never once it is ready
       for the rider), the most of one item per order (1–99), returns within
       N days of delivery (0 = none; applies at once).
    M. Delivery & Payments ▸ Rider pay (new card): what a rider earns per
@@ -482,12 +482,11 @@ State.deliverySettings = {
   const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
   const WEBSITE = /^(https?:\/\/)?[a-z0-9-]+(\.[a-z0-9-]+)+(\/\S*)?$/i;
   const TIMEZONES = ["Asia/Singapore", "Asia/Kuala_Lumpur", "Asia/Jakarta", "Asia/Bangkok", "Asia/Manila", "Asia/Hong_Kong", "Asia/Kolkata", "Asia/Dubai", "Australia/Sydney", "Europe/London"];
-  const CANCEL_STEPS = ["new", "confirmed", "picking", "packing"];
+  const CANCEL_STEPS = ["new", "confirmed", "picking"];
   const CANCEL_LABEL = {
     new: "New — until the store confirms it",
-    confirmed: "Confirmed — until picking starts (default)",
-    picking: "Picking — until packing starts",
-    packing: "Packing — until it's ready for the rider",
+    confirmed: "Confirmed — until preparing starts (default)",
+    picking: "Preparing — until it's ready for the rider",
   };
   const DAY = 86400000;
   const LAST_METHOD = "Keep at least one payment method on — customers could not place any order";
@@ -776,7 +775,7 @@ State.deliverySettings = {
     "delivery.expressEnabled": "Express delivery", "delivery.expressCharge": "Express charge", paymentMethods: "Payment methods on",
     "orders.confirmation": "Order confirmation", "orders.customerCancelUntil": "Customers may cancel until", "orders.maxQtyPerItem": "Most of one item",
     "orders.returnWindowDays": "Returns within (days)", "timing.stageTargets.new": "Accept a new order (min)", "timing.stageTargets.confirmed": "Start picking (min)",
-    "timing.stageTargets.picking": "Picking (min)", "timing.stageTargets.packing": "Packing (min)", "timing.stageTargets.readyForRider": "Waiting for the rider (min)",
+    "timing.stageTargets.picking": "Preparing (min)", "timing.stageTargets.readyForRider": "Waiting for the rider (min)",
     "timing.stageTargets.pickedUp": "Out for delivery (min)", "timing.notAcceptedAlertMinutes": "\"Not accepted\" alert (min)",
     "timing.expressDueBufferMinutes": "Express due buffer (min)", "stock.allowNegativeStock": "Negative stock allowed", "stock.costPriceMethod": "Cost price on receiving",
     "unavailableItems.bonusPercent": "Wallet refund bonus (%)", "unavailableItems.answerMinutes": "Time to answer (min)", "unavailableItems.noAnswer": "If no answer",
@@ -799,7 +798,7 @@ State.deliverySettings = {
       "delivery.expressCharge": d.expressCharge, paymentMethods: d.paymentMethods.filter((m) => m.enabled).map((m) => m.name),
       "orders.confirmation": confirmationMode(), "orders.customerCancelUntil": r.customerCancelUntil, "orders.maxQtyPerItem": r.maxQtyPerItem,
       "orders.returnWindowDays": r.returnWindowDays, "timing.stageTargets.new": tm.new, "timing.stageTargets.confirmed": tm.confirmed,
-      "timing.stageTargets.picking": tm.picking, "timing.stageTargets.packing": tm.packing, "timing.stageTargets.readyForRider": tm.ready_for_rider,
+      "timing.stageTargets.picking": tm.picking, "timing.stageTargets.readyForRider": tm.ready_for_rider,
       "timing.stageTargets.pickedUp": tm.picked_up, "timing.notAcceptedAlertMinutes": tm.confirmAlertMins, "timing.expressDueBufferMinutes": tm.expressBufferMins,
       "stock.allowNegativeStock": !!d.allowNegativeStock, "stock.costPriceMethod": d.costPriceMethod || "average",
       "unavailableItems.bonusPercent": s.walletBonusPct, "unavailableItems.answerMinutes": s.answerMins, "unavailableItems.noAnswer": s.noAnswer,
@@ -915,7 +914,7 @@ State.deliverySettings = {
     const movable = canMove();
     return `<div class="slot-orders">
       ${orders.length ? orders.map((o) => `<div class="row"><span>#${o.id} · ${esc(o.customerName)} <span class="badge badge-${STATUS_META[o.status].tone}-soft">${STATUS_META[o.status].label}</span></span>
-        ${movable && ["new", "confirmed", "picking", "packing", "ready_for_rider"].includes(o.status) ? `<select class="input input-sm" data-action="move-slot-order" data-id="${o.id}"><option value="">Move to…</option>${moveOptionsHTML(branch, key)}</select>` : ""}</div>`).join("")
+        ${movable && ["new", "confirmed", "picking", "ready_for_rider"].includes(o.status) ? `<select class="input input-sm" data-action="move-slot-order" data-id="${o.id}"><option value="">Move to…</option>${moveOptionsHTML(branch, key)}</select>` : ""}</div>`).join("")
         : `<div class="qk-muted small">No prototype orders in this slot yet (the booked number includes demo bookings).</div>`}
       ${orders.length && movable ? `<div class="qk-muted small" style="margin-top:6px">${ic("alert")} The customer is not told when you move their order — call or message them.</div>` : ""}
     </div>`;

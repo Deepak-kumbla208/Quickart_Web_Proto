@@ -167,7 +167,7 @@
   Object.assign(AUDIT_FIELD_LABEL, { item: "Item", replacement: "Replacement", choice: "Customer's answer" });
 
   /* A. "Not available" opens a small dialog: the replacement is chosen when the line is marked (the customer is told at
-        once, with that offer) — it used to ask only "mark it?" and offer afterwards. Only while picking or packing. */
+        once, with that offer) — it used to ask only "mark it?" and offer afterwards. Only while the order is being prepared. */
   const stockedHere = (o, exceptId) =>
     State.items.filter((i) => i.stock && i.id !== exceptId && (storeQty(o.branchId, i.id) || 0) > 0);
   const defaultAlt = (o, it) => {

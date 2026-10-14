@@ -27,7 +27,7 @@
    ==================================================================== */
 
 /* ---------------- 1. Settings and one-time migration ---------------- */
-const DEFAULT_TIMING = { new: 3, confirmed: 5, picking: 8, packing: 5, ready_for_rider: 10, picked_up: 30, confirmAlertMins: 10, expressBufferMins: 15 };
+const DEFAULT_TIMING = { new: 3, confirmed: 5, picking: 13, ready_for_rider: 10, picked_up: 30, confirmAlertMins: 10, expressBufferMins: 15 };
 const DEFAULT_GOODWILL = { bonusCap: 50, staffCap: 50, days: 30 };
 State.deliverySettings = {
   ...State.deliverySettings,
@@ -40,7 +40,7 @@ function goodwillSettings() { return State.deliverySettings.goodwill; }
 // The console's stage targets (r3) read STAGE_SLA_MIN; keep it in step with the settings.
 function applyTimingTargets() {
   const t = timingSettings();
-  ["new", "confirmed", "picking", "packing", "ready_for_rider", "picked_up"].forEach((k) => { STAGE_SLA_MIN[k] = Number(t[k]) || DEFAULT_TIMING[k]; });
+  ["new", "confirmed", "picking", "ready_for_rider", "picked_up"].forEach((k) => { STAGE_SLA_MIN[k] = Number(t[k]) || DEFAULT_TIMING[k]; });
 }
 applyTimingTargets();
 
@@ -128,8 +128,8 @@ function timingCardHTML(editable) {
     <div class="summary-card-title">Order timing targets</div>
     <div class="qk-muted small">Minutes each stage should take. The Orders screen colours the timer amber at 75% of the target and red when over, and works out "at risk", "late" and the average-vs-target figures from these.</div>
     <div class="field-grid-2" style="margin-top:10px">
-      ${field("new", "Accept a new order (min) — manual mode")}${field("confirmed", "Start picking (min)")}
-      ${field("picking", "Picking (min)")}${field("packing", "Packing (min)")}
+      ${field("new", "Accept a new order (min) — manual mode")}${field("confirmed", "Start preparing (min)")}
+      ${field("picking", "Preparing — picking and packing (min)")}
       ${field("ready_for_rider", "Waiting for the rider (min)")}${field("picked_up", "Out for delivery (min)")}
     </div>
     <div class="field-grid-2">

@@ -20,8 +20,8 @@ if (!VEHICLE_TYPES.includes("Truck")) VEHICLE_TYPES.push("Truck");
 const DEFAULT_VEHICLE_CAPACITY = { "Bicycle": 1, "On foot": 1, "Motorcycle": 2, "Car": 4, "Van": 10, "Truck": 25 };
 State.deliverySettings = { ...State.deliverySettings, vehicleCapacity: { ...DEFAULT_VEHICLE_CAPACITY, ...(State.deliverySettings.vehicleCapacity || {}) } };
 // Stages where an order can have a rider (assigned but not yet delivered).
-const RIDER_STAGES = ["confirmed", "picking", "packing", "ready_for_rider", "picked_up"];
-const ASSIGNABLE_STAGES = ["confirmed", "picking", "packing", "ready_for_rider"];
+const RIDER_STAGES = ["confirmed", "picking", "ready_for_rider", "picked_up"];
+const ASSIGNABLE_STAGES = ["confirmed", "picking", "ready_for_rider"];
 function riderCapacity(p) {
   if (p && p.capacity) return Number(p.capacity);
   return State.deliverySettings.vehicleCapacity[p && p.vehicle] || 1;

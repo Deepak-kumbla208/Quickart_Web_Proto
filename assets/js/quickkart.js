@@ -172,23 +172,22 @@ function couponDiscountAmount(coupon, subtotal) {
   return 0;
 }
 
-// Store-fulfilment order lifecycle. New/Confirmed/Picking/Packing are the store's
-// own prep stages (Store Manager-driven); Ready for Rider is when the branch's
+// Store-fulfilment order lifecycle. New/Confirmed/Preparing are the store's
+// own prep stages (D108: picking and packing are one step) (Store Manager-driven); Ready for Rider is when the branch's
 // round-robin queue takes over; Picked Up/Delivered are rider-driven.
 const STATUS_META = {
   new: { label: "New", tone: "yellow" },
   confirmed: { label: "Confirmed", tone: "yellow" },
-  picking: { label: "Picking", tone: "yellow" },
-  packing: { label: "Packing", tone: "yellow" },
+  picking: { label: "Preparing", tone: "yellow" },
   ready_for_rider: { label: "Ready for Rider", tone: "blue" },
   picked_up: { label: "Picked Up", tone: "blue" },
   delivered: { label: "Delivered", tone: "green" },
   cancelled: { label: "Cancelled", tone: "red" },
   returned: { label: "Returned", tone: "red" },
 };
-const TIMELINE_STEPS = ["new", "confirmed", "picking", "packing", "ready_for_rider", "picked_up", "delivered"];
+const TIMELINE_STEPS = ["new", "confirmed", "picking", "ready_for_rider", "picked_up", "delivered"];
 // Store-side prep — no rider involved yet, managed by Store Manager/Admin.
-const PREP_STATUSES = ["new", "confirmed", "picking", "packing"];
+const PREP_STATUSES = ["new", "confirmed", "picking"];
 // Rider-facing lifecycle — order has (or is waiting for) a rider.
 const DISPATCH_STATUSES = ["ready_for_rider", "picked_up"];
 // End states — nothing left to advance.
@@ -197,9 +196,8 @@ const TERMINAL_STATUSES = ["delivered", "cancelled", "returned"];
 // CURRENT status (the button moves it to the next TIMELINE_STEPS entry).
 const ADVANCE_LABEL = {
   new: "Confirm order",
-  confirmed: "Start picking",
-  picking: "Start packing",
-  packing: "Mark ready for rider",
+  confirmed: "Start preparing",
+  picking: "Mark ready for rider",
 };
 // Earlier prototype versions used a 4-stage status set (placed/assigned/
 // out_for_delivery/...) before it became the 7-stage store-fulfilment flow.
@@ -690,7 +688,7 @@ function seedOrders() {
     const r = Math.random();
     let status;
     if (daysAgo === 0 && r < 0.5) {
-      const inProgress = ["new", "confirmed", "picking", "packing", "ready_for_rider", "picked_up"];
+      const inProgress = ["new", "confirmed", "picking", "ready_for_rider", "picked_up"];
       status = inProgress[Math.floor(Math.random() * inProgress.length)];
     } else status = r < 0.08 ? "cancelled" : r < 0.14 ? "returned" : "delivered";
     const address = addrs[i % addrs.length];
@@ -2564,14 +2562,13 @@ function orderTimelineSteps(order) {
     { key: "new", label: "Order Placed" },
     { key: "confirmed", label: "Order Confirmed" },
     { key: "picking", label: "Preparing Your Order" },
-    { key: "packing", label: "Ready for Pickup" },
+    { key: "ready_for_rider", label: "Ready for Pickup" },
     { key: "delivered", label: "Picked Up" },
   ] : [
     { key: "new", label: "Order Placed" },
     { key: "confirmed", label: "Order Confirmed" },
     { key: "picking", label: "Preparing Your Order" },
-    { key: "packing", label: "Packed" },
-    { key: "ready_for_rider", label: "Rider Assigned" },
+    { key: "ready_for_rider", label: "Packed — waiting for a rider" },
     { key: "picked_up", label: "Out for Delivery" },
     { key: "delivered", label: "Delivered" },
   ];
@@ -2591,9 +2588,8 @@ function currentStepInfo(order) {
   const descriptions = {
     new: "We've received your order.",
     confirmed: "Your order has been confirmed by the store.",
-    picking: "Your items are being picked and prepared.",
-    packing: isPickup ? "Your order is packed and ready for pickup." : "Your order is packed and waiting for a rider.",
-    ready_for_rider: "A rider has been assigned to your order.",
+    picking: "Your items are being picked and packed.",
+    ready_for_rider: isPickup ? "Your order is packed and ready for pickup." : "Your order is packed and waiting for a rider.",
     picked_up: "Your rider is on the way.",
     delivered: isPickup ? "Picked up — enjoy!" : "Delivered — enjoy!",
   };
@@ -3987,11 +3983,11 @@ function adminOrderRow(order, editable) {
           </select>
         </label>
         ${!order.branchId ? `<div class="notice notice-warn">${ic("alert")}<span>This order has no serving branch, so it can't be assigned a rider.</span></div>` : eligiblePartners.length === 0 ? `<div class="notice notice-warn">${ic("alert")}<span>${esc(branch.name)} has no active riders yet.</span></div>` : ""}
-        ` : PREP_STATUSES.includes(order.status) ? `<div class="qk-muted small">Rider assignment happens once this order is packed and marked ready.</div>` : ""}
+        ` : PREP_STATUSES.includes(order.status) ? `<div class="qk-muted small">Rider assignment happens once this order is prepared and marked ready.</div>` : ""}
         ${!editable || TERMINAL_STATUSES.includes(order.status) ? "" : `
           <div class="form-actions form-actions-3">
-            ${PREP_STATUSES.includes(order.status) ? `<button class="btn btn-primary-soft btn-sm" data-action="set-order-status" data-id="${order.id}" data-status="${order.fulfillment === "pickup" && order.status === "packing" ? "delivered" : TIMELINE_STEPS[TIMELINE_STEPS.indexOf(order.status) + 1]}">${order.fulfillment === "pickup" && order.status === "packing" ? "Mark picked up" : ADVANCE_LABEL[order.status]}</button>` : ""}
-            ${order.fulfillment !== "pickup" && order.status === "ready_for_rider" ? `<button class="btn btn-outline btn-sm" data-action="set-order-status" data-id="${order.id}" data-status="picked_up">Mark picked up</button>` : ""}
+            ${PREP_STATUSES.includes(order.status) ? `<button class="btn btn-primary-soft btn-sm" data-action="set-order-status" data-id="${order.id}" data-status="${TIMELINE_STEPS[TIMELINE_STEPS.indexOf(order.status) + 1]}">${ADVANCE_LABEL[order.status]}</button>` : ""}
+            ${order.status === "ready_for_rider" ? `<button class="btn btn-outline btn-sm" data-action="set-order-status" data-id="${order.id}" data-status="${order.fulfillment === "pickup" ? "delivered" : "picked_up"}">Mark picked up</button>` : ""}
             ${order.fulfillment !== "pickup" && order.status === "picked_up" ? `<button class="btn btn-primary-soft btn-sm" data-action="set-order-status" data-id="${order.id}" data-status="delivered">Mark delivered</button>` : ""}
             ${[...PREP_STATUSES, "ready_for_rider"].includes(order.status) ? `<button class="btn btn-outline-danger btn-sm" data-action="open-admin-cancel" data-id="${order.id}">Cancel</button>` : ""}
           </div>`}
