@@ -3,10 +3,11 @@
    cart and a limit on each combo, as the backend built them (P9-5b,
    BE-ADM-025, D100) on quickkart-api-service. Every change of the day is here.
 
-   A. The CART shows a combo as ONE COMPACT ROW — name, "Combo" badge, bundle price, "You save S$x", a "View items" dropdown
-      (the products and how many, view only) and a − / + for the WHOLE bundle (× N). Units beyond the full sets are
-      ordinary lines underneath, with their own − / +; add the missing products and they join a bundle (× 2). Remove the
-      last bundle and the row goes. (API: lines[].comboId, comboUnits.)
+   A. The CART shows a combo as ONE COMPACT ROW — picture, name, "Combo" badge, bundle price, "You save S$x" and a
+      − / + for the WHOLE bundle (× N). **Round 17 (17 October 2026, D120): the row no longer lists the products
+      inside the bundle** — the "View items" dropdown is gone, and the row is the combo alone. Units beyond the full
+      sets are still ordinary lines underneath, with their own − / +; add the missing products and they join a bundle
+      (× 2). Remove the last bundle and the row goes. (API: appliedCombos[].imageUrl, lines[].comboId, comboUnits.)
    B. EACH FULL SET earns the saving (one of every product), up to the
       combo's limit — it used to be one combo per cart however many the
       customer held. A product counts for one combo only; the combo with the
@@ -147,10 +148,9 @@
   window.activeComboSavings = () => comboAllocation().applied.reduce((s, a) => s + a.discount, 0);
 
   // ---------------------------------------------------------------- A. the cart
-  // A combo is ONE compact row: its name, the bundle price, "You save", a dropdown for its items and a − / + for the
-  // WHOLE bundle (× N). Units beyond the full sets are ordinary lines underneath; they join a bundle when the missing
-  // products are added too.
-  UI.comboOpen = UI.comboOpen || {};
+  // A combo is ONE compact row: its picture, its name, the bundle price, "You save" and a − / + for the WHOLE bundle
+  // (× N). Round 17 (D120): the products inside the bundle are NOT listed — the row is the combo alone. Units beyond
+  // the full sets are ordinary lines underneath; they join a bundle when the missing products are added too.
   window.cartLinesHTML = function cartLinesHTMLR13(t) {
     const { applied, consumed } = comboAllocation();
     const cards = applied
@@ -158,7 +158,6 @@
         const members = a.combo.itemIds.map((id) => t.cartItems.find((i) => i.id === id)).filter(Boolean);
         if (!members.length) return "";
         const id = esc(a.combo.id);
-        const open = !!UI.comboOpen[a.combo.id];
         const bundle = cents(a.combo.bundlePrice * a.sets);
         const apart = cents(comboIndividualTotal(a.combo) * a.sets);
         const full = a.cap && a.cap.remaining < 1;
@@ -171,13 +170,12 @@
             <img src="${esc(a.combo.image || members[0].image)}" alt="" class="cart-line-img" />
             <div class="cart-line-info">
               <div class="cart-line-name">${esc(a.combo.title)}<span class="badge badge-green" style="margin-left:6px">Combo</span></div>
-              <div class="cart-line-unit qk-muted">${members.length} items${a.sets > 1 ? ` · × ${a.sets}` : ""}</div>
+              ${a.sets > 1 ? `<div class="cart-line-unit qk-muted">× ${a.sets}</div>` : ""}
               <div class="cart-line-price-row qk-num">
                 <span class="cart-line-price-now">${money(bundle)}</span>
                 <span class="cart-line-price-mrp">${money(apart)}</span>
               </div>
               <div class="combo-bundle-save">You save ${money(a.discount)}</div>
-              <button type="button" class="link-btn combo-bundle-toggle" data-action="toggle-combo-items" data-id="${id}" aria-expanded="${open}">${open ? "Hide items" : "View items"} <span class="combo-chevron ${open ? "is-open" : ""}">${ic("chevronDown")}</span></button>
             </div>
             <div class="qty-stepper">
               <button data-action="dec-combo" data-id="${id}" aria-label="Remove one bundle">${ic("minus")}</button>
@@ -185,7 +183,6 @@
               <button data-action="inc-combo" data-id="${id}" aria-label="Add one bundle" ${full ? 'disabled title="Limit reached"' : ""}>${ic("plus")}</button>
             </div>
           </div>
-          ${open ? `<ul class="combo-bundle-items">${members.map((i) => `<li><span>${a.sets} × ${esc(cartLineName(i))}</span><span class="qk-muted">${esc(i.unit)}</span></li>`).join("")}</ul>` : ""}
           ${foot ? `<div class="combo-bundle-foot qk-muted small">${foot}</div>` : ""}
         </div>`;
       })
@@ -230,10 +227,6 @@
     return note ? swapped.replace(/\s*<\/div>\s*$/, `${note}</div>`) : swapped;
   };
 
-  Actions["toggle-combo-items"] = (el) => {
-    UI.comboOpen[el.dataset.id] = !UI.comboOpen[el.dataset.id];
-    render();
-  };
   // − / + on the row change the WHOLE bundle: one of every product.
   const comboOf = (el) => allCombos().find((c) => c.id === el.dataset.id);
   Actions["inc-combo"] = (el) => {
@@ -370,7 +363,7 @@
 
 /* ---------------- What's changed ---------------- */
 WHATS_NEW.unshift({ area: "Round 13 — combo bundles and combo limits", items: [
-  ["A combo is one row in the cart", "The combo's name, a Combo badge, the bundle price and \"You save S$x\", with a View items dropdown (the products, view only) and a − / + that add or remove the WHOLE bundle (× N). Units beyond the full sets are ordinary lines underneath with their own − / +; add the missing products and they join the combo (× 2). (API: lines[].comboId and comboUnits.)"],
+  ["A combo is one row in the cart", "The combo's picture and name, a Combo badge, the bundle price and \"You save S$x\", with a − / + that add or remove the WHOLE bundle (× N). (Round 17: the products inside the bundle are no longer listed.) Units beyond the full sets are ordinary lines underneath with their own − / +; add the missing products and they join the combo (× 2). (API: lines[].comboId and comboUnits.)"],
   ["Each full set earns the saving", "One of every product is a bundle. Two bundles save twice; before, one combo per cart however many you held. A product counts for one combo only — the combo that saves more takes it first."],
   ["A limit on each combo (admin)", "Marketing ▸ Home Screen ▸ Deals & Combos ▸ Add / Edit combo: Limit (No limit · Per order · Per customer, per day · One time per customer · Total across all customers) and a Limit quantity — required exactly when there is a limit, a whole number from 1 to 1 000 000. The combo's row shows the limit and how many bundles have been earned. A change is in the audit log."],
   ["What the customer sees", "The combo row says \"Limit: 1 per day · limit reached\" and a message under the lines says what was cut (\"Snack Time Combo: today's limit of 1 is used\"). A limit never blocks the order: it is placed without the combo discount on the extra bundles. (API: appliedCombos[].cap and capped, comboNotices[] — not an issue.)"],
