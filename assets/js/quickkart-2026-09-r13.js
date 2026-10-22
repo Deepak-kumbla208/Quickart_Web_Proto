@@ -112,8 +112,12 @@
     Object.keys(State.cart).forEach((k) => {
       if (State.cart[k] > 0 && findItem(Number(k))) left[k] = State.cart[k];
     });
+    // Round 19 (D122): in the shop's "chosen" mode only a combo the customer added as a combo is a candidate, and its
+    // full sets are capped at the number chosen (r19 comboChosenSets); null = automatic, the rule below as built.
+    const chosenSets = window.comboChosenSets ? comboChosenSets() : null;
     const candidates = allCombos()
       .filter((c) => c.itemIds.length && comboSavings(c) > 0 && c.itemIds.every((id) => (left[id] || 0) >= 1))
+      .filter((c) => chosenSets === null || chosenSets[c.id] >= 1)
       .map((combo) => ({ combo, perSet: comboSavings(combo) }))
       .sort((a, b) => b.perSet - a.perSet || String(a.combo.id).localeCompare(String(b.combo.id)));
     const applied = [];
@@ -121,7 +125,8 @@
     const units = {};
     const consumed = {};
     candidates.forEach(({ combo, perSet }) => {
-      const full = Math.min(...combo.itemIds.map((id) => left[id] || 0));
+      const complete = Math.min(...combo.itemIds.map((id) => left[id] || 0));
+      const full = chosenSets === null ? complete : Math.min(complete, chosenSets[combo.id] || 0); // Round 19: the chosen number is the ceiling
       if (full < 1) return;
       const limit = allowanceOf(combo);
       const earned = limit === null ? full : Math.min(full, Math.max(0, limit));
