@@ -3,6 +3,8 @@
 
    Backend: decision D126, design quickkart-api-service docs/18-design-home-page-builder.md, phase P24.
    NOT built in the backend yet — this round shows the target screens first (P24-0 → round 21 → P24-1 …).
+   Narrowed the same day (D128, design §8): sources = picks / a category / a brand; a tap opens nothing / a category /
+   one product / a brand's products; banner + products beside = exactly 6; old automatic rows became picks.
 
    Admin:  Home Screen ▸ Add section asks for a LAYOUT first (gallery with sketches), every layout can be added more
            than once (Combos once), products come from a SOURCE, banners and tiles OPEN what the admin chooses, sections
@@ -13,7 +15,8 @@
    ==================================================================== */
 (function round21HomeBuilder() {
   /* ---------------- 0. Rules and small helpers ---------------- */
-  const R21 = { sections: 25, cards: 200, slides: 20, tiles: 20, highlights: 8, picks: 20, rowMax: 20, gridMin: 4, gridMax: 12, shopGrid: 24, tags: 50 };
+  // beside: banner + products with the picture beside always shows exactly 6 (D128 c).
+  const R21 = { sections: 25, cards: 200, slides: 20, tiles: 20, highlights: 8, picks: 20, rowMax: 20, gridMin: 4, gridMax: 12, shopGrid: 24, tags: 50, beside: 6 };
   const BLANK_PREVIEW = "data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22/%3E";
   const SHOP_TZ = "Asia/Singapore";
   const TZ_LABEL = "Singapore time";
@@ -61,7 +64,7 @@
   const TILE_TYPES = ["hero", "verticalTiles", "offerTiles", "trustStrip"];
   const ADMIN_ONLY_NAME = ["hero", "secondaryBanner", "verticalTiles", "offerTiles", "trustStrip", "deals"];
   const PICTURE_TYPES = ["secondaryBanner", "promo", "freshSpotlight"];
-  const defaultLimit = (type) => ({ rail: 10, productGrid: 8, promo: 10, freshSpotlight: 6 }[type] || 10);
+  const defaultLimit = (type) => ({ rail: 10, productGrid: 8, promo: 10, freshSpotlight: R21.beside }[type] || 10);
   const limitRange = (type) => (type === "productGrid" ? [R21.gridMin, R21.gridMax] : [1, R21.rowMax]);
 
   // Labels the earlier rounds read (tile editor title, audit labels).
@@ -69,13 +72,12 @@
   window.homeSectionLabel = (s) => (s && s.title) || TYPE_NAME[s.type] || s.type;
 
   /* ---------------- 2. Sources, links, sales ---------------- */
+  // D128: three sources and four tap choices. The tag / top / onOffer branches below stay only so the one-time
+  // upgrade (section 4) can read what an old row showed.
   const SOURCE_KINDS = [
     ["hand", "Products I pick"],
     ["category", "A category"],
     ["brand", "A brand"],
-    ["tag", "A tag"],
-    ["top", "Top selling (automatic, last 30 days)"],
-    ["onOffer", "On offer (automatic: price below MRP)"],
   ];
   const SORTS = [["top", "Top selling first"], ["discount", "Biggest discount first"], ["priceAsc", "Price: low to high"], ["priceDesc", "Price: high to low"], ["name", "Name A–Z"]];
   const LINK_KINDS = [
@@ -83,11 +85,9 @@
     ["category", "A category"],
     ["product", "One product"],
     ["brand", "A brand's products"],
-    ["tag", "Products with a tag"],
-    ["search", "Search results for…"],
-    ["top", "Top selling products"],
-    ["onOffer", "Everything on offer"],
   ];
+  const SOURCE_OK = SOURCE_KINDS.map(([k]) => k);
+  const LINK_OK = LINK_KINDS.map(([k]) => k);
   const NEEDS_REF = ["category", "brand", "tag", "product"];
   const NEEDS_SORT = ["category", "brand", "tag"];
   // Sales the dashboard way: cancelled and returned orders do not count (D126 c).
@@ -127,7 +127,9 @@
     if (kind === "onOffer") return sortList(cat.filter((i) => i.mrp > i.price), "discount", sold);
     return [];
   }
-  const sectionItems = (s) => sourceAll(s.source, s.itemIds).slice(0, s.limit || defaultLimit(s.type));
+  // Picks show every pick (≤ 20); Beside always 6; a category or brand its "how many".
+  const shownMax = (s) => (s.type === "freshSpotlight" ? R21.beside : !s.source || s.source.kind === "hand" ? R21.picks : s.limit || defaultLimit(s.type));
+  const sectionItems = (s) => sourceAll(s.source, s.itemIds).slice(0, shownMax(s));
   function linkItems(link) {
     if (!link || link.kind === "none") return [];
     if (link.kind === "product") { const i = findItem(Number(link.ref)); return i && withBranchStock(i).stock ? [i] : []; }
@@ -152,7 +154,7 @@
   const describeLink = (link) => (!link || link.kind === "none" ? "Opens nothing" : `Opens: ${describeRef(link.kind, link.ref, link.text)}`);
   function describeSource(s) {
     const src = s.source || { kind: "hand" };
-    const n = s.limit || defaultLimit(s.type);
+    const n = shownMax(s);
     if (src.kind === "hand") return `${plural((s.itemIds || []).length, "product")} picked`;
     const sort = NEEDS_SORT.includes(src.kind) ? ` · ${(SORTS.find(([k]) => k === src.sort) || SORTS[4])[1].toLowerCase()}` : "";
     const what = { category: "Category", brand: "Brand", tag: "Tag" }[src.kind];
@@ -239,6 +241,29 @@
     }
     persist("homeSections");
     syncTagOptions();
+  })();
+  // D128 (the same day): a row filled from a tag, top selling or on offer keeps the products it shows today as its
+  // picks; a tap that opened a tag, search words, top selling or on offer opens nothing; Beside is always 6.
+  (function narrow21() {
+    let changed = false;
+    const fixLink = (l) => {
+      if (!l || LINK_OK.includes(l.kind)) return l;
+      changed = true;
+      return { kind: "none" };
+    };
+    State.homeSections = State.homeSections.map((s) => {
+      const out = { ...s };
+      if (PRODUCT_TYPES.includes(s.type) && s.source && !SOURCE_OK.includes(s.source.kind)) {
+        out.itemIds = sectionItems(s).map((i) => i.id);
+        out.source = { kind: "hand" };
+        changed = true;
+      }
+      if (s.type === "freshSpotlight" && out.limit !== R21.beside) { out.limit = R21.beside; changed = true; }
+      if (PICTURE_TYPES.includes(s.type)) out.link = fixLink(s.link);
+      if (TILE_TYPES.includes(s.type) && s.tiles) out.tiles = s.tiles.map((t) => (t.link ? { ...t, link: fixLink(t.link) } : t));
+      return out;
+    });
+    if (changed) persist("homeSections");
   })();
   // Tiles keep their own link now; the old category / tag fields are retired.
   Object.keys(TILE_TYPE_CONFIG).forEach((k) => { TILE_TYPE_CONFIG[k].link = null; });
@@ -421,17 +446,14 @@
   /* ---------------- 6. Opening a link: the shop list, titled by what was tapped ---------------- */
   const SHOP_SORT = { top: "r21-top", discount: "discount", priceAsc: "price-asc", priceDesc: "price-desc", name: "r21-name" };
   Actions["r21-open-link"] = (el) => {
-    const { kind, ref, text, sort, title } = el.dataset;
+    // D128: a tap opens one product, a category or a brand's products (See all: a category or a brand).
+    const { kind, ref, sort, title } = el.dataset;
     if (kind === "product") { UI.modal = { type: "product", id: Number(ref) }; render(); return; }
     resetAdvancedFilters();
     UI.query = ""; UI.tagFilter = null; UI.cat = ALL_CATEGORIES; UI.shopSort = "relevance";
     if (kind === "category") { const c = findCategory(Number(ref)); if (c) UI.cat = c.name; }
     if (kind === "brand") { const b = brandById(ref); if (b) UI.brandFilter = [b.name]; }
-    if (kind === "tag") UI.tagFilter = ref;
-    if (kind === "search") UI.query = text || "";
-    if (kind === "top") { UI.tagFilter = "__top"; UI.shopSort = "r21-top"; }
-    if (kind === "onOffer") UI.tagFilter = "offer";
-    if (sort && SHOP_SORT[sort] && kind !== "top") UI.shopSort = SHOP_SORT[sort];
+    if (sort && SHOP_SORT[sort]) UI.shopSort = SHOP_SORT[sort];
     UI.r21ListTitle = title || null;
     UI.route = "shop";
     window.scrollTo(0, 0);
@@ -443,16 +465,15 @@
     if (!base) return;
     Actions[name] = (el, ev) => { UI.r21ListTitle = null; return base(el, ev); };
   });
+  // The "On offer" quick filter: computed (price below MRP), not a tag.
   const baseFilteredBase = filteredItemsBase;
   window.filteredItemsBase = () => {
     const keep = UI.tagFilter;
-    if (keep !== "offer" && keep !== "__top") return baseFilteredBase();
+    if (keep !== "offer") return baseFilteredBase();
     UI.tagFilter = null;
     let list;
     try { list = baseFilteredBase(); } finally { UI.tagFilter = keep; }
-    if (keep === "offer") return list.filter((i) => i.mrp > i.price);
-    const sold = unitsSold(30);
-    return list.filter((i) => (sold.get(i.id) || 0) > 0);
+    return list.filter((i) => i.mrp > i.price);
   };
   const baseFiltered = filteredItems;
   window.filteredItems = () => {
@@ -462,7 +483,7 @@
     return list;
   };
   const baseTagLabel = tagLabel;
-  window.tagLabel = (tag) => (tag === "offer" ? "On offer" : tag === "__top" ? "Top selling" : tagBySlug(tag) ? tagName(tag) : baseTagLabel(tag));
+  window.tagLabel = (tag) => (tag === "offer" ? "On offer" : tagBySlug(tag) ? tagName(tag) : baseTagLabel(tag));
   const baseViewShop = viewShop;
   window.viewShop = () => {
     let html = baseViewShop();
@@ -501,9 +522,6 @@
         hand: (s.itemIds || []).length ? "None of the picked products is in stock" : "No products picked yet",
         category: "No product in this category is in stock",
         brand: "No product of this brand is in stock",
-        tag: "No product with this tag is in stock",
-        top: "No orders in the last 30 days yet",
-        onOffer: "No product is priced below its MRP",
       }[src.kind];
     }
     if (s.type === "secondaryBanner") return s.image ? null : "Add a picture";
@@ -519,7 +537,12 @@
     }
     if (PRODUCT_TYPES.includes(s.type)) {
       const all = sourceAll(s.source, s.itemIds).length;
-      const shown = Math.min(all, s.limit || defaultLimit(s.type));
+      const shown = Math.min(all, shownMax(s));
+      if (s.type === "freshSpotlight" && shown < R21.beside) {
+        const picks = (s.itemIds || []).length;
+        const hand = !s.source || s.source.kind === "hand";
+        return `Shows ${shown} of ${R21.beside} — ${hand && picks < R21.beside ? `pick ${R21.beside - picks} more` : hand ? "the others are out of stock" : `only ${shown} in stock`}`;
+      }
       return all > shown ? `Shows ${shown} of ${all} products` : `Shows ${plural(shown, "product")}`;
     }
     if (s.type === "buyAgain") return "Only signed-in customers who ordered in the last 90 days see it — new customers won't";
@@ -649,21 +672,24 @@
     const kind = src.kind;
     const [lo, hi] = limitRange(f.type);
     const limit = f.limit || defaultLimit(f.type);
+    const beside = f.type === "freshSpotlight";
     const parts = [field("Products come from", `<select class="input" name="sourceKind" data-action="r21-form-change">${options(SOURCE_KINDS, kind)}</select>`)];
     if (kind === "hand") {
-      parts.push(`<div class="field"><span class="field-label">Products I pick <span class="qk-muted small" style="font-weight:400">(up to ${R21.picks}, shown in the order you tick them)</span></span>
+      const picked = (f.itemIds || []).length;
+      const howMany = beside ? `exactly ${R21.beside} — ${picked} picked` : `up to ${R21.picks}`;
+      parts.push(`<div class="field"><span class="field-label">Products I pick <span class="qk-muted small" style="font-weight:400">(${howMany}, shown in the order you tick them)</span></span>
         <input class="input" oninput="onPromoProductSearch(this.value)" placeholder="Search products..." style="margin-bottom:8px" />
         <div id="promoProductPicker" class="sidebar-checklist r21-picker">${pickerRows(State.items.map((i) => [i.id, `${i.name} · ${i.unit}`, `${i.name} ${i.brand || ""}`]), f.itemIds || [], "itemIds")}</div></div>`);
     }
     if (kind === "category") parts.push(field("Category", `<select class="input" name="sourceRef" data-action="r21-form-change">${options([["", "Choose…"], ...State.categories.map((c) => [c.id, c.name])], src.ref)}</select>`));
     if (kind === "brand") parts.push(field("Brand", `<select class="input" name="sourceRef" data-action="r21-form-change">${options([["", "Choose…"], ...State.brands.slice().sort((a, b) => a.name.localeCompare(b.name)).map((b) => [b.id, b.name])], src.ref)}</select>`));
-    if (kind === "tag") parts.push(sortedTags().length ? field("Tag", `<select class="input" name="sourceRef" data-action="r21-form-change">${options([["", "Choose…"], ...sortedTags().map((t) => [t.slug, t.name])], src.ref)}</select>`) : note("No tags yet — create one in Masters ▸ Tags.", "warn"));
     if (NEEDS_SORT.includes(kind)) parts.push(field("Order", `<select class="input" name="sourceSort" data-action="r21-form-change">${options(SORTS, src.sort || "top")}</select>`));
-    if (kind !== "hand") parts.push(field(`How many (${lo}–${hi})`, `<input class="input" type="number" name="limit" min="${lo}" max="${hi}" value="${limit}" data-action="r21-form-change" />`));
+    if (kind !== "hand" && !beside) parts.push(field(`How many (${lo}–${hi})`, `<input class="input" type="number" name="limit" min="${lo}" max="${hi}" value="${limit}" data-action="r21-form-change" />`));
+    if (kind !== "hand" && beside) parts.push(note(`Beside the picture there is always room for ${R21.beside} — the first ${R21.beside} in this order show.`, ""));
     const all = sourceAll(src, f.itemIds);
     sourceAllNames = all.slice(0, 3).map((i) => i.name);
     const pseudo = { ...f, source: src };
-    parts.push(countLine(all.length, kind === "hand" ? R21.picks : limit, emptyReason(pseudo, todayShop())));
+    parts.push(countLine(all.length, beside ? R21.beside : kind === "hand" ? R21.picks : limit, emptyReason(pseudo, todayShop())));
     return `<div class="r21-block"><div class="r21-block-title">Products</div>${parts.join("")}</div>`;
   }
   function linkFields(link, label) {
@@ -672,8 +698,6 @@
     if (link.kind === "category") parts.push(field("Category", `<select class="input" name="linkRef" data-action="r21-form-change">${options([["", "Choose…"], ...State.categories.map((c) => [c.id, c.name])], link.ref)}</select>`));
     if (link.kind === "product") parts.push(field("Product", `<select class="input" name="linkRef" data-action="r21-form-change">${options([["", "Choose…"], ...State.items.slice().sort((a, b) => a.name.localeCompare(b.name)).map((i) => [i.id, `${i.name} · ${i.unit}`])], link.ref)}</select>`));
     if (link.kind === "brand") parts.push(field("Brand", `<select class="input" name="linkRef" data-action="r21-form-change">${options([["", "Choose…"], ...State.brands.slice().sort((a, b) => a.name.localeCompare(b.name)).map((b) => [b.id, b.name])], link.ref)}</select>`));
-    if (link.kind === "tag") parts.push(sortedTags().length ? field("Tag", `<select class="input" name="linkRef" data-action="r21-form-change">${options([["", "Choose…"], ...sortedTags().map((t) => [t.slug, t.name])], link.ref)}</select>`) : note("No tags yet — create one in Masters ▸ Tags.", "warn"));
-    if (link.kind === "search") parts.push(field("Search words", `<input class="input" name="linkText" maxlength="100" value="${esc(link.text || "")}" placeholder="e.g. mango" data-action="r21-form-change" />`, "The shopper sees the shop's search results for these words."));
     if (link.kind !== "none") {
       const n = linkItems(link).length;
       parts.push(n ? note(`${ic("check")} Opens ${plural(n, "product")} right now.`, "ok") : note(`${ic("alert")} Opens an empty list right now — check the choice above.`, "warn"));
@@ -756,6 +780,7 @@
     const get = (k) => (fd.has(k) ? String(fd.get(k)) : null);
     if (get("title") != null) f.title = get("title").trim();
     if (get("type")) f.type = get("type");
+    if (f.type === "freshSpotlight") f.limit = R21.beside;
     if (get("image") != null) f.image = get("image").trim();
     if (get("subtitle") != null) f.subtitle = get("subtitle").trim();
     if (get("sourceKind")) {
@@ -769,14 +794,13 @@
       const before = (f.itemIds || []).filter((id) => ticked.includes(id));
       f.itemIds = [...before, ...ticked.filter((id) => !before.includes(id))];
     }
-    if (get("limit")) f.limit = Number(get("limit"));
+    if (get("limit") && f.type !== "freshSpotlight") f.limit = Number(get("limit"));
     if (get("linkKind")) {
       const kind = get("linkKind");
       const prev = f.link || {};
       f.link = { kind };
       if (NEEDS_REF.includes(kind)) f.link.ref = kind === prev.kind ? get("linkRef") ?? prev.ref ?? "" : "";
-      if (kind === "search") f.link.text = (get("linkText") ?? (prev.kind === "search" ? prev.text : "") ?? "").trim();
-      if (["tag", "category", "brand"].includes(kind)) f.link.sort = "top";
+      if (["category", "brand"].includes(kind)) f.link.sort = "top";
     }
     if (get("pickAll")) f.pick = { all: get("pickAll") === "all", ids: fd.getAll("pickIds").map(Number) };
     f.enabled = form.querySelector('[name="enabled"]') ? fd.has("enabled") : f.enabled !== false;
@@ -793,18 +817,23 @@
     if (PICTURE_TYPES.includes(type) && !f.image) return "Add a picture — upload one or paste an https:// link";
     if (PRODUCT_TYPES.includes(type)) {
       const src = f.source || {};
+      if (!SOURCE_OK.includes(src.kind)) return "Choose where the products come from";
       if (NEEDS_REF.includes(src.kind) && !src.ref) return `Choose the ${src.kind} the products come from`;
-      if (src.kind === "hand" && !(f.itemIds || []).length) return "Pick at least one product";
-      if (src.kind === "hand" && f.itemIds.length > R21.picks) return `Pick at most ${R21.picks} products`;
+      const picked = (f.itemIds || []).length;
+      if (src.kind === "hand" && type === "freshSpotlight" && picked !== R21.beside) {
+        return picked < R21.beside ? `Pick exactly ${R21.beside} products — ${R21.beside - picked} more to go` : `Pick exactly ${R21.beside} products — untick ${picked - R21.beside}`;
+      }
+      if (src.kind === "hand" && !picked) return "Pick at least one product";
+      if (src.kind === "hand" && picked > R21.picks) return `Pick at most ${R21.picks} products`;
       const [lo, hi] = limitRange(type);
-      if (src.kind !== "hand" && (!(f.limit >= lo) || f.limit > hi)) return `How many: ${lo} to ${hi}`;
+      if (src.kind !== "hand" && type !== "freshSpotlight" && (!(f.limit >= lo) || f.limit > hi)) return `How many: ${lo} to ${hi}`;
       const mine = src.kind === "hand" ? (f.itemIds || []).length : f.limit;
       if (cardsUsed(f.id) + mine > R21.cards) return `The page holds at most ${R21.cards} product cards — ${cardsUsed(f.id)} are used by other sections`;
     }
     if (type === "buyAgain" && cardsUsed(f.id) + 20 > R21.cards) return `The page holds at most ${R21.cards} product cards — ${cardsUsed(f.id)} are used by other sections`;
     if (PICTURE_TYPES.includes(type) && f.link) {
+      if (!LINK_OK.includes(f.link.kind)) return "Choose what the button opens";
       if (NEEDS_REF.includes(f.link.kind) && !f.link.ref) return "Choose what the button opens";
-      if (f.link.kind === "search" && !f.link.text) return "Type the search words";
     }
     if ((type === "categoryGrid" || type === "brandGrid") && f.pick && !f.pick.all) {
       if (!(f.pick.ids || []).length) return "Choose at least one, or pick “All”";
@@ -953,8 +982,7 @@
       const prev = t.link || {};
       t.link = { kind };
       if (NEEDS_REF.includes(kind)) t.link.ref = kind === prev.kind ? (fd.has("linkRef") ? String(fd.get("linkRef")) : prev.ref || "") : "";
-      if (kind === "search") t.link.text = String(fd.get("linkText") ?? (prev.kind === "search" ? prev.text || "" : "")).trim();
-      if (["tag", "category", "brand"].includes(kind)) t.link.sort = "top";
+      if (["category", "brand"].includes(kind)) t.link.sort = "top";
     }
     t.enabled = fd.has("enabled");
     t.startsOn = String(fd.get("startsOn") || "");
@@ -968,8 +996,7 @@
     const section = State.homeSections.find((s) => s.id === Number(form.dataset.section));
     const isNew = form.dataset.tile === "new";
     if (isNew && section.type === "trustStrip" && (section.tiles || []).length >= R21.highlights) { UI.modal.error = `A highlights strip holds at most ${R21.highlights} items`; render(); return; }
-    if (t.link && NEEDS_REF.includes(t.link.kind) && !t.link.ref) { UI.modal.error = "Choose what the tap opens"; render(); return; }
-    if (t.link && t.link.kind === "search" && !t.link.text) { UI.modal.error = "Type the search words"; render(); return; }
+    if (t.link && (!LINK_OK.includes(t.link.kind) || (NEEDS_REF.includes(t.link.kind) && !t.link.ref))) { UI.modal.error = "Choose what the tap opens"; render(); return; }
     if (t.startsOn && t.lastDay && t.lastDay < t.startsOn) { UI.modal.error = "The last day must be on or after the start day"; render(); return; }
     const beforeIds = new Set((section.tiles || []).map((x) => x.id));
     baseSaveTile(form, ev);
@@ -1064,17 +1091,9 @@
   })();
 
   /* ---------------- 14. Masters ▸ Tags ---------------- */
+  // Since D128 the home page never names a tag, so only products count.
   function tagUse(slug) {
-    const products = State.items.filter((i) => (i.tags || []).includes(slug));
-    const today = todayShop();
-    const uses = [];
-    sortedHomeSections().forEach((s) => {
-      const st = sectionStatus(s, today).chip;
-      if (s.source && s.source.kind === "tag" && s.source.ref === slug) uses.push(`“${homeSectionLabel(s)}” (${st}) · its products`);
-      if (s.link && s.link.kind === "tag" && s.link.ref === slug) uses.push(`“${homeSectionLabel(s)}” (${st}) · its button`);
-      sortedTiles(s).forEach((t) => { if (t.link && t.link.kind === "tag" && t.link.ref === slug) uses.push(`“${homeSectionLabel(s)}” (${st}) · ${tileWord(s)} “${t.title}”`); });
-    });
-    return { products, uses };
+    return { products: State.items.filter((i) => (i.tags || []).includes(slug)), uses: [] };
   }
   function adminTags(editable) {
     const tags = sortedTags();
@@ -1083,7 +1102,7 @@
     ${editable ? `<button class="btn btn-primary btn-sm" data-action="r21-new-tag" ${tags.length >= R21.tags ? "disabled" : ""}>${ic("plus")} Add tag</button>` : "<span></span>"}
     <span class="qk-muted small">${tags.length} of ${R21.tags} tags</span>
   </div>
-  <div class="qk-muted small" style="margin:10px 0">Tags group products for home-page rows, banners and the shop's quick filters, in this order. <b>On offer</b> is automatic (price below MRP) — it isn't a tag. A tag's short name (shown in grey) is fixed once made.</div>
+  <div class="qk-muted small" style="margin:10px 0">Tags label products — customers filter by them in the shop's quick filters, in this order. <b>On offer</b> is automatic (price below MRP) — it isn't a tag. A tag's short name (shown in grey) is fixed once made.</div>
   <div class="admin-table">
     ${tags.length ? tags.map((t, idx) => { const u = tagUse(t.slug); return `
       <div class="admin-row">
@@ -1106,7 +1125,7 @@
     return dialog(f.id ? "Rename tag" : "Add tag", `
       <form class="dialog-body" data-action="r21-save-tag">
         ${field("Name *", `<input class="input" name="name" maxlength="40" value="${esc(f.name || "")}" placeholder="e.g. Diwali specials" oninput="var s=document.getElementById('r21Slug'); if (s && !${f.id ? "true" : "false"}) s.textContent=this.value.toLowerCase().normalize('NFKD').replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'').slice(0,40) || '—'" />`)}
-        <div class="qk-muted small" style="margin:-6px 0 12px">Short name: <b id="r21Slug">${esc(slug || "—")}</b> ${f.id ? "(fixed — links keep working when you rename)" : "(fixed once made)"}</div>
+        <div class="qk-muted small" style="margin:-6px 0 12px">Short name: <b id="r21Slug">${esc(slug || "—")}</b> ${f.id ? "(fixed — filters keep working when you rename)" : "(fixed once made)"}</div>
         ${UI.modal.error ? `<div class="field-error">${esc(UI.modal.error)}</div>` : ""}
         <div class="form-actions">
           <button type="button" class="btn btn-outline btn-block" data-action="close-modal">Cancel</button>
@@ -1204,15 +1223,72 @@
       </div>`).join("")}
     ${brands.length === 0 ? `<div class="empty-state"><div class="empty-title">No brands match</div></div>` : ""}`;
 
-  /* ---------------- 16. What's changed ---------------- */
-  WHATS_NEW.unshift({ area: "Round 21 — the home page builder (D126, P24 — backend not built yet)", items: [
+  /* ---------------- 16. A product's pack size: Pack of + Amount + a listed unit (D127, FX-1) ---------------- */
+  const UNIT_RULES = {
+    g: { min: 1, max: 9999, whole: true }, kg: { min: 0.01, max: 100 }, ml: { min: 1, max: 9999, whole: true }, L: { min: 0.01, max: 100 },
+    pc: { min: 1, max: 1000, whole: true }, pack: { min: 1, max: 100, whole: true }, bunch: { min: 1, max: 20, whole: true },
+  };
+  const UNIT_LIST = [["g", "g — grams"], ["kg", "kg — kilograms"], ["ml", "ml — millilitres"], ["L", "L — litres"], ["pc", "pc — pieces"], ["pack", "pack"], ["bunch", "bunch"]];
+  // "6 x 325 ml", "1.5 kg", "2 packs" back into the three boxes; anything else (an old free-text unit) leaves them empty.
+  function splitUnit(text) {
+    const m = /^(?:(\d{1,2}) x )?(\d+(?:\.\d{1,3})?) (g|kg|ml|L|pc|packs?|bunch(?:es)?)$/.exec(String(text || "").trim());
+    if (!m) return null;
+    return { pack: m[1] || "", amount: m[2], unit: m[3].startsWith("pack") ? "pack" : m[3].startsWith("bunch") ? "bunch" : m[3] };
+  }
+  // The backend's standard form (src/modules/catalog/product-units.ts), or the reason it would refuse.
+  function joinUnit(packTyped, amount, unit) {
+    const pack = packTyped === "1" ? "" : packTyped; // 1 is the same as none, as the backend reads it
+    const rule = UNIT_RULES[unit];
+    if (!rule) return { error: "Unit: choose one from the list" };
+    if (!/^\d+(\.\d{1,3})?$/.test(amount)) return { error: `Amount: a number${rule.whole ? "" : ", up to 3 decimals"}` };
+    const n = Number(amount);
+    if (rule.whole && !Number.isInteger(n)) return { error: `Amount in ${unit}: a whole number` };
+    if (n < rule.min || n > rule.max) return { error: `Amount in ${unit}: ${rule.min} to ${rule.max.toLocaleString("en-GB")}` };
+    if (pack && !/^\d+$/.test(pack)) return { error: "Pack of: a whole number from 2 to 99 (empty for one)" };
+    if (pack && (Number(pack) < 2 || Number(pack) > 99)) return { error: "Pack of: 2 to 99 (empty for one)" };
+    const word = n > 1 && unit === "pack" ? "packs" : n > 1 && unit === "bunch" ? "bunches" : unit;
+    return { text: `${pack ? `${Number(pack)} x ` : ""}${n} ${word}` };
+  }
+  const UNIT_FIELD = /<label class="field"><span class="field-label">Unit<\/span><input class="input" name="unit"[^>]*\/><\/label>/;
+  const unitItemForm = window.itemFormModal;
+  window.itemFormModal = (...args) => {
+    const f = UI.modal.form;
+    const parts = splitUnit(f.unit) || { pack: "", amount: "", unit: "" };
+    const old = f.unit && !splitUnit(f.unit) ? `<span class="qk-muted small r21-hint">Saved as “${esc(f.unit)}” — not a listed unit. Choose one to save the product.</span>` : "";
+    return unitItemForm(...args).replace(UNIT_FIELD, () => `
+        <div class="field"><span class="field-label">Pack size *</span>
+          <div class="field-grid-3">
+            <label class="field"><span class="field-label small">Pack of</span><input class="input" name="unitPack" type="number" min="2" max="99" step="1" value="${esc(parts.pack)}" placeholder="—" /></label>
+            <label class="field"><span class="field-label small">Amount</span><input class="input" name="unitAmount" inputmode="decimal" value="${esc(parts.amount)}" placeholder="e.g. 500" /></label>
+            <label class="field"><span class="field-label small">Unit</span><select class="input" name="unitKind">${options([["", "Choose…"], ...UNIT_LIST], parts.unit)}</select></label>
+          </div>
+          <span class="qk-muted small r21-hint">Saved as e.g. “500 g”, “1.5 kg”, “6 x 325 ml”. Pack of = how many in a multipack — leave it empty for one.</span>${old}
+          <input type="hidden" name="unit" value="${esc(f.unit || "")}" />
+        </div>`);
+  };
+  const unitSaveItem = Submits["save-item"];
+  Submits["save-item"] = (form, ev) => {
+    const fd = new FormData(form);
+    if (fd.has("unitKind")) {
+      const res = joinUnit(String(fd.get("unitPack") || "").trim(), String(fd.get("unitAmount") || "").trim(), String(fd.get("unitKind") || ""));
+      if (res.error) { showToast(res.error, "danger"); return; }
+      form.querySelector('input[name="unit"]').value = res.text;
+    }
+    return unitSaveItem(form, ev);
+  };
+
+  /* ---------------- 17. What's changed ---------------- */
+  WHATS_NEW.unshift({ area: "Round 21 — the home page builder (D126, narrowed by D128; P24 — backend not built yet)", items: [
     ["Add section asks for a layout", "Marketing ▸ Home Screen ▸ Add section opens a gallery: Banners (Banner carousel, Single banner, Banner tiles), Products (Product row, Product grid, Banner + products, Combos), Shop by (Category grid, Shop by brand), For each shopper (Buy again, Recently viewed), Info (Highlights strip). Each card has a small drawing. Any layout can be added more than once — Combos only once. At most 25 sections and 200 product cards a page."],
-    ["Where products come from", "A product row, grid or banner + products takes its products from: products you pick, a category, a brand, a tag (ordered top selling / biggest discount / price / name), Top selling (automatic, last 30 days) or On offer (automatic: price below MRP). A line under the choice says how many it shows right now, or why it would be hidden."],
-    ["What a tap opens", "Every slide, tile and banner chooses what a tap opens: nothing (no button), a category, one product, a brand, a tag, search results for some words, top selling, or everything on offer. The list opens with the title of what was tapped."],
+    ["Where products come from", "A product row, grid or banner + products takes its products from one of three: products you pick, a category, or a brand (a category or brand ordered top selling / biggest discount / price / name). A line under the choice says how many it shows right now, or why it would be hidden. (D128: no tag, top selling or on-offer source.)"],
+    ["What a tap opens", "Every slide, tile and banner chooses one of four: Nothing — no button, A category, One product, or A brand's products. The list opens with the title of what was tapped. (D128: no tag, search words, top selling or on offer.)"],
+    ["Banner + products beside: always 6", "With the picture beside the products there is no “How many” box: picked products must be exactly 6, and a category or brand shows its first 6. If fewer are in stock, customers see those and the chip says “Shows 4 of 6”. The picture above keeps 1–20."],
+    ["The upgrade keeps the page", "Rows that filled themselves from a tag, top selling or on offer (Popular Near You, Best Sellers, Fresh Picks, Today's Offers, Indian Essentials, Singapore Favourites) now hold the products they showed as picked products — they no longer move with sales or stock, and have no See all. Tiles and banners that opened a tag or on offer (the three square tiles, Fresh Picks, the weekly-savings banner) now open nothing — point them at a category, product or brand."],
     ["Dates and one status chip", "Sections and each slide or tile have Starts on (empty = now) and Last day (shown to the end of that day), in Singapore time — the coupons' convention. Each row shows one chip — Off, Ended, Scheduled, Empty or On — with the reason on the line under it."],
     ["Promotions are now slides", "Marketing ▸ Promotions is gone. Each promotion became a slide at the end of the first banner carousel (switched-off ones stay off); the Home Screen shows a one-time note. The Promotions permission is gone from roles — Home Screen permission covers banners."],
-    ["Masters ▸ Tags", "Each shop makes its own tags (up to 50) — the old fixed five became Prabhas's own (Best Sellers, Fresh Picks, Indian Essentials, Singapore Favourites). A tag's short name is fixed once made; “offer” is reserved. Deleting a tag that products or the home page use is refused with the list. The product form's chips are the shop's tags."],
+    ["Masters ▸ Tags", "Each shop makes its own tags (up to 50) — the old fixed five became Prabhas's own (Best Sellers, Fresh Picks, Indian Essentials, Singapore Favourites). A tag's short name is fixed once made; “offer” is reserved. Deleting a tag that products carry is refused with the list. The product form's chips are the shop's tags, and the customer's quick filters."],
     ["Brand logos", "Masters ▸ Brands: each brand can have a logo (upload or https link). Shop by brand shows the brands that have one."],
+    ["A product's pack size from a list (D127)", "Catalogue ▸ product form: Unit is now Pack of (optional, 2–99) + Amount + a Unit from the list — g, kg, ml, L, pc, pack, bunch — each with its range (g / ml 1–9 999, kg / L 0.01–100, pc 1–1 000, pack 1–100, bunch 1–20). Saved as “500 g”, “1.5 kg”, “6 x 325 ml”, “2 packs”. A product whose saved unit isn't one of these asks for a unit before it can be saved."],
     ["The customer home page", "Sections show in exactly the admin's order (no banner forced to the top), with neutral words — no built-in “Farm fresh” or “Weekly savings” — and a banner with nothing to open has no button. New: Product grid, Category grid, Shop by brand and Buy again (what a signed-in customer ordered most often in 90 days). The shop's quick filters are the shop's tags plus On offer."],
   ] });
 })();
