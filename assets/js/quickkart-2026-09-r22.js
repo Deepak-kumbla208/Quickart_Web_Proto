@@ -19,6 +19,8 @@
              line; a free-delivery coupon is not applied to express; the demo shop's express = its fee + its old extra.
    Then (D131): Schedule delivery is the default — the earliest free slot already picked; Express only when the
              customer taps it (or when the store has no free slot).
+   And (D132, FX-4): every Upload button takes an SVG too — kept as it is (never shrunk), cleaned the way the API
+             cleans it (no scripts, event handlers or links out of the file); anything else is "not an SVG picture".
    ==================================================================== */
 (function round22UnitsAndMenu() {
   /* ---------------- 1. The list as GET /admin/products/units answers it (D127 f) ---------------- */
@@ -148,7 +150,8 @@
   }
 
   /* ---------------- 4. What's changed ---------------- */
-  WHATS_NEW.unshift({ area: "Round 22 — the Unit list from the API (D127 f, FX-2), Home Screen under Setup, express instead of the delivery fee and free above a limit (D130, D129, FX-3)", items: [
+  WHATS_NEW.unshift({ area: "Round 22 — the Unit list from the API (D127 f, FX-2), Home Screen under Setup, express instead of the delivery fee and free above a limit (D130, D129, FX-3), SVG pictures (D132, FX-4)", items: [
+    ["SVG pictures (D132)", "Every Upload button — products, categories, home sections, tiles, slides, combos, brand logos and the store logo — now takes an SVG as well as JPEG, PNG or WebP (up to 2 MB). A photo is still shrunk to 1200 px; an SVG is kept as it is, so a logo stays sharp at any size. The API cleans an SVG as it arrives — scripts, event handlers and links out of the file are removed — and refuses a file that is not an SVG picture (“This file is not an SVG picture”). Admin app: add image/svg+xml to the picker and never draw an SVG on a canvas. API: contentType image/svg+xml on POST /admin/uploads/presign."],
     ["Schedule delivery is the default (D131)", "Express usually costs more than a normal delivery, so the cart and checkout now start on “Schedule delivery” with the earliest free slot already picked — the customer can change the slot or tap Express. Express is pre-selected only when the store has no free slot. After an order, the next one starts on Schedule again. API: a checkout or order without deliverySpeed is now scheduled (it was express), so it needs a slot — always send the speed."],
     ["Express is its own delivery price (D130)", "An express order now pays the express price instead of the delivery fee — not both. The bill has one delivery line, “Express delivery S$x”; scheduled orders pay the delivery fee as before, pickup neither. Business Settings ▸ Express Delivery calls it “Express delivery price”, and every shop's express price became its delivery fee + its old extra, so nothing got cheaper or free overnight (the demo shop: S$4.90 + S$2.50 = S$7.40). A free-delivery coupon is for scheduled delivery: on an express order it shows “not applied” with the reason. API: deliveryFee “0.00” and expressCharge the price on an express bill (customer contract 0.27.0-draft)."],
     ["Free express above a limit (admin)", "Setup ▸ Business Settings ▸ Delivery & Payments ▸ Express Delivery has a new box, “Free express above (S$)”. An express order whose items (after the coupon — the same measure as free delivery) reach it pays no express charge. Empty = express is always charged, which is how every shop starts. It is its own amount, separate from “Free delivery above”. 0–100 000; a wrong value shows its reason in red under the box. API: delivery.freeExpressThreshold on GET / PATCH /admin/settings (null clears it)."],
@@ -391,5 +394,92 @@
       .replace("We'll get it to you, no rush", () =>
         express ? "As soon as it's ready" : slot ? `${slot} — change it at checkout` : "Pick a time at checkout",
       );
+  };
+})();
+
+/* ---------------- Later the same day: SVG pictures (backend D132, FX-4) ----------------
+   Round 10's Upload buttons took JPEG, PNG or WebP and shrank every picture on a canvas. An SVG is now taken too, kept as
+   it is (a canvas would turn a logo into a WebP), and cleaned the way the API cleans it on upload. */
+(function round22SvgPictures() {
+  const SVG = "image/svg+xml";
+  const HINT =
+    "JPEG, PNG, WebP or SVG, up to 2 MB — photos are shrunk to 1200 px before upload; an SVG is kept as it is. Or paste an https:// link.";
+  const isSvg = (file) => file.type === SVG || (!file.type && /\.svg$/i.test(file.name));
+  const kb = (blob) => Math.max(1, Math.round(blob.size / 1024));
+
+  // The pickers offer SVG too: their accept list is built from UPLOAD_TYPES each time a form is drawn.
+  if (!UPLOAD_TYPES.includes(SVG)) UPLOAD_TYPES.push(SVG);
+
+  // A photo is still shrunk; an SVG never reaches the canvas, and any other type names SVG in its refusal.
+  const shrink = shrinkPicture;
+  shrinkPicture = async (file) => {
+    if (!UPLOAD_TYPES.includes(file.type) || file.type === SVG) throw new Error("Only JPEG, PNG, WebP or SVG pictures");
+    return shrink(file);
+  };
+
+  /** What the API keeps (D132 a): one <svg>, without scripts, <foreignObject>, on… handlers or links out of the file. */
+  async function cleanSvg(file) {
+    if (file.size > UPLOAD_MAX_BYTES) throw new Error("The picture is larger than 2 MB — shrink it before uploading");
+    const doc = new DOMParser().parseFromString(await file.text(), SVG);
+    const root = doc.documentElement;
+    if (doc.getElementsByTagName("parsererror").length || !root || root.localName !== "svg") {
+      throw new Error("This file is not an SVG picture");
+    }
+    root.querySelectorAll("script, foreignObject, animate, set").forEach((node) => node.remove());
+    [root, ...root.querySelectorAll("*")].forEach((node) => {
+      [...node.attributes].forEach((attr) => {
+        const value = attr.value.trim();
+        const link = /(^|:)href$/i.test(attr.name);
+        const kept = value.startsWith("#") || (node.localName === "image" && /^data:image\/(png|jpeg|gif|webp);base64,/i.test(value));
+        if (/^on/i.test(attr.name) || (link && !kept)) node.removeAttribute(attr.name);
+      });
+    });
+    return new Blob([new XMLSerializer().serializeToString(root)], { type: SVG });
+  }
+
+  // The hint under every Upload button and under the logo's upload.
+  const withButton = withUploadButton;
+  withUploadButton = (html, purpose) => withButton(html, purpose).split(UPLOAD_HINT).join(HINT);
+  const branding = adminThemeBranding;
+  window.adminThemeBranding = (editable) => branding(editable).split(UPLOAD_HINT).join(HINT);
+
+  // Real app: POST /admin/uploads/presign { purpose, contentType: "image/svg+xml", sizeBytes: file.size } → PUT the file
+  // as it is to uploadUrl → box.value = publicUrl. The prototype keeps the cleaned SVG as a data: address instead.
+  const upload = Actions["upload-picture"];
+  Actions["upload-picture"] = async (el, ev) => {
+    const file = el.files && el.files[0];
+    if (!file || !isSvg(file)) return upload(el, ev);
+    const field = el.closest(".field");
+    try {
+      const picture = await cleanSvg(file);
+      const address = await pictureAddress(picture);
+      field.querySelector('input[name="image"]').value = address;
+      const row = field.closest(".form-media-row");
+      const preview = row && row.querySelector(".form-media-preview");
+      if (preview) preview.src = address;
+      if (UI.modal && UI.modal.form) UI.modal.form.image = address;
+      showToast(`SVG uploaded — ${kb(picture)} KB, sharp at any size. It is saved with the form.`);
+    } catch (e) {
+      showToast(e.message || "Upload failed — try again", "danger");
+    } finally {
+      el.value = ""; // the same file can be picked again
+    }
+  };
+
+  const logo = Actions["logo-file-upload"];
+  Actions["logo-file-upload"] = async (el, ev) => {
+    const file = el.files && el.files[0];
+    if (!file || !isSvg(file)) return logo(el, ev);
+    try {
+      const picture = await cleanSvg(file);
+      const address = await pictureAddress(picture); // real app: presign (purpose "logo") + PUT → publicUrl
+      ensureThemeDraft();
+      UI.themeDraft.branding.logoUrl = address;
+      render();
+      showToast(`Logo uploaded — SVG, ${kb(picture)} KB, sharp at any size. Save to apply it.`);
+    } catch (e) {
+      el.value = "";
+      showToast(e.message || "Upload failed — try again", "danger");
+    }
   };
 })();
