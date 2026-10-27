@@ -17,6 +17,8 @@
              checkout say "Add S$x more for free express".
    Then (D130, the same MR): an express order pays the express price INSTEAD OF the delivery fee — one delivery
              line; a free-delivery coupon is not applied to express; the demo shop's express = its fee + its old extra.
+   Then (D131): Schedule delivery is the default — the earliest free slot already picked; Express only when the
+             customer taps it (or when the store has no free slot).
    ==================================================================== */
 (function round22UnitsAndMenu() {
   /* ---------------- 1. The list as GET /admin/products/units answers it (D127 f) ---------------- */
@@ -147,6 +149,7 @@
 
   /* ---------------- 4. What's changed ---------------- */
   WHATS_NEW.unshift({ area: "Round 22 — the Unit list from the API (D127 f, FX-2), Home Screen under Setup, express instead of the delivery fee and free above a limit (D130, D129, FX-3)", items: [
+    ["Schedule delivery is the default (D131)", "Express usually costs more than a normal delivery, so the cart and checkout now start on “Schedule delivery” with the earliest free slot already picked — the customer can change the slot or tap Express. Express is pre-selected only when the store has no free slot. After an order, the next one starts on Schedule again. API: a checkout or order without deliverySpeed is now scheduled (it was express), so it needs a slot — always send the speed."],
     ["Express is its own delivery price (D130)", "An express order now pays the express price instead of the delivery fee — not both. The bill has one delivery line, “Express delivery S$x”; scheduled orders pay the delivery fee as before, pickup neither. Business Settings ▸ Express Delivery calls it “Express delivery price”, and every shop's express price became its delivery fee + its old extra, so nothing got cheaper or free overnight (the demo shop: S$4.90 + S$2.50 = S$7.40). A free-delivery coupon is for scheduled delivery: on an express order it shows “not applied” with the reason. API: deliveryFee “0.00” and expressCharge the price on an express bill (customer contract 0.27.0-draft)."],
     ["Free express above a limit (admin)", "Setup ▸ Business Settings ▸ Delivery & Payments ▸ Express Delivery has a new box, “Free express above (S$)”. An express order whose items (after the coupon — the same measure as free delivery) reach it pays no express charge. Empty = express is always charged, which is how every shop starts. It is its own amount, separate from “Free delivery above”. 0–100 000; a wrong value shows its reason in red under the box. API: delivery.freeExpressThreshold on GET / PATCH /admin/settings (null clears it)."],
     ["Free express in the cart and checkout (customer)", "With Express chosen, the cart and checkout say “Add S$x more for free express” with a progress bar, like the free-delivery one; once reached the Express choice reads “Express delivery · Free” and the bill has no express charge (and no GST on it). The free-delivery limit never makes express free. API: the bill's freeExpressThreshold and amountToFreeExpress (customer contract 0.27.0-draft) — show what the API sends, never work it out in the app."],
@@ -317,5 +320,76 @@
     }
     showToast(`Express delivery ${expressEnabled() ? `on · ${money(expressChargeAmount())}` : "off"} · ${next === null ? "always charged" : `free from ${money(next)}`}`);
     render();
+  };
+})();
+/* ---------------- Later the same day: scheduled is the default speed (backend D131, FX-3, MR !146) ---------------- */
+(function round22ScheduledDefault() {
+  // The earliest slot a customer could book at this store, or null when every slot is full, closed or past.
+  const earliestSlot = (branch) => {
+    if (!branch) return null;
+    for (const d of slotDays()) {
+      for (const s of slotsFor(branch.id, d.date)) {
+        const inf = slotInfo(branch.id, d.date, s);
+        if (slotBookable(inf)) return inf.key;
+      }
+    }
+    return null;
+  };
+
+  /* Express usually costs more than a normal delivery, so the shop never chooses it for the customer: Schedule is
+     selected with the earliest free slot already picked, until the customer taps Express. Express is the
+     pre-selection only when scheduled delivery cannot be had — the store has no free slot. */
+  const applyDefault = () => {
+    if (UI.fulfillment === "pickup" || !State.session) return;
+    const branch = checkoutAssignment().branch;
+    const first = earliestSlot(branch);
+    const noSlot = !!branch && !first;
+    if (!UI.r22SpeedChosen) UI.deliverySpeed = noSlot && expressEnabled() ? "express" : "scheduled";
+    if (effectiveDeliverySpeed() === "scheduled" && first && !selectedSlotValid(branch)) UI.scheduledSlot = first;
+  };
+
+  UI.deliverySpeed = "scheduled";
+  const chooseSpeed = Actions["set-delivery-speed"];
+  Actions["set-delivery-speed"] = (el, ev) => {
+    UI.r22SpeedChosen = true; // the customer's own choice from here on
+    return chooseSpeed(el, ev);
+  };
+
+  const cart = viewCart;
+  window.viewCart = (...args) => {
+    applyDefault();
+    return cart(...args);
+  };
+  const checkout = viewCheckout;
+  window.viewCheckout = (...args) => {
+    applyDefault();
+    return checkout(...args);
+  };
+
+  // After an order the app used to go back to Express; the next order starts on Schedule again.
+  const pay = handlePay;
+  window.handlePay = (method) => {
+    const result = pay(method);
+    if (!Object.values(State.cart).some((qty) => qty > 0)) {
+      UI.r22SpeedChosen = false;
+      UI.deliverySpeed = "scheduled";
+    }
+    return result;
+  };
+})();
+/* The cart's banner names the delivery the customer is getting (D131) — it said "Delivery at your convenience",
+   the old name of express, whichever speed was chosen. */
+(function round22SpeedBanner() {
+  const banner = deliveryEtaBannerHTML;
+  window.deliveryEtaBannerHTML = (cartItems, isPickup) => {
+    const html = banner(cartItems, isPickup);
+    if (isPickup || !cartItems.length) return html;
+    const express = effectiveDeliverySpeed() === "express";
+    const slot = !express && UI.scheduledSlot ? slotLabelFromKey(UI.scheduledSlot) : "";
+    return html
+      .replace("Delivery at your convenience", () => (express ? "Express delivery" : "Scheduled delivery"))
+      .replace("We'll get it to you, no rush", () =>
+        express ? "As soon as it's ready" : slot ? `${slot} — change it at checkout` : "Pick a time at checkout",
+      );
   };
 })();
