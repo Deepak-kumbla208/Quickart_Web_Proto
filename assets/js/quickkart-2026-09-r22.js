@@ -13,8 +13,10 @@
    0.27.0-draft) — business_settings.free_express_threshold, admin delivery.freeExpressThreshold, the bill's
    freeExpressThreshold / amountToFreeExpress.
    Admin:    Business Settings ▸ Express Delivery — "Free express above (S$)" under the charge; empty = always charged.
-   Customer: express is free once the items after the coupon reach it (like free delivery, its own amount; a
-             free-delivery coupon still covers only the fee); cart and checkout say "Add S$x more for free express".
+   Customer: express is free once the items after the coupon reach it (like free delivery, its own amount); cart and
+             checkout say "Add S$x more for free express".
+   Then (D130, the same MR): an express order pays the express price INSTEAD OF the delivery fee — one delivery
+             line; a free-delivery coupon is not applied to express; the demo shop's express = its fee + its old extra.
    ==================================================================== */
 (function round22UnitsAndMenu() {
   /* ---------------- 1. The list as GET /admin/products/units answers it (D127 f) ---------------- */
@@ -144,9 +146,10 @@
   }
 
   /* ---------------- 4. What's changed ---------------- */
-  WHATS_NEW.unshift({ area: "Round 22 — the Unit list from the API (D127 f, FX-2), Home Screen under Setup, free express above a limit (D129, FX-3)", items: [
+  WHATS_NEW.unshift({ area: "Round 22 — the Unit list from the API (D127 f, FX-2), Home Screen under Setup, express instead of the delivery fee and free above a limit (D130, D129, FX-3)", items: [
+    ["Express is its own delivery price (D130)", "An express order now pays the express price instead of the delivery fee — not both. The bill has one delivery line, “Express delivery S$x”; scheduled orders pay the delivery fee as before, pickup neither. Business Settings ▸ Express Delivery calls it “Express delivery price”, and every shop's express price became its delivery fee + its old extra, so nothing got cheaper or free overnight (the demo shop: S$4.90 + S$2.50 = S$7.40). A free-delivery coupon is for scheduled delivery: on an express order it shows “not applied” with the reason. API: deliveryFee “0.00” and expressCharge the price on an express bill (customer contract 0.27.0-draft)."],
     ["Free express above a limit (admin)", "Setup ▸ Business Settings ▸ Delivery & Payments ▸ Express Delivery has a new box, “Free express above (S$)”. An express order whose items (after the coupon — the same measure as free delivery) reach it pays no express charge. Empty = express is always charged, which is how every shop starts. It is its own amount, separate from “Free delivery above”. 0–100 000; a wrong value shows its reason in red under the box. API: delivery.freeExpressThreshold on GET / PATCH /admin/settings (null clears it)."],
-    ["Free express in the cart and checkout (customer)", "With Express chosen, the cart and checkout say “Add S$x more for free express” with a progress bar, like the free-delivery one; once reached the Express choice reads “Express delivery · Free” and the bill has no express charge (and no GST on it). A free-delivery coupon still removes only the delivery fee. API: the bill's freeExpressThreshold and amountToFreeExpress (customer contract 0.27.0-draft) — show what the API sends, never work it out in the app."],
+    ["Free express in the cart and checkout (customer)", "With Express chosen, the cart and checkout say “Add S$x more for free express” with a progress bar, like the free-delivery one; once reached the Express choice reads “Express delivery · Free” and the bill has no express charge (and no GST on it). The free-delivery limit never makes express free. API: the bill's freeExpressThreshold and amountToFreeExpress (customer contract 0.27.0-draft) — show what the API sends, never work it out in the app."],
     ["Home Screen is under Setup", "The Home Screen (sections, slides, combos, theme & branding) moved from Marketing to Setup ▸ Home Screen, right after Business Settings. Marketing now holds Coupons. Nothing else changes — the same page, and the same Home Screen permission."],
     ["Each unit's amounts on screen", "Catalogue ▸ product form: as soon as a Unit is picked, the line under Pack size says what it takes — “kg: from 0.01 to 100, up to 3 decimals”, “pc: a whole number from 1 to 1,000” — plus “Shown as “6 x 325 ml”” while typing. The list and every limit come from GET /admin/products/units (D127 f): load it when the form opens instead of keeping a copy in the app."],
     ["A refused pack size is explained under the field", "A pack size the API would refuse no longer ends in a toast: the reason shows in red under Pack size and the box is outlined — the API's own words from errors.unit. The admin app should do the same instead of showing “Request validation failed”."],
@@ -164,22 +167,47 @@
   };
   // The limit as the bill reports it: only when it can be earned — express on, charged and limited.
   const earnableLimit = () => (expressEnabled() && expressChargeAmount() > 0 ? freeExpressLimit() : null);
+  // The same test the bill uses for charging express at all.
+  const wantsExpress = () => UI.fulfillment !== "pickup" && UI.deliverySpeed === "express" && expressEnabled();
+  // The API's own words (D130 c)
+  const FREESHIP_NOT_FOR_EXPRESS = "Free-delivery coupons are for scheduled delivery — choose a delivery slot or remove the coupon";
 
-  /* 1. The bill: free from the limit, measured on the items after the coupon (like free delivery). A free-delivery
-        coupon or the free-delivery limit never make it free. Re-run with the charge at 0 so Round 7's GST on the
-        express charge falls away with the charge itself. */
+  /* 0. D130 b: the demo shop's express price becomes its delivery fee + its old extra — once per browser, as the
+        backend's migration did for every shop. */
+  if (!loadLS("migrated_2026_10_r22_d130", false)) {
+    const d = State.deliverySettings;
+    State.deliverySettings = { ...d, expressCharge: round2((Number(d.deliveryFee) || 0) + (Number(d.expressCharge) || 0)) };
+    persist("deliverySettings");
+    saveLS("migrated_2026_10_r22_d130", true);
+  }
+
+  /* 1. The bill (D130): an express delivery pays the express charge INSTEAD OF the delivery fee — the earlier
+        rounds' totals are re-run with the fee at 0. Free from the limit (D129), measured on the items after the
+        coupon (like free delivery); the free-delivery limit never frees it, and a free-delivery coupon does not
+        apply to it. Round 7's GST on the delivery charges follows whatever is charged. */
   const totals = cartTotals;
   window.cartTotals = () => {
     const limit = earnableLimit();
-    let t = totals();
-    if (limit !== null && t.expressCharge > 0 && t.priceAfterCoupon >= limit) {
-      const charge = window.expressChargeAmount;
-      window.expressChargeAmount = () => 0;
-      try {
+    const express = wantsExpress();
+    const settings = State.deliverySettings;
+    const charge = window.expressChargeAmount;
+    let t;
+    try {
+      if (express) State.deliverySettings = { ...settings, deliveryFee: 0 };
+      t = totals();
+      if (limit !== null && t.expressCharge > 0 && t.priceAfterCoupon >= limit) {
+        window.expressChargeAmount = () => 0;
         t = totals();
-      } finally {
-        window.expressChargeAmount = charge;
       }
+    } finally {
+      State.deliverySettings = settings;
+      window.expressChargeAmount = charge;
+    }
+    if (express && t.couponValid && t.appliedCoupon && t.appliedCoupon.type === "freeship") {
+      // No delivery fee to remove: not applied, with the reason (the API answers coupon.applied: false)
+      t.couponValid = false;
+      t.couponFreeShip = false;
+      t.couponCheck = { ok: false, reason: FREESHIP_NOT_FOR_EXPRESS };
     }
     t.freeExpressThreshold = limit;
     t.amountToFreeExpress = limit === null ? 0 : Math.max(0, round2(limit - t.priceAfterCoupon));
@@ -191,44 +219,54 @@
       <div>Add ${money(t.amountToFreeExpress)} more for free express</div>
       <div class="progress-track"><div class="progress-fill" style="width:${t.freeExpressThreshold > 0 ? Math.min(100, (t.priceAfterCoupon / t.freeExpressThreshold) * 100) : 100}%"></div></div>
     </div>`;
-  // The same test the bill uses for charging express at all.
-  const wantsExpress = () => UI.fulfillment !== "pickup" && UI.deliverySpeed === "express" && expressEnabled();
+  // One delivery line on an express order (D130): "Express delivery S$x" (or FREE) in place of "Delivery fee FREE".
+  const FEE_FREE_ROW = '<div class="summary-row"><span>Delivery fee</span><span class="qk-num">FREE</span></div>';
+  const chargeRow = (t) => `<div class="summary-row"><span>Express delivery charge</span><span class="qk-num">${money(t.expressCharge)}</span></div>`;
+  const expressRow = (t) => `<div class="summary-row"><span>Express delivery</span><span class="qk-num">${t.expressCharge > 0 ? money(t.expressCharge) : "FREE"}</span></div>`;
+  const oneDeliveryRow = (html, t) =>
+    wantsExpress() ? html.replace(chargeRow(t), () => "").replace(FEE_FREE_ROW, () => expressRow(t)) : html;
 
-  /* 2. Cart: the express hint under the free-delivery one, while Express is the chosen speed. */
+  /* 2. Cart: one delivery line; the express hint where the free-delivery one would be (that bar is for scheduled
+        delivery, and shows only while a delivery fee is charged). */
   const cart = viewCart;
   window.viewCart = (...args) => {
-    const html = cart(...args);
     const t = cartTotals();
+    const html = oneDeliveryRow(cart(...args), t);
     if (t.freeExpressThreshold === null || !wantsExpress() || !(t.amountToFreeExpress > 0)) return html;
     const aside = html.indexOf('<aside class="cart-summary-col">');
     const at = aside < 0 ? -1 : html.indexOf('<div class="summary-card">', aside);
     return at < 0 ? html : `${html.slice(0, at)}${nudge(t)}${html.slice(at)}`;
   };
 
-  /* 3. Checkout: "Free" on the Express choice once reached; the hint under it until then. */
+  /* 3. Checkout: the Express choice shows its price (not "+"), "Free" once the limit is reached; the hint under it
+        until then; one delivery line in the order summary. */
   const checkout = viewCheckout;
   window.viewCheckout = (...args) => {
-    let html = checkout(...args);
     const t = cartTotals();
+    let html = oneDeliveryRow(checkout(...args), t);
     const limit = t.freeExpressThreshold;
-    if (limit === null) return html;
     const charge = money(expressChargeAmount());
     const note = `Express adds ${charge} to the delivery fee.</div>`;
-    if (t.amountToFreeExpress === 0) {
-      html = html.replace(`Express delivery · +${charge}`, () => "Express delivery · Free");
+    const free = limit !== null && t.amountToFreeExpress === 0;
+    html = html.replace(`Express delivery · +${charge}`, () => (free ? "Express delivery · Free" : `Express delivery · ${charge}`));
+    if (free) {
       return html.replace(note, () => (limit > 0 ? `Express is free on orders from ${money(limit)} — this one qualifies.</div>` : "Express is free on every order.</div>"));
     }
-    return html.replace(note, () => `${note}<div style="margin-top:8px">${nudge(t)}</div>`);
+    const instead = `Express costs ${charge} — instead of the delivery fee.</div>`;
+    return html.replace(note, () => (limit !== null ? `${instead}<div style="margin-top:8px">${nudge(t)}</div>` : instead));
   };
 
   /* 4. Admin: "Free express above (S$)" in the Express Delivery card, saved with it. */
   AUDIT_FIELD_LABEL["delivery.freeExpressThreshold"] = "Free express above";
   const card = adminExpressCard;
   window.adminExpressCard = (editable) => {
-    const html = card(editable).replace(
-      "is not waived by free delivery or a free-delivery coupon.",
-      () => "is not waived by free delivery or a free-delivery coupon — only by your own <b>Free express above</b> amount.",
-    );
+    const html = card(editable)
+      // D130: the express charge is the price of an express delivery, instead of the delivery fee
+      .replace(
+        "The charge is added <b>on top of</b> the delivery fee and is not waived by free delivery or a free-delivery coupon.",
+        () => "Express orders pay this price <b>instead of</b> the delivery fee. It is not waived by free delivery or a free-delivery coupon — only by your own <b>Free express above</b> amount.",
+      )
+      .replace('<span class="field-label">Express charge (S$)</span>', () => '<span class="field-label">Express delivery price (S$)</span>');
     const input = html.indexOf('id="expressChargeInput"');
     const end = input < 0 ? -1 : html.indexOf("</label>", input);
     if (end < 0) return html;
@@ -239,6 +277,14 @@
     <div class="qk-muted small" style="margin:-2px 0 10px">Orders from this amount — the items after the coupon, measured like free delivery — pay no express charge. Leave empty to always charge express. Separate from “Free delivery above”.</div>`;
     return `${html.slice(0, end + "</label>".length)}${field}${html.slice(end + "</label>".length)}`;
   };
+
+  // The Delivery Fee card says the fee is for scheduled orders (D130)
+  const deliveryPanel = adminDeliveryPanel;
+  window.adminDeliveryPanel = (editable) =>
+    deliveryPanel(editable).replace(
+      "Charged on delivery orders below the free-delivery threshold. Pickup orders are never charged a delivery fee.",
+      () => "Charged on <b>scheduled</b> delivery orders below the free-delivery threshold. Express orders pay the express price instead (Express Delivery card); pickup orders pay neither.",
+    );
 
   const saveExpress = Actions["save-express"]; // Round 11's audited save: the switch and the charge
   Actions["save-express"] = (...args) => {
