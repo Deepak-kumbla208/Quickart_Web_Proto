@@ -8,6 +8,13 @@
            "Shown as …" while typing; a pack size the API would refuse shows its reason in red under the field (the
            API's errors.unit words), not a toast. Builds on round 21's Pack of + Amount + Unit control.
            The menu — Home Screen moves from Marketing to Setup (after Business Settings); Marketing keeps Coupons.
+
+   Later the same day — free express above a limit. Backend: D129, FX-3 (MR !146, in review; customer contract
+   0.27.0-draft) — business_settings.free_express_threshold, admin delivery.freeExpressThreshold, the bill's
+   freeExpressThreshold / amountToFreeExpress.
+   Admin:    Business Settings ▸ Express Delivery — "Free express above (S$)" under the charge; empty = always charged.
+   Customer: express is free once the items after the coupon reach it (like free delivery, its own amount; a
+             free-delivery coupon still covers only the fee); cart and checkout say "Add S$x more for free express".
    ==================================================================== */
 (function round22UnitsAndMenu() {
   /* ---------------- 1. The list as GET /admin/products/units answers it (D127 f) ---------------- */
@@ -137,9 +144,132 @@
   }
 
   /* ---------------- 4. What's changed ---------------- */
-  WHATS_NEW.unshift({ area: "Round 22 — the Unit list from the API (D127 f, FX-2) and Home Screen under Setup", items: [
+  WHATS_NEW.unshift({ area: "Round 22 — the Unit list from the API (D127 f, FX-2), Home Screen under Setup, free express above a limit (D129, FX-3)", items: [
+    ["Free express above a limit (admin)", "Setup ▸ Business Settings ▸ Delivery & Payments ▸ Express Delivery has a new box, “Free express above (S$)”. An express order whose items (after the coupon — the same measure as free delivery) reach it pays no express charge. Empty = express is always charged, which is how every shop starts. It is its own amount, separate from “Free delivery above”. 0–100 000; a wrong value shows its reason in red under the box. API: delivery.freeExpressThreshold on GET / PATCH /admin/settings (null clears it)."],
+    ["Free express in the cart and checkout (customer)", "With Express chosen, the cart and checkout say “Add S$x more for free express” with a progress bar, like the free-delivery one; once reached the Express choice reads “Express delivery · Free” and the bill has no express charge (and no GST on it). A free-delivery coupon still removes only the delivery fee. API: the bill's freeExpressThreshold and amountToFreeExpress (customer contract 0.27.0-draft) — show what the API sends, never work it out in the app."],
     ["Home Screen is under Setup", "The Home Screen (sections, slides, combos, theme & branding) moved from Marketing to Setup ▸ Home Screen, right after Business Settings. Marketing now holds Coupons. Nothing else changes — the same page, and the same Home Screen permission."],
     ["Each unit's amounts on screen", "Catalogue ▸ product form: as soon as a Unit is picked, the line under Pack size says what it takes — “kg: from 0.01 to 100, up to 3 decimals”, “pc: a whole number from 1 to 1,000” — plus “Shown as “6 x 325 ml”” while typing. The list and every limit come from GET /admin/products/units (D127 f): load it when the form opens instead of keeping a copy in the app."],
     ["A refused pack size is explained under the field", "A pack size the API would refuse no longer ends in a toast: the reason shows in red under Pack size and the box is outlined — the API's own words from errors.unit. The admin app should do the same instead of showing “Request validation failed”."],
   ] });
+})();
+
+/* ---------------- Later the same day: free express above a limit (backend D129, FX-3, MR !146) ---------------- */
+(function round22FreeExpress() {
+  const LIMIT_MAX = 100000;
+
+  // null = express is never free — the default, so nothing changes until a shop sets one (API: delivery.freeExpressThreshold).
+  window.freeExpressLimit = () => {
+    const v = State.deliverySettings.freeExpressThreshold;
+    return v === null || v === undefined || v === "" ? null : round2(Number(v));
+  };
+  // The limit as the bill reports it: only when it can be earned — express on, charged and limited.
+  const earnableLimit = () => (expressEnabled() && expressChargeAmount() > 0 ? freeExpressLimit() : null);
+
+  /* 1. The bill: free from the limit, measured on the items after the coupon (like free delivery). A free-delivery
+        coupon or the free-delivery limit never make it free. Re-run with the charge at 0 so Round 7's GST on the
+        express charge falls away with the charge itself. */
+  const totals = cartTotals;
+  window.cartTotals = () => {
+    const limit = earnableLimit();
+    let t = totals();
+    if (limit !== null && t.expressCharge > 0 && t.priceAfterCoupon >= limit) {
+      const charge = window.expressChargeAmount;
+      window.expressChargeAmount = () => 0;
+      try {
+        t = totals();
+      } finally {
+        window.expressChargeAmount = charge;
+      }
+    }
+    t.freeExpressThreshold = limit;
+    t.amountToFreeExpress = limit === null ? 0 : Math.max(0, round2(limit - t.priceAfterCoupon));
+    return t;
+  };
+
+  const nudge = (t) => `
+    <div class="free-delivery-nudge">
+      <div>Add ${money(t.amountToFreeExpress)} more for free express</div>
+      <div class="progress-track"><div class="progress-fill" style="width:${t.freeExpressThreshold > 0 ? Math.min(100, (t.priceAfterCoupon / t.freeExpressThreshold) * 100) : 100}%"></div></div>
+    </div>`;
+  // The same test the bill uses for charging express at all.
+  const wantsExpress = () => UI.fulfillment !== "pickup" && UI.deliverySpeed === "express" && expressEnabled();
+
+  /* 2. Cart: the express hint under the free-delivery one, while Express is the chosen speed. */
+  const cart = viewCart;
+  window.viewCart = (...args) => {
+    const html = cart(...args);
+    const t = cartTotals();
+    if (t.freeExpressThreshold === null || !wantsExpress() || !(t.amountToFreeExpress > 0)) return html;
+    const aside = html.indexOf('<aside class="cart-summary-col">');
+    const at = aside < 0 ? -1 : html.indexOf('<div class="summary-card">', aside);
+    return at < 0 ? html : `${html.slice(0, at)}${nudge(t)}${html.slice(at)}`;
+  };
+
+  /* 3. Checkout: "Free" on the Express choice once reached; the hint under it until then. */
+  const checkout = viewCheckout;
+  window.viewCheckout = (...args) => {
+    let html = checkout(...args);
+    const t = cartTotals();
+    const limit = t.freeExpressThreshold;
+    if (limit === null) return html;
+    const charge = money(expressChargeAmount());
+    const note = `Express adds ${charge} to the delivery fee.</div>`;
+    if (t.amountToFreeExpress === 0) {
+      html = html.replace(`Express delivery · +${charge}`, () => "Express delivery · Free");
+      return html.replace(note, () => (limit > 0 ? `Express is free on orders from ${money(limit)} — this one qualifies.</div>` : "Express is free on every order.</div>"));
+    }
+    return html.replace(note, () => `${note}<div style="margin-top:8px">${nudge(t)}</div>`);
+  };
+
+  /* 4. Admin: "Free express above (S$)" in the Express Delivery card, saved with it. */
+  AUDIT_FIELD_LABEL["delivery.freeExpressThreshold"] = "Free express above";
+  const card = adminExpressCard;
+  window.adminExpressCard = (editable) => {
+    const html = card(editable).replace(
+      "is not waived by free delivery or a free-delivery coupon.",
+      () => "is not waived by free delivery or a free-delivery coupon — only by your own <b>Free express above</b> amount.",
+    );
+    const input = html.indexOf('id="expressChargeInput"');
+    const end = input < 0 ? -1 : html.indexOf("</label>", input);
+    if (end < 0) return html;
+    const limit = freeExpressLimit();
+    const field = `
+    <label class="field"><span class="field-label">Free express above (S$)</span><input class="input" id="freeExpressInput" type="number" min="0" max="${LIMIT_MAX}" step="0.01" placeholder="Never free" value="${limit === null ? "" : limit}" ${editable ? "" : "disabled"} /></label>
+    <div class="field-error" style="margin:-4px 0 6px" data-r22-free-express-error hidden></div>
+    <div class="qk-muted small" style="margin:-2px 0 10px">Orders from this amount — the items after the coupon, measured like free delivery — pay no express charge. Leave empty to always charge express. Separate from “Free delivery above”.</div>`;
+    return `${html.slice(0, end + "</label>".length)}${field}${html.slice(end + "</label>".length)}`;
+  };
+
+  const saveExpress = Actions["save-express"]; // Round 11's audited save: the switch and the charge
+  Actions["save-express"] = (...args) => {
+    const input = document.getElementById("freeExpressInput");
+    const box = document.querySelector("[data-r22-free-express-error]");
+    const raw = input ? input.value.trim() : "";
+    const value = Number(raw);
+    const problem = raw === "" ? null : !(value >= 0) ? 'Must be an amount, such as "60.00"' : value > LIMIT_MAX ? `Must be at most S$${LIMIT_MAX}` : null;
+    if (problem) {
+      if (input) input.classList.add("invalid");
+      if (box) { box.hidden = false; box.textContent = problem; }
+      return;
+    }
+    const before = freeExpressLimit();
+    const next = raw === "" ? null : round2(value);
+    const topId = (State.auditEvents[0] || {}).id;
+    saveExpress(...args);
+    if (next === before) return;
+    State.deliverySettings = { ...State.deliverySettings, freeExpressThreshold: next };
+    persist("deliverySettings");
+    // One audit entry per save, as the API writes it: join the one Round 11 just wrote, or write one.
+    const top = State.auditEvents[0];
+    const change = { before: { "delivery.freeExpressThreshold": before }, after: { "delivery.freeExpressThreshold": next } };
+    if (top && top.id !== topId && top.action === "business_settings.updated") {
+      top.before = { ...(top.before || {}), ...change.before };
+      top.after = { ...(top.after || {}), ...change.after };
+      persist("auditEvents");
+    } else if (currentUser()) {
+      addAuditEvent({ action: "business_settings.updated", entity: "business_settings", entityId: null, actorType: "user", actorId: currentUser().id, ...change });
+    }
+    showToast(`Express delivery ${expressEnabled() ? `on · ${money(expressChargeAmount())}` : "off"} · ${next === null ? "always charged" : `free from ${money(next)}`}`);
+    render();
+  };
 })();
