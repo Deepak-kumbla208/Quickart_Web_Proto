@@ -1,0 +1,8 @@
+/* Round 23 (2026-10-28): a channel or the Twilio card whose setup a provider refused (needs attention, D133 g). */
+.notif-card.notif-attention {
+  border-color: #f04438;
+  box-shadow: inset 0 0 0 1px #f04438;
+}
+.notif-card .notif-limit .field-grid-2 {
+  grid-template-columns: 1fr auto;
+}
