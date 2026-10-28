@@ -16,7 +16,7 @@
       nothing goes through it until the settings are saved again or Send test
       passes — the other channels keep sending. (A link on the WhatsApp card
       shows it.)
-   D. **Monthly limit** on SMS, WhatsApp and email — empty = no limit.
+   D. (No monthly limit — dropped the same day: "not required".)
    E. Message templates: a **WhatsApp** tab on the customer order updates
       with Meta's approval status, **Send by** (the order the channels are
       tried in; stop at the first that reaches the customer, or every
@@ -77,7 +77,6 @@
     NO_DEVICES: "No phone with the app is logged in",
     WHATSAPP_NOT_APPROVED: "No WhatsApp template for this message is approved yet",
     PROVIDER_NEEDS_ATTENTION: "The channel’s setup needs attention — nothing is sent through it until it is fixed",
-    MONTHLY_LIMIT_REACHED: "The channel’s monthly limit was reached",
     TEMPLATE_DISABLED: "This message is switched off on this channel",
     SMS_REJECTED: "The provider refused this SMS — usually the number is invalid, not a mobile, or the person replied STOP",
     PROVIDER_ERROR: "The provider did not take it (tried for about an hour)",
@@ -145,7 +144,7 @@
   };
   Submits["save-notif-channel"] = Actions["save-notif-channel"];
 
-  // The card: "Set up" for Twilio SMS needs its own account; a red banner when it needs attention; the limit.
+  // The card: "Set up" for Twilio SMS needs its own account; a red banner when it needs attention.
   const prevCard = window.notifChannelCard;
   window.notifChannelCard = function (ch, title, icon, editable, ownFields) {
     const html = prevCard(ch, title, icon, editable, ownFields);
@@ -167,32 +166,7 @@
       const head = el.querySelector(".notif-card-head");
       if (head) head.insertAdjacentHTML("afterend", attentionNotice(code));
     }
-    if (ch !== "push" && c.enabled) el.insertAdjacentHTML("beforeend", limitHTML(ch, editable));
     return t.innerHTML;
-  };
-
-  const limitHTML = (ch, editable) => {
-    const c = State.notificationConfig[ch] || {};
-    return `<div class="notif-limit" style="margin-top:10px;padding-top:10px;border-top:1px dashed var(--border, #e5e7eb)">
-      <div class="field-grid-2" style="align-items:end">
-        <label class="field" style="margin:0"><span class="field-label">Monthly limit <span class="qk-muted small">(messages; empty = no limit)</span></span><input class="input" type="number" min="1" id="limit-${ch}" value="${c.monthlyLimit || ""}" ${editable ? "" : "disabled"} /></label>
-        ${editable ? `<button type="button" class="btn btn-outline" data-action="save-notif-limit" data-ch="${ch}">Save limit</button>` : ""}
-      </div>
-      <div class="qk-muted small">At 80 % every Super Admin gets an email; at 100 % order updates skip ${label(ch)} and the next channel is used. Login codes and admin links always go.</div>
-    </div>`;
-  };
-  Actions["save-notif-limit"] = (el) => {
-    const ch = el.dataset.ch;
-    const input = document.getElementById(`limit-${ch}`);
-    const raw = input ? input.value.trim() : "";
-    const limit = raw === "" ? null : Math.floor(Number(raw));
-    if (limit !== null && !(limit >= 1 && limit <= 10000000)) { showToast("A whole number from 1, or empty for no limit", "danger"); return; }
-    const before = (State.notificationConfig[ch] || {}).monthlyLimit || null;
-    State.notificationConfig = { ...State.notificationConfig, [ch]: { ...State.notificationConfig[ch], monthlyLimit: limit } };
-    persist("notificationConfig");
-    audit("notification_provider.limit_changed", ch, { channel: ch, monthlyLimit: before }, { channel: ch, monthlyLimit: limit });
-    showToast(limit ? `${label(ch)}: at most ${limit} messages a month` : `${label(ch)}: no monthly limit`);
-    render();
   };
 
   // The WhatsApp card (a fourth channel).
@@ -224,7 +198,7 @@
       ${editable ? `<div class="form-actions"><button type="button" class="btn btn-outline" data-action="test-wa-channel">Send test</button><button type="submit" class="btn btn-primary">Save whatsapp</button></div>` : ""}
     </form>
     ${editable && ready && !code ? `<div class="qk-muted small" style="margin-top:6px"><a href="#" data-action="demo-twilio-refused">Prototype: show what happens when Twilio refuses this account</a></div>` : ""}
-    ${limitHTML("whatsapp", editable)}` : `<div class="qk-muted small">Off — no WhatsApp messages are sent; order updates go to the next channel.</div>`}
+    ` : `<div class="qk-muted small">Off — no WhatsApp messages are sent; order updates go to the next channel.</div>`}
   </div>`;
   }
   Actions["toggle-wa-channel"] = (el) => {
@@ -590,7 +564,7 @@
     const month = State.messageLog;
     const usage = ["push", "whatsapp", "sms", "email"].map((ch) => {
       const list = month.filter((r) => r.channel === ch);
-      return { ch, sent: list.filter((r) => r.status === "sent").length, delivered: list.filter((r) => r.delivery === "delivered" || r.delivery === "read").length, failed: list.filter((r) => r.status === "failed").length, segments: list.reduce((s, r) => s + (r.segments || 0), 0), limit: (State.notificationConfig[ch] || {}).monthlyLimit };
+      return { ch, sent: list.filter((r) => r.status === "sent").length, delivered: list.filter((r) => r.delivery === "delivered" || r.delivery === "read").length, failed: list.filter((r) => r.status === "failed").length, segments: list.reduce((s, r) => s + (r.segments || 0), 0) };
     });
     const cost = { whatsapp: "US$0.60", sms: "US$0.15" };
     return `
@@ -598,7 +572,7 @@
   <div class="notif-grid" style="margin-bottom:14px">
     ${usage.map((u) => `<div class="summary-card" style="padding:10px"><div class="summary-card-title" style="margin:0">${label(u.ch)}</div>
       <div class="small">Sent <b>${u.sent}</b> · Delivered <b>${u.ch === "push" ? "—" : u.delivered}</b> · Failed <b>${u.failed}</b>${u.ch === "sms" ? ` · Parts <b>${u.segments}</b>` : ""}</div>
-      <div class="qk-muted small">${u.ch === "push" ? "Free" : `Twilio: ${cost[u.ch] || "—"}`}${u.limit ? ` · Limit ${u.limit}` : ""}</div></div>`).join("")}
+      <div class="qk-muted small">${u.ch === "push" ? "Free" : `Twilio: ${cost[u.ch] || "—"}`}</div></div>`).join("")}
   </div>
   <div class="pill-row" style="margin-bottom:8px">
     ${["", "sent", "failed", "skipped"].map((s) => `<button class="pill ${f.status === s ? "active" : ""}" data-action="log-filter" data-k="status" data-v="${s}">${s ? s[0].toUpperCase() + s.slice(1) : "All"}</button>`).join("")}
@@ -659,7 +633,6 @@
 
   /* ---------------- the audit log names the new actions ---------------- */
   Object.assign(AUDIT_ACTION_TEXT, {
-    "notification_provider.limit_changed": ["Notifications", "changed a channel's monthly limit"],
     "notification_plan.updated": ["Notifications", "changed how a message is sent"],
     "notification_whatsapp.submitted": ["Notifications", "sent WhatsApp templates for approval"],
     "notification.retried": ["Notifications", "sent a failed message again"],
@@ -672,7 +645,7 @@ WHATS_NEW.unshift({ area: "Round 23 — Notifications: each channel's own provid
   ["Each channel sets up its own provider (as before)", "Setup ▸ Notifications ▸ Channels & providers: every channel card keeps its own Provider list and its own settings. Twilio SMS, Twilio WhatsApp and Twilio Email each ask for the Account SID and Auth token (32 characters, never shown again) — a shop using one Twilio account types it into each card. The Twilio SMS card also has an optional Messaging Service SID. (The shared Twilio card shown earlier on 28 Oct is gone.)"],
   ["WhatsApp — a fourth channel", "Provider Twilio WhatsApp: Account SID, Auth token, the WhatsApp number in international form (+ optional Messaging Service SID), On / Off, Send test. WhatsApp only sends texts Meta approved for your business; the card shows how many are approved. Customers agree to these messages in your terms and conditions — nothing to tick in the app."],
   ["Needs attention", "When a provider refuses your setup — a wrong token, a country Twilio is not allowed to send to, a Firebase project that does not match the app — the card turns red with the reason. Nothing is sent through it (no pointless retries) until you save the settings again or Send test passes; every Super Admin gets one email. Only that channel stops — the others keep sending. A Twilio trial account is named as such (it sends only Twilio's sample messages until it is upgraded). A link on the WhatsApp card shows it in the prototype."],
-  ["Monthly limit", "SMS, WhatsApp and email each have an optional monthly limit (empty = no limit, the default). At 80 % every Super Admin gets an email; at 100 % order updates skip that channel and use the next one. Login codes and admin links always go."],
+  ["No monthly limit", "The optional monthly limit per channel shown earlier on 28 Oct is gone — not required. Every channel sends without a cap."],
   ["Send by", "Message templates: order updates try Push first; a customer without the app gets WhatsApp, then SMS — one message, never two. Open a message to change the order, or choose \"Send on every channel\". The next channel is used only when the customer certainly did not get the message. The SMS tab starts off on most updates (on for confirmed, on its way, cash reminder, ready to collect)."],
   ["WhatsApp tab", "Each order update has a WhatsApp text with its approval status — Not submitted, Waiting for WhatsApp, Approved, Rejected (with the reason). A save sends the new words to WhatsApp; the approved words keep going out until the new ones are approved. \"Submit QuickKart's templates\" sends the whole set at once; \"Refresh\" reads WhatsApp's decisions (in the prototype every waiting text is approved on Refresh). English only; WhatsApp's rules are checked as you type."],
   ["Who receives", "Staff alerts sent to a group (new order, at risk, late, low stock) can go to chosen staff only — none ticked = everyone allowed to act on that store, as before. The admin password reset and the admin invite have no Who receives: they go to the one person concerned."],
