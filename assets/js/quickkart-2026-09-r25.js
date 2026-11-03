@@ -7,8 +7,8 @@
       price — 1 → half, 2 → the price of one, 3 → one and a half — any number,
       no daily limit. The line pays half of price × qty rounded down to the
       cent; the saving is the rest (the API's `bogoSaving`).
-   B. The cart line keeps the selling price and says "Buy 1 Get 1 · half price —
-      3 for x" with the full price struck through.
+   B. The cart line keeps the selling price and the "BOGO" badge — no "half
+      price" or "N for x" wording (the user); the bill's BOGO savings row says it.
    C. Add on a Buy 1 Get 1 product always puts 2 in the cart; + / − then move by
       1, and − at 2 leaves 1.
    D. The order keeps each line's `bogoSaving`. The order row shows what was
@@ -64,18 +64,13 @@
     return t;
   };
 
-  /* B. The cart line: the selling price stays; the offer line says what the units cost. */
+  /* B. The cart line: the selling price and the badge only — the earlier rounds' offer text goes (no "half price" or
+        "N for x" wording, the user); the bill's BOGO savings row carries the saving. */
   const cartLine = cartLineHTML;
   window.cartLineHTML = (i, note = "") => {
     const html = cartLine(i, note);
     if (!isBogo(i.id)) return html;
-    const full = r2(i.price * i.qty);
-    const pays = r2(full - bogoSavingOf(i));
-    const text = `Buy 1 Get 1 · <b>half price</b> — ${i.qty} for ${money(pays)} <s class="qk-muted">${money(full)}</s>`;
-    return html.replace(
-      /<div class="qk-muted small(?: tone-green)?">Buy 1 Get 1[\s\S]*?<\/div>/,
-      () => `<div class="qk-muted small tone-green">${text}</div>`,
-    );
+    return html.replace(/<div class="qk-muted small(?: tone-green)?">Buy 1 Get 1[\s\S]*?<\/div>/, () => "");
   };
 
   /* C. Add: a pair the first time, every time; then one at a time (− at 2 leaves 1). */
@@ -119,7 +114,7 @@
         qty: it.qty, rate: it.price, amount, discount, taxable: inclusive ? paid - gst : paid,
         gst, total: paid,
         note: it.resolution === "swap" ? "Replaced" : it.resolution === "removed" ? "Removed" : it.resolution ? "Refunded"
-          : discount > 0 ? (cents(paid) === Math.floor(cents(amount) / 2) ? "Buy 1 Get 1 — half price" : "Buy 1 Get 1") : null,
+          : discount > 0 ? "Buy 1 Get 1" : null,
       };
     });
   };
@@ -162,8 +157,7 @@
         .replace(money(it.price * it.qty * 1.1), () => money(paid * 1.1))
         .replace(money(it.price * it.qty), () => money(paid));
     }
-    const badge = it.bogoSaving != null ? "Buy 1 Get 1 · half price" : "Buy 1 Get 1";
-    return `<div class="summary-row"><span>${it.qty} × ${esc(it.name)} <span class="badge badge-green">${badge}</span>${it.resolution === "swap" ? " (swapped)" : it.resolution ? " (refunded)" : ""}</span><span class="qk-num">${money(paid)}</span></div>`;
+    return `<div class="summary-row"><span>${it.qty} × ${esc(it.name)} <span class="badge badge-green">Buy 1 Get 1</span>${it.resolution === "swap" ? " (swapped)" : it.resolution ? " (refunded)" : ""}</span><span class="qk-num">${money(paid)}</span></div>`;
   };
 
   // The admin order drawer: the line's saving beside it, so the packer knows (pack every unit).
@@ -187,20 +181,20 @@
     if (!isBogo(id)) return html;
     return html.replace(
       /You've had today's free one — full price until tomorrow\.|Add 2, pay for 1 — one free per customer a day; more are full price\./,
-      () => "Every unit at half price — Add puts 2 in your cart for the price of 1. Any number, no limit.",
+      () => "Buy 1 Get 1 — the discount applies automatically in your cart.",
     );
   };
   const itemForm = itemFormModal;
   window.itemFormModal = (...args) =>
     itemForm(...args).replace(
       "Buy 1 Get 1 Free — one free per customer a day; shown in the Deals &amp; Combos home section",
-      () => "Buy 1 Get 1 — every unit at half price, no limit; shown in the Deals &amp; Combos home section",
+      () => "Buy 1 Get 1 — shown in the Deals &amp; Combos home section",
     );
 
-  WHATS_NEW.unshift({ area: "Round 25 — Buy 1 Get 1: every unit at half price, no cap (backend D143, FX-18; customer contract 0.29.0) — replaces round 24's daily limit", items: [
-    ["Half price on every unit", "Every unit of a Buy 1 Get 1 product costs half its selling price — a box of 2.00 is 1.00, 2 are 2.00, 3 are 3.00 — any number, no daily limit. The line pays half of price × qty rounded down to the cent (the API's bogoSaving is the rest). The same for every shop (not a setting)."],
-    ["The cart", "The cart line keeps the selling price and says \"Buy 1 Get 1 · half price — 3 for 3.00\" with the full price struck through; the bill's BOGO savings row is the sum of the lines' savings. The \"N free\" and \"already used today\" texts are gone."],
-    ["Add puts in a pair", "Add on a Buy 1 Get 1 product always puts 2 in the cart; + / − then move by one, and − at 2 leaves 1 (one unit at half price)."],
-    ["Orders, invoice, admin", "The order keeps each line's bogoSaving; the order row shows what was paid; the invoice shows Amount = Qty × Rate, the saving in a Discount column and a \"Buy 1 Get 1 saving\" row after the item total; an unavailable line refunds what was paid for it; the admin drawer marks \"Buy 1 Get 1 −x\" beside the line (pack every unit). Orders from before keep what they were charged."],
+  WHATS_NEW.unshift({ area: "Round 25 — Buy 1 Get 1: no daily limit, the saving from the server (backend D143, FX-18; customer contract 0.29.0) — replaces round 24's daily limit", items: [
+    ["No limit", "A Buy 1 Get 1 product has no daily limit any more — any number, every customer, every day. The server works out each line's saving (the API's bogoSaving); the app shows it and never works it out itself. The same for every shop (not a setting)."],
+    ["The cart", "The cart line keeps the selling price and the BOGO badge — no extra offer wording; the bill's BOGO savings row is the sum of the lines' savings. The \"N free\" and \"already used today\" texts are gone."],
+    ["Add puts in a pair", "Add on a Buy 1 Get 1 product always puts 2 in the cart; + / − then move by one, and − at 2 leaves 1."],
+    ["Orders, invoice, admin", "The order keeps each line's bogoSaving; the order row shows \"Buy 1 Get 1\" and what was paid; the invoice shows Amount = Qty × Rate, the saving in a Discount column and a \"Buy 1 Get 1 saving\" row after the item total; an unavailable line refunds what was paid for it; the admin drawer marks \"Buy 1 Get 1 −x\" beside the line (pack every unit). Orders from before keep what they were charged."],
   ] });
 })();
