@@ -30,6 +30,15 @@
       greyed out, a ticked brand stays listed with 0.
    H. The sort list keeps only what the server sorts (relevance, popular,
       price both ways, discount, name).
+
+   Same day — Buy 1 Get 1 inside a combo: one discount per unit (backend
+   D145, FX-20; customer contract 0.31.0-draft):
+
+   I. The units of a Buy 1 Get 1 product inside a combo pay the combo price
+      only; half price is for the line's other units. The combo row shows the
+      bundle and the plain row the rest — no unit twice.
+   J. An unavailable item of a combo is offered back at what it was sold for
+      in the bundle (each combo's saving shared over its items by price).
    ============================================================ */
 (function round25BogoHalfPrice() {
   const r2 = (n) => Math.round(n * 100) / 100;
@@ -40,9 +49,34 @@
     const full = cents(price * qty);
     return (full - Math.floor(full / 2)) / 100;
   };
-  /** A cart line's saving — the API's `bogoSaving`. */
-  const bogoSavingOf = (line) => (isBogo(line.id) ? halfSaving(line.price, line.qty) : 0);
+  /** Units of a product sitting in combos — every combo's (round 13's allocation; backend D145). */
+  const inCombos = (id) => (window.comboAllocation ? comboAllocation().consumed[id] || 0 : 0);
+  /** A cart line's saving — the API's `bogoSaving`: one discount per unit (D145), so only the units outside combos. */
+  const bogoSavingOf = (line) =>
+    isBogo(line.id) ? halfSaving(line.price, Math.max(0, line.qty - inCombos(line.id))) : 0;
   window.bogoSavingOf = bogoSavingOf;
+
+  /** What each cart line gets of its combos' saving, shared by price in whole cents (backend `comboSharesOf`, D145). */
+  function comboSharesNow() {
+    const shares = new Map();
+    if (!window.comboAllocation) return shares;
+    const priceOf = new Map(cartLines().map((l) => [l.id, l.price]));
+    comboAllocation().applied.forEach((a) => {
+      const ids = a.combo.itemIds.filter((id) => priceOf.has(id));
+      const total = cents(a.discount);
+      const weight = ids.reduce((s, id) => s + priceOf.get(id), 0);
+      if (!ids.length || !(weight > 0)) return;
+      const exact = ids.map((id) => (total * priceOf.get(id)) / weight);
+      const parts = exact.map(Math.floor);
+      exact
+        .map((x, i) => ({ i, rest: x - Math.floor(x) }))
+        .sort((p, q) => q.rest - p.rest || p.i - q.i)
+        .slice(0, total - parts.reduce((s, c) => s + c, 0))
+        .forEach(({ i }) => (parts[i] += 1));
+      ids.forEach((id, i) => shares.set(id, r2((shares.get(id) || 0) + parts[i] / 100)));
+    });
+    return shares;
+  }
 
   /** An order line's saving: frozen on new orders; older lines keep their free units × the price. */
   const lineSaving = (it) => {
@@ -51,7 +85,10 @@
     const free = it.freeQty != null ? it.freeQty : Math.floor(it.qty / 2);
     return r2(it.price * free);
   };
-  const linePaid = (it) => r2(it.price * it.qty - lineSaving(it));
+  /** The line's amount on the order screen: price × qty less Buy 1 Get 1 (the combo saving is its own summary row). */
+  const lineCharged = (it) => r2(it.price * it.qty - lineSaving(it));
+  // D145: a line inside a combo was sold for its part of the bundle price — what it is worth back.
+  const linePaid = (it) => r2(Math.max(0, lineCharged(it) - (it.comboShare || 0)));
 
   /* A. The bill. Round 24's totals give every second unit free, capped at one a day; the rest of the half price is
         handed in through the combo saving for one run (so the coupon, the delivery fee, express, tax and the wallet
@@ -61,8 +98,9 @@
     const lines = cartLines();
     const capped = lines.reduce((s, l) => s + (isBogo(l.id) ? l.price * window.bogoFreeQtyOf(l) : 0), 0);
     const wanted = lines.reduce((s, l) => s + bogoSavingOf(l), 0);
+    // Up for the half price on every unit, or down when units sit in combos (one discount per unit, D145).
     const extra = r2(wanted - capped);
-    if (!(extra > 0)) return totals();
+    if (extra === 0) return totals();
     const combos = window.activeComboSavings;
     let t;
     try {
@@ -101,11 +139,17 @@
   const pay = handlePay;
   window.handlePay = (method) => {
     const saving = new Map(cartLines().map((l) => [l.id, bogoSavingOf(l)]));
+    const shares = comboSharesNow();
     const before = State.orders[0] && State.orders[0].id;
     const result = pay(method);
     const order = State.orders[0];
     if (order && order.id !== before) {
-      order.items = order.items.map((it) => ({ ...it, freeQty: 0, bogoSaving: saving.get(it.id) || 0 }));
+      order.items = order.items.map((it) => ({
+        ...it,
+        freeQty: 0,
+        bogoSaving: saving.get(it.id) || 0,
+        comboShare: shares.get(it.id) || 0,
+      }));
       persist("orders");
     }
     return result;
@@ -162,14 +206,16 @@
   const itemRow = orderItemRowHTML;
   window.orderItemRowHTML = (order, it, idx) => {
     const html = itemRow(order, it, idx);
-    if (!it.bogo) return html;
-    const paid = linePaid(it);
+    if (!it.bogo && !it.comboShare) return html;
     if (it.unavailable && !it.resolution) {
+      // The refund buttons: what the line was sold for — Buy 1 Get 1 and its combo share off (D143, D145)
+      const paid = linePaid(it);
       return html
         .replace(money(it.price * it.qty * 1.1), () => money(paid * 1.1))
         .replace(money(it.price * it.qty), () => money(paid));
     }
-    return `<div class="summary-row"><span>${it.qty} × ${esc(it.name)} <span class="badge badge-green">Buy 1 Get 1</span>${it.resolution === "swap" ? " (swapped)" : it.resolution ? " (refunded)" : ""}</span><span class="qk-num">${money(paid)}</span></div>`;
+    if (!it.bogo) return html;
+    return `<div class="summary-row"><span>${it.qty} × ${esc(it.name)} <span class="badge badge-green">Buy 1 Get 1</span>${it.resolution === "swap" ? " (swapped)" : it.resolution ? " (refunded)" : ""}</span><span class="qk-num">${money(lineCharged(it))}</span></div>`;
   };
 
   // The admin order drawer: the line's saving beside it, so the packer knows (pack every unit).
@@ -203,7 +249,9 @@
       () => "Buy 1 Get 1 — shown in the Deals &amp; Combos home section",
     );
 
-  WHATS_NEW.unshift({ area: "Round 25 — Buy 1 Get 1: no daily limit, the saving from the server (backend D143, FX-18; customer contract 0.29.0) — replaces round 24's daily limit; & the Shop filters from the server (backend D144, FX-19; customer contract 0.30.0)", items: [
+  WHATS_NEW.unshift({ area: "Round 25 — Buy 1 Get 1: no daily limit, the saving from the server (backend D143, FX-18; customer contract 0.29.0) — replaces round 24's daily limit; & the Shop filters from the server (backend D144, FX-19; customer contract 0.30.0); & Buy 1 Get 1 inside a combo (backend D145, FX-20; contract 0.31.0)", items: [
+    ["Buy 1 Get 1 inside a combo", "One discount per unit: the units of a Buy 1 Get 1 product inside a combo pay the combo price only, and half price is for the line's other units (the API's bogoSaving now halves qty − comboUnits). Before, they got both, so a combo of Buy 1 Get 1 products could cost less than nothing. The combo row shows the bundle and the product's own row the rest (qty − comboUnits) — a unit never shows twice."],
+    ["A combo item that is unavailable", "Offered back at what it was sold for in the bundle — the combo's saving shared over its items by their prices — not its full price (the refund buttons on the order screen)."],
     ["Shop: price slider", "Price is a two-handle slider with Min / Max boxes under it, instead of the fixed bands (Under 5 …, which did not fit rupee or dirham prices). Its ends are the cheapest and dearest product the other filters leave — the API's price.min / price.max from GET /customer/products/filters, which ignores the price itself, so dragging never moves the ends. A knob pulled to its end means no limit on that side. Send minPrice / maxPrice when a knob is let go or a box is left; keep Min ≤ Max (the API answers 422 otherwise)."],
     ["Shop: counts beside every option", "Each brand, the 10 / 20 / 30 % choices and In stock only show how many products picking them would show (counted without their own filter). A choice with 0 is greyed out; a ticked brand stays listed with 0 so it can be unticked. All from GET /customer/products/filters — call it again when a filter changes, not when the page changes."],
     ["Shop: filtered on the server", "Every filter, sort and page is answered by GET /customer/products over the whole catalogue — the app no longer downloads every product (it stopped at 1,000) to filter on the phone. Brands are sent as ids (brandId repeated for several), In stock only as available=true, the discount as minDiscount; the result count is pagination.totalItems."],
