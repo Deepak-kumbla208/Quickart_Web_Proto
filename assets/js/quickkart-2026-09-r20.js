@@ -71,7 +71,7 @@
       ["Delivery", "What a delivery order pays on top of the items — the fee, free delivery, Express and GST on those charges — and where the delivery slots live.", ["Delivery Fee", "Express Delivery", "GST on delivery charges", "Delivery Slots"]],
       ["Payment", "How customers may pay. PayNow, GrabPay and Card also need the gateway under Setup ▸ Payments; Cash on Delivery needs nothing.", ["Payment Methods"]],
       ["Orders", "How an order enters the queue, how long each step should take, what customers may do with an order, and when a combo counts.", ["Order confirmation", "Order timing targets", "Order rules", "Combos"]],
-      ["Riders & fleet", "Your vehicles and your riders — orders per trip, pay per delivery, the cash limit and breaks, and the reasons a rider may give when a delivery fails.", ["Vehicle types", "Rider pay", "Rider cash and breaks", "Not-delivered reasons"]],
+      ["Riders & fleet", "Your vehicles and your riders — orders per trip, pay per delivery, the cash limit and breaks, the reasons a rider may give when a delivery fails, and how Smart dispatch picks riders.", ["Vehicle types", "Rider pay", "Rider cash and breaks", "Not-delivered reasons", "Smart dispatch"]],
     ],
     stock: [["Stock rules", "What happens when stock runs out or an item is unavailable, how a receipt sets the cost price, and the goodwill your team may give.", ["*"]]],
   };
