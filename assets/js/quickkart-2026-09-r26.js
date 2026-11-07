@@ -62,6 +62,23 @@ const R26_COLOURS = ["#2563EB", "#16A34A", "#D97706", "#7C3AED", "#DB2777", "#0D
 const R26_SPEED_KMH = 20;   // the backend's fixed assumed speed (the rider ETA rule)
 const r26R6 = (x) => Math.round(x * 1e6) / 1e6;
 const r26Clock = (ms) => fmtClock(new Date(ms).toTimeString().slice(0, 5));
+// A time with its day when it isn't today: "9:15 PM yesterday", "9:15 PM, 4 Nov".
+function r26When(ms) {
+  const day = (x) => { const d = new Date(x); d.setHours(0, 0, 0, 0); return d.getTime(); };
+  const diff = Math.round((day(Date.now()) - day(ms)) / 86400000);
+  if (diff === 0) return r26Clock(ms);
+  if (diff === 1) return `${r26Clock(ms)} yesterday`;
+  if (diff === -1) return `${r26Clock(ms)} tomorrow`;
+  return `${r26Clock(ms)}, ${new Date(ms).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}`;
+}
+// Minutes as people read them: "12 min", "1 h 20 min", "13 h", "2 days" — never "1149 min".
+function r26Dur(min) {
+  const m = Math.max(0, Math.round(min));
+  if (m < 60) return `${m} min`;
+  if (m < 1440) { const h = Math.floor(m / 60), r = m % 60; return h < 10 && r ? `${h} h ${r} min` : `${Math.round(m / 60)} h`; }
+  const d = Math.round(m / 1440);
+  return `${d} day${d === 1 ? "" : "s"}`;
+}
 const r26Order = (id) => State.orders.find((o) => o.id === id);
 function r26Rules() {
   const r = State.businessRules || {};
@@ -219,15 +236,27 @@ function r26ReadyInMin(o) {
   const current = Math.max(2, (Number(STAGE_SLA_MIN[o.status]) || 0) - spent);
   return current + R26_STORE_STAGES.slice(i + 1).reduce((n, s) => n + (Number(STAGE_SLA_MIN[s]) || 0), 0);
 }
-// When each customer would be reached if this rider took these orders (with what they already hold at the store).
-function r26Estimate(p, orders) {
-  const b = findBranch(orders[0].branchId) || findBranch(p.branchId);
-  const held = riderOpenOrders(p.id).filter((o) => o.status !== "picked_up" && !orders.some((x) => x.id === o.id));
-  const all = [...held, ...orders];
+// The soonest anyone could reach this customer: the packing left, then straight from the store.
+function r26SoonestMs(o) {
+  const b = findBranch(o.branchId);
+  let t = Date.now() + r26ReadyInMin(o) * 60000 + (b ? (r15Meters({ lat: b.lat, lng: b.lng }, r15Pin(o)) / 1000 / R26_SPEED_KMH) * 3600000 : 0);
+  const w = orderKind(o) === "scheduled" ? orderSlotWindow(o) : null;
+  if (w && t < w.startMs) t = w.startMs;
+  return t;
+}
+// Minutes an order will be late whoever takes it (its promised time has passed, or packing and the drive alone take too long).
+const r26MissedMin = (o) => Math.max(0, Math.ceil((r26SoonestMs(o) - promisedAtMs(o)) / 60000));
+function r26MissedText(o) {
+  const at = r26When(promisedAtMs(o));
+  return promisedAtMs(o) <= Date.now() ? `already past its promised time (${at})` : `can't make its promised time (${at}) whoever takes it`;
+}
+// One run of a trip: leave when the last order is packed, then express → slot by slot → nearest next, minutes at each door.
+function r26Run(b, list) {
+  if (!list.length) return [];
   const drop = r26Rules().dropMin;
-  let t = Date.now() + Math.max(0, ...all.map(r26ReadyInMin)) * 60000;
+  let t = Date.now() + Math.max(0, ...list.map(r26ReadyInMin)) * 60000;
   const groups = new Map();
-  all.forEach((o) => { const k = tripKey(o); groups.set(k, [...(groups.get(k) || []), o]); });
+  list.forEach((o) => { const k = tripKey(o); groups.set(k, [...(groups.get(k) || []), o]); });
   const keys = [...groups.keys()].sort((a, c) => (a === "express" ? -1 : c === "express" ? 1 : a.localeCompare(c)));
   let at = { lat: b.lat, lng: b.lng };
   const stops = [];
@@ -239,13 +268,50 @@ function r26Estimate(p, orders) {
       t += (r15Meters(at, pin) / 1000 / R26_SPEED_KMH) * 3600000;
       const w = orderKind(o) === "scheduled" ? orderSlotWindow(o) : null;
       if (w && t < w.startMs) t = w.startMs;   // never before the window opens
-      stops.push({ o, arriveMs: t, lateMin: Math.max(0, Math.ceil((t - promisedAtMs(o)) / 60000)), mine: !held.includes(o) });
+      stops.push({ o, arriveMs: t, lateMin: Math.max(0, Math.ceil((t - promisedAtMs(o)) / 60000)) });
       t += drop * 60000;
       at = pin;
     }
   });
+  return stops;
+}
+// When each customer would be reached if this rider took these orders (with what they already hold at the store).
+// lateMin counts only the lateness this choice causes: a new order's own lateness (unless it is late whoever takes
+// it), and the extra minutes it adds to the orders the rider already holds — not lateness those already had.
+function r26Estimate(p, orders) {
+  const b = findBranch(orders[0].branchId) || findBranch(p.branchId);
+  const held = riderOpenOrders(p.id).filter((o) => o.status !== "picked_up" && !orders.some((x) => x.id === o.id));
+  const stops = r26Run(b, [...held, ...orders]);
+  const alone = new Map(r26Run(b, held).map((s) => [s.o.id, s.lateMin]));
+  stops.forEach((s) => {
+    s.mine = !held.includes(s.o);
+    s.missed = s.mine && r26MissedMin(s.o) > 0;
+    s.causedMin = !s.mine ? Math.max(0, s.lateMin - (alone.get(s.o.id) || 0)) : s.missed ? 0 : s.lateMin;
+  });
   const mine = stops.filter((s) => s.mine);
-  return { stops, lateMin: Math.max(0, ...stops.map((s) => s.lateMin)), lastMs: Math.max(...mine.map((s) => s.arriveMs)) };
+  const most = (list) => Math.max(0, ...list.map((s) => s.causedMin));
+  return {
+    stops,
+    lateMin: most(stops),                                  // decides "on time"
+    ownLateMin: most(mine),                                // the new orders' own lateness this rider causes
+    heldLateMin: most(stops.filter((s) => !s.mine)),       // lateness added to the rider's other orders
+    missed: mine.filter((s) => s.missed).map((s) => s.o),  // late whoever takes them → the soonest rider
+    lastMs: Math.max(...mine.map((s) => s.arriveMs)),
+  };
+}
+// One tag for a rider's estimate (the Assign rider dialog).
+function r26EstTag(est, p) {
+  if (est.ownLateMin > 0) return `<span class="r26-tag late">~${esc(r26Dur(est.ownLateMin))} late</span>`;
+  if (est.heldLateMin > 0) return `<span class="r26-tag late">+${esc(r26Dur(est.heldLateMin))} late for ${esc(p.name)}'s other orders</span>`;
+  if (est.missed.length) return `<span class="tone-yellow">Arrives ~${esc(r26When(est.lastMs))} · past the promised time</span>`;
+  return `<span class="tone-green">Arrives by ~${esc(r26Clock(est.lastMs))}</span>`;
+}
+// Why the earliest rider still isn't on time (the dialog notice and the Dispatch card).
+function r26LateText(f) {
+  const e = f.r26.est;
+  return e.ownLateMin > 0
+    ? `the earliest is ${f.p.name}, about ${r26Dur(e.ownLateMin)} late`
+    : `${f.p.name} could take it, but it would add about ${r26Dur(e.heldLateMin)} of lateness to the orders ${f.p.name} already has`;
 }
 function r26Info(p, orders) {
   const zones = [...new Set(orders.map(r26ZoneOf))].filter(Boolean);
@@ -256,9 +322,11 @@ function r26Info(p, orders) {
   return { zoned: zones.length > 0, zoneRider, outOfZone: zones.length > 0 && !zoneRider, loadingSame, turn: r26Turns(p.branchId).get(p.id) || null, today: r26Today(p), est: r26Estimate(p, orders) };
 }
 // The agreed order: on time → zone rider → already loading this zone and slot → turn → fewer per hour → name.
+// An order that is late whoever takes it goes to the rider who gets there soonest (then the same order).
 function r26Rank(fits) {
   return [...fits].sort((a, b) =>
     Number(a.r26.est.lateMin > 0) - Number(b.r26.est.lateMin > 0) || a.r26.est.lateMin - b.r26.est.lateMin
+    || (a.r26.est.missed.length ? Math.round((a.r26.est.lastMs - b.r26.est.lastMs) / 60000) : 0)
     || Number(b.r26.zoneRider) - Number(a.r26.zoneRider)
     || Number(b.r26.loadingSame) - Number(a.r26.loadingSame)
     || (a.r26.turn || 999) - (b.r26.turn || 999)
@@ -267,8 +335,10 @@ function r26Rank(fits) {
 }
 function r26WhyNot(f, best) {
   if (!best) return "";
-  if (f.r26.est.lateMin > 0) return `would be about ${f.r26.est.lateMin} min late`;
+  if (f.r26.est.ownLateMin > 0) return `would be about ${r26Dur(f.r26.est.ownLateMin)} late`;
+  if (f.r26.est.heldLateMin > 0) return `it would add about ${r26Dur(f.r26.est.heldLateMin)} of lateness to the orders ${f.p.name} already has`;
   if (f.warning) return f.warning.charAt(0).toLowerCase() + f.warning.slice(1);
+  if (f.r26.est.missed.length && f.r26.est.lastMs - best.r26.est.lastMs >= 60000) return `${best.p.name} gets there sooner (~${r26When(best.r26.est.lastMs)})`;
   if (f.r26.outOfZone && best.r26.zoneRider) return "not a rider of this zone";
   if (best.r26.loadingSame && !f.r26.loadingSame) return `${best.p.name} is already loading this zone and slot`;
   if (f.r26.turn && best.r26.turn && f.r26.turn > best.r26.turn) return `it's ${best.p.name}'s turn (turn ${best.r26.turn}; ${f.p.name} is turn ${f.r26.turn})`;
@@ -305,7 +375,7 @@ window.assignCandidates = (orders) => {
       i.loadingSame ? `<span class="r26-tag">Loading this zone and slot</span>` : "",
       i.turn ? `<span class="r26-tag soft">Turn ${i.turn}</span>` : "",
       `<span class="qk-muted">${i.today.n} delivered today · ${i.today.perHour}/h</span>`,
-      f.canTake ? (i.est.lateMin > 0 ? `<span class="r26-tag late">~${i.est.lateMin} min late</span>` : `<span class="tone-green">Arrives by ~${esc(r26Clock(i.est.lastMs))}</span>`) : "",
+      f.canTake ? r26EstTag(i.est, f.p) : "",
     ].filter(Boolean).join("");
     return html.replace('<span class="as-sub">', `<span class="as-sub r26-sub">${tags}</span><span class="as-sub">`);
   };
@@ -321,7 +391,13 @@ window.assignCandidates = (orders) => {
     html = html.replace('<div class="as-summary">', `<div class="as-summary">${zones.map(r26ZoneChip).join("")}`);
     if (mode === "manual") html = html.replace('<div class="as-group">Suggested</div>', '<div class="as-group">Best match <span class="qk-muted small">(a hint — Manual mode)</span></div>');
     let top = "";
-    if (!c.best && c.earliest) top += `<div class="notice notice-danger r26-note">${ic("alert")}<span><b>No rider can reach every customer on time.</b> The earliest is ${esc(c.earliest.p.name)}, about ${c.earliest.r26.est.lateMin} min late. Assign someone anyway, move the order to a later slot, or tell the customer.</span></div>`;
+    const missed = orders.filter((o) => r26MissedMin(o) > 0);
+    if (missed.length) top += `<div class="notice notice-warn r26-note">${ic("clock")}<span>${missed.length === 1
+      ? `<b>#${esc(missed[0].id)} is ${esc(r26MissedText(missed[0]))}.</b>`
+      : missed.length === orders.length && missed.every((o) => promisedAtMs(o) <= Date.now())
+        ? `<b>All ${missed.length} orders are already past their promised time.</b>`
+        : `<b>${missed.length} of these orders will be late whoever takes them</b> (${missed.map((o) => `#${esc(o.id)}`).join(", ")}).`} The suggestion is the rider who gets there soonest — tell the customer.</span></div>`;
+    if (!c.best && c.earliest && c.earliest.r26.est.lateMin > 0) top += `<div class="notice notice-danger r26-note">${ic("alert")}<span><b>${c.earliest.r26.est.ownLateMin > 0 ? "No rider can reach every customer on time." : "No rider can take this without making other orders late."}</b> ${esc(r26LateText(c.earliest).replace(/^./, (x) => x.toUpperCase()))}. Assign someone anyway, move the order to a later slot, or tell the customer.</span></div>`;
     const pid = m.r26Confirm;
     const pick = pid && c.available.concat(c.suggested).find((f) => f.p.id === pid);
     if (pick && c.best) {
@@ -330,7 +406,7 @@ window.assignCandidates = (orders) => {
     }
     if (top) html = html.replace('<div class="dialog-body">', `<div class="dialog-body">${top}`);
     return html.replace(/<div class="qk-muted small" style="margin-top:10px">[\s\S]*?<\/div>(\s*<\/div>\s*<\/div>\s*<\/div>\s*)$/,
-      `<div class="qk-muted small" style="margin-top:10px">Smart dispatch: the promised time first, then the zone's riders, then fair turns (first back to the store goes next; a tie goes to fewer deliveries per hour today), then filling the trip up to the rider's capacity. The estimate is the packing time left plus 20 km/h in a straight line and ${r26Rules().dropMin} min at each door. Offline or full riders need “Assign anyway”; a rider out on a trip can't be given anything.</div>$1`);
+      `<div class="qk-muted small" style="margin-top:10px">Smart dispatch: the promised time first, then the zone's riders, then fair turns (first back to the store goes next; a tie goes to fewer deliveries per hour today), then filling the trip up to the rider's capacity. An order that will be late whoever takes it goes to the rider who gets there soonest, and a rider's other orders count only for the lateness this choice adds to them. The estimate is the packing time left plus 20 km/h in a straight line and ${r26Rules().dropMin} min at each door. Offline or full riders need “Assign anyway”; a rider out on a trip can't be given anything.</div>$1`);
   };
   // Choosing a rider who was not suggested asks first (Suggest / Auto), and the audit entry says so.
   const assign = Actions["assign-rider"];
@@ -375,7 +451,7 @@ function r26Plan(queue) {
           .filter((f) => f.canTake && !f.warning);
         const ranked = r26Rank(fits);
         const best = ranked.find((f) => f.r26.est.lateMin === 0);
-        if (!best) { stuck.push({ order: first, earliest: ranked[0] || null }); rest = rest.slice(1); continue; }
+        if (!best) { stuck.push({ order: first, earliest: ranked[0] || null, taken: !ranked.length && used.size > 0 }); rest = rest.slice(1); continue; }
         const take = [first];
         for (const o of rest.slice(1)) {
           if (take.length >= best.free) break;
@@ -411,16 +487,31 @@ function r26TripCard(t, editable) {
     <div class="small">${t.orders.map((o) => `<button type="button" class="link-btn small" data-action="open-order" data-id="${esc(o.id)}">#${esc(o.id)}</button>`).join(" ")} <span class="qk-muted">· ${t.orders.length} order${t.orders.length === 1 ? "" : "s"}</span></div>
     <div class="r26-trip-rider">${ic("truck")}<b>${esc(p.name)}</b><span class="qk-muted small">${esc(p.vehicle || "")} · ${f.load + t.orders.length}/${f.cap}</span>${!t.zone || t.info.zoneRider ? "" : `<span class="r26-tag warn">Out-of-zone</span>`}</div>
     <div class="qk-muted small">${esc(why)}</div>
-    <div class="small tone-green">${ic("clock")} Last drop ~${esc(r26Clock(t.info.est.lastMs))} · every order on time</div>
+    ${r26TripTiming(t)}
     ${editable ? `<div class="r26-trip-actions"><button type="button" class="btn btn-primary btn-sm" data-action="r26-assign-trip" data-ids="${esc(ids)}" data-partner="${p.id}">Assign trip</button><button type="button" class="btn btn-outline btn-sm" data-action="r26-choose" data-ids="${esc(ids)}">Choose rider…</button></div>` : ""}
   </div>`;
 }
+// The trip's timing line: all on time, or the orders that are late whoever takes them.
+function r26TripTiming(t) {
+  const e = t.info.est, last = `Last drop ~${esc(r26When(e.lastMs))}`;
+  if (!e.missed.length) return `<div class="small tone-green">${ic("clock")} ${last} · every order on time</div>`;
+  const passed = e.missed.filter((o) => promisedAtMs(o) <= Date.now()).length;
+  const why = e.missed.length === 1 && t.orders.length === 1 ? esc(r26MissedText(e.missed[0]))
+    : passed === t.orders.length ? `all ${passed} already past their promised time`
+    : `${e.missed.length} of ${t.orders.length} orders late whoever takes them`;
+  return `<div class="small tone-yellow">${ic("clock")} ${last} · ${why} — the soonest rider</div>`;
+}
 function r26StuckCard(s, editable) {
   const z = r26ZoneOf(s.order);
+  const missed = r26MissedMin(s.order) > 0 ? `#${esc(s.order.id)} is ${esc(r26MissedText(s.order))}. ` : "";
+  const text = !s.earliest && s.taken ? "Every free rider here already has a suggested trip above — it waits for the next one free."
+    : !s.earliest ? "No free rider at this store right now — it waits; the at-risk alert warns the staff."
+    : s.earliest.r26.est.ownLateMin > 0 ? `No rider can make the promised time — ${esc(r26LateText(s.earliest))}.`
+    : `No rider can take it without making other orders late — ${esc(r26LateText(s.earliest))}.`;
   return `<div class="r26-trip stuck">
     <div class="r26-trip-head">${r26Dot(z)}<b>${esc(r26ZoneText(z))}</b><span class="tag">${esc(tripLabel(tripKey(s.order)))}</span></div>
     <div class="small"><button type="button" class="link-btn small" data-action="open-order" data-id="${esc(s.order.id)}">#${esc(s.order.id)}</button></div>
-    <div class="small tone-red">${ic("alert")} ${s.earliest ? `No rider can make the promised time — the earliest is ${esc(s.earliest.p.name)}, about ${s.earliest.r26.est.lateMin} min late.` : "No free rider at this store right now — it waits; the at-risk alert warns the staff."}</div>
+    <div class="small tone-red">${ic("alert")} ${missed}${text}</div>
     ${editable ? `<div class="r26-trip-actions"><button type="button" class="btn btn-outline btn-sm" data-action="r26-choose" data-ids="${esc(s.order.id)}">Choose rider…</button></div>` : ""}
   </div>`;
 }
@@ -929,6 +1020,7 @@ WHATS_NEW.unshift({ area: "Round 26 — Delivery Zones and Smart dispatch (propo
   ["Assign rider dialog", "Each rider shows Zone rider / Out-of-zone, their turn, deliveries today and per hour, and the estimate (\"Arrives by ~6:42 PM\" or \"~8 min late\"). Choosing someone who was not suggested asks first and says why they weren't (e.g. \"it's Hassan's turn\"); the audit entry notes it."],
   ["Business Settings ▸ Smart dispatch", "Delivery & Payments ▸ Riders & fleet: Manual / Suggest (default) / Auto, and the minutes at each customer's door. Auto assigns trips once their orders reach Picking (the prototype has a \"Run auto dispatch now\" button for it)."],
   ["The estimate", "The packing time still ahead (the shop's stage targets), then the trip's usual stop order at 20 km/h in a straight line plus the minutes at each door; a scheduled order is never delivered before its window opens. No Google calls."],
+  ["Late orders (fix, 2026-11-07)", "Lateness now counts only what a choice causes. An order that will be late whoever takes it (its promised time has passed, or packing and the drive alone take too long) is no longer stuck: it goes to the rider who gets there soonest, and the card says \"already past its promised time (9:15 PM yesterday)\". A rider's other orders count only for the extra lateness the new order adds to them. Each card and dialog shows the order's own lateness, and long delays read in hours (\"about 13 h late\"), never \"1149 min\"."],
 ] });
 
 /* ---------------- 11. Styles ---------------- */
