@@ -1,5 +1,5 @@
 /* ====================================================================
-   QuickKart prototype — Round 15 (12 October 2026): the RIDER APP, rebuilt
+   MyShopza prototype — Round 15 (12 October 2026): the RIDER APP, rebuilt
    as a phone app on the rider APIs the backend finished (P11-1 / P11-2 /
    P11-3, MRs !94 / !95 / !96, decisions D95 / D96 / D97). Every change of
    the day is here.
@@ -79,7 +79,7 @@ function r15LoginPage() {
   <div class="r15-stage"><div class="r15-phone r15-login">
     <div class="r15-login-top">
       <div class="brand-tile brand-tile-lg"><img src="${State.siteCustomization.branding.logoUrl}" alt="" /></div>
-      <div class="r15-login-brand">QuickKart Rider</div>
+      <div class="r15-login-brand">MyShopza Rider</div>
       <div class="r15-login-sub">Deliver orders. Track your shift.</div>
     </div>
     <div class="r15-login-card">

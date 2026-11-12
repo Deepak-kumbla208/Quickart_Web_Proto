@@ -12,7 +12,7 @@
   })();
 </script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>QuickKart Backend Reference</title>
+<title>MyShopza Backend Reference</title>
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
@@ -111,7 +111,7 @@
     padding:6px 10px; border-radius:6px; border-left:2px solid transparent;
   }
   .toc a:hover{ color:var(--ink); background:var(--surface-2); }
-  /* Scrollspy active state — mirrors .dash-nav-item.active in the QuickKart app:
+  /* Scrollspy active state — mirrors .dash-nav-item.active in the MyShopza app:
      a soft fill plus full-contrast accent text, here with the left rail the
      .toc a border-left placeholder was already reserving. */
   .toc a.active{
@@ -349,7 +349,7 @@
 
 <div class="shell">
   <aside class="toc">
-    <div class="toc-brand"><span class="toc-mark">Q</span><span class="toc-brand-word">QuickKart</span></div>
+    <div class="toc-brand"><span class="toc-mark">Q</span><span class="toc-brand-word">MyShopza</span></div>
     <nav>
       <div class="grp">Reference</div>
       <a href="#scope">Scope &amp; source</a>
@@ -380,9 +380,9 @@
   <main>
     <div class="doc-head" id="scope">
       <span class="eyebrow">Prototype → Backend hand-off</span>
-      <h1>QuickKart Backend Reference</h1>
+      <h1>MyShopza Backend Reference</h1>
       <p>Screens, roles, a multi-tenant PostgreSQL schema and the production hardening the prototype skips — a starting point for the real backend build.</p>
-      <span class="path">Source inspected: QuickKart web dev prototype — assets/js/quickkart.js (~6,240 lines), single Web HTML build, mobile-responsive</span>
+      <span class="path">Source inspected: MyShopza web dev prototype — assets/js/quickkart.js (~6,240 lines), single Web HTML build, mobile-responsive</span>
       <div class="legend">
         <span class="badge current">● current — built &amp; working today</span>
         <span class="badge proposed">● proposed — business feature from the brief, not built</span>
@@ -392,7 +392,7 @@
     </div>
 
     <div class="callout" style="margin-bottom:56px;">
-      <p><b>How to read this doc.</b> The prototype today is a single-tenant, client-side app — one store group ("Prabhas Trading Pte Ltd", trading as QuickKart), state held in <code>localStorage</code>, no server. Everything tagged <span class="badge current" style="vertical-align:1px;">current</span> below is inspected directly from the code. Everything tagged <span class="badge proposed" style="vertical-align:1px;">proposed</span> — the platform Super Admin, tenants, feature entitlement, and most of the database — doesn't exist yet; it's drafted from the brief for this document and marked accordingly rather than presented as built.</p>
+      <p><b>How to read this doc.</b> The prototype today is a single-tenant, client-side app — one store group ("Prabhas Trading Pte Ltd", trading as MyShopza), state held in <code>localStorage</code>, no server. Everything tagged <span class="badge current" style="vertical-align:1px;">current</span> below is inspected directly from the code. Everything tagged <span class="badge proposed" style="vertical-align:1px;">proposed</span> — the platform Super Admin, tenants, feature entitlement, and most of the database — doesn't exist yet; it's drafted from the brief for this document and marked accordingly rather than presented as built.</p>
       <p><b>Two different kinds of "not built".</b> <span class="badge proposed" style="vertical-align:1px;">proposed</span> means a <i>business</i> feature the brief asks for that the prototype doesn't have — tenants, feature entitlement, customer accounts. <span class="badge prod" style="vertical-align:1px;">production</span>, used throughout §04, means an <i>engineering</i> requirement for launch that a meeting-level prototype deliberately skips — real auth, payment capture, inventory locking, observability. The first is scope; the second is non-negotiable regardless of scope. Don't read them as the same backlog.</p>
     </div>
 
@@ -466,7 +466,7 @@
         <div class="portal-head"><h3>Super Admin / platform control</h3><span class="tag badge proposed">proposed</span></div>
         <p class="portal-note">Not present in the code — a repo-wide search for "tenant" returns zero matches across all versions. The prototype has exactly one implicit organization baked in as seed data. What follows is drafted from your brief, for a platform layer sitting <i>above</i> today's per-org Admin portal.</p>
         <div class="callout amber">
-          <p><b>Super Admin (platform)</b> manages the roster of <b>tenants</b> — retailer organizations onboarded onto QuickKart (e.g. "Prabhas Trading / QuickKart", "Grace Supermarket") — and, per tenant, which platform features are switched on:</p>
+          <p><b>Super Admin (platform)</b> manages the roster of <b>tenants</b> — retailer organizations onboarded onto MyShopza (e.g. "Prabhas Trading / MyShopza", "Grace Supermarket") — and, per tenant, which platform features are switched on:</p>
           <pre class="mono" style="margin:10px 0 8px; font-size:12.5px; line-height:1.7; white-space:pre-wrap;">Grace Supermarket
 ☑ Promotions          ☑ Multiple Stores
 ☑ Scheduled Delivery   ☐ Loyalty

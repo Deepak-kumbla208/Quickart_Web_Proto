@@ -1,5 +1,5 @@
 /* ====================================================================
-   QuickKart prototype — Round 7 (30 September 2026): backend alignment.
+   MyShopza prototype — Round 7 (30 September 2026): backend alignment.
 
    The backend decisions D56–D70 were recorded from Rounds 1–6; this round
    adds the admin / rider controls those decisions need and the prototype
@@ -261,13 +261,13 @@ function smsProviderFieldsHTML(c, dis) {
     return `
   <div class="notif-grid">
     ${notifChannelCard("email", "Email", "receipt", editable, emailProviderFieldsHTML,
-    (c, dis) => `Sent from <b>no-reply@quickkart.sg</b> with your business name as the sender name.
+    (c, dis) => `Sent from <b>no-reply@myshopza.com</b> with your business name as the sender name.
       <label class="field" style="margin-top:8px"><span class="field-label">Sender name</span><input class="input" name="fromName" value="${val(c.fromName)}" ${dis} /></label>`)}
     ${notifChannelCard("sms", "SMS", "phone", editable, smsProviderFieldsHTML,
-    (c, dis) => `Sent through QuickKart's SMS account. Login codes (OTP) always go by SMS.
+    (c, dis) => `Sent through MyShopza's SMS account. Login codes (OTP) always go by SMS.
       <label class="field" style="margin-top:8px"><span class="field-label">Sender ID</span><input class="input" name="senderId" maxlength="11" value="${val(c.senderId)}" ${dis} /></label>${SSIR_NOTE}`)}
     ${notifChannelCard("push", "Push notifications", "bell", editable, (c, dis) => `
-      <div class="notice notice-warn" style="margin-bottom:10px">${ic("alert")}<span>Your own Firebase (FCM) project only works if your customers use <b>your own branded app build</b> registered to that project. With the shared QuickKart app, keep the shared provider.</span></div>
+      <div class="notice notice-warn" style="margin-bottom:10px">${ic("alert")}<span>Your own Firebase (FCM) project only works if your customers use <b>your own branded app build</b> registered to that project. With the shared MyShopza app, keep the shared provider.</span></div>
       <div class="field-grid-2">
         <label class="field"><span class="field-label">Firebase project ID *</span><input class="input" name="projectId" value="${val(c.projectId)}" ${dis} /></label>
         <label class="field"><span class="field-label">Sender ID</span><input class="input" name="senderId" value="${val(c.senderId)}" ${dis} /></label>
@@ -277,7 +277,7 @@ function smsProviderFieldsHTML(c, dis) {
         <span class="qk-muted small">${c.serviceAccountSet ? `Saved (${esc(c.serviceAccountFile || "service-account.json")}) — upload a new file to replace it.` : "Not uploaded yet."}${UI.pendingSaFile ? ` Ready to save: <b>${esc(UI.pendingSaFile)}</b>` : ""}</span>
       </label>
       <label class="field"><span class="field-label">Web push key (VAPID public key)</span><input class="input" name="vapidKey" value="${val(c.vapidKey)}" ${dis} /></label>`,
-    () => `Sent through the QuickKart app's Firebase project. Nothing to set up.`)}
+    () => `Sent through the MyShopza app's Firebase project. Nothing to set up.`)}
   </div>`;
   };
   const REQUIRED = {

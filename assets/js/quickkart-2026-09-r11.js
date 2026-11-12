@@ -1,5 +1,5 @@
 /* ====================================================================
-   QuickKart prototype — Round 11 (5 October 2026): stock transfers (P9-4b,
+   MyShopza prototype — Round 11 (5 October 2026): stock transfers (P9-4b,
    MR !78, D58 a, D81) and, later the same day, the Home Screen (P9-5,
    MR !79, D82) as the backend built them on quickkart-api-service. Every
    change of the day is here.
@@ -16,7 +16,7 @@
    C. Decline: an optional note next to the reason; the lists show the
       reason, the note and who did the last step.
    D. Not enough to send (negative stock off): the backend's words — "Only 2
-      on hand at QuickKart Clementi — this business does not allow negative
+      on hand at MyShopza Clementi — this business does not allow negative
       stock" — on Accept & send and on Stock ▸ Transfer (Send to store).
    E. A product with a transfer still requested or on the way can't be
       deleted, nor a store with one to or from it (D81 b) — the backend's
@@ -76,8 +76,8 @@
       orders are in Setup ▸ Audit log.
 
    Notification providers (Setup ▸ Notifications) — later again, as P9-8a
-   (D65, D83) built it: there is NO QuickKart shared provider.
-   Y. Every card is the business's own account (the "Use QuickKart's shared
+   (D65, D83) built it: there is NO MyShopza shared provider.
+   Y. Every card is the business's own account (the "Use MyShopza's shared
       provider" choice is gone), with "Set up" / "Not set up" — not set up
       sends nothing, and without SMS customers can't log in. SMS off stops
       the SMS messages, never the login codes.
@@ -229,7 +229,7 @@
       return `
       <div class="tr-row">
         <span class="tr-what"><b>${t.qty} × ${esc(item.name || "")}</b><span class="qk-muted small">${esc(item.sku || "")}${t.orderId ? ` · for order <button class="link-btn small" data-action="open-order" data-id="${t.orderId}">#${esc(t.orderId)}</button>` : ""}${t.note ? ` · ${esc(t.note)}` : ""}</span></span>
-        <span class="small">${esc(findBranch(t.fromId).name.replace("QuickKart ", ""))} → ${esc(findBranch(t.toId).name.replace("QuickKart ", ""))}</span>
+        <span class="small">${esc(findBranch(t.fromId).name.replace("MyShopza ", ""))} → ${esc(findBranch(t.toId).name.replace("MyShopza ", ""))}</span>
         <span><span class="tr-chip tr-${t.status}">${esc(TRANSFER_STATUS[t.status].label)}</span><span class="qk-muted small"> ${timeAgo(last.at)}${why(t, last)}</span></span>
         <span class="tr-act">${editable ? actions : ""}</span>
       </div>
@@ -1196,7 +1196,7 @@ State.deliverySettings = {
 
 /* ---------------- Later the same day: Notification providers as P9-8a built it (D65, D83) ---------------- */
 /* In the real admin app (quickkart-api-service docs/08 §40): GET /admin/notifications/providers; PUT and PATCH
-   /admin/notifications/providers/:channel; POST …/:channel/test — the Super Admin only. There is no QuickKart shared
+   /admin/notifications/providers/:channel; POST …/:channel/test — the Super Admin only. There is no MyShopza shared
    provider (D83): each business sets up its own email, SMS and Firebase; a channel without one sends nothing, and
    without SMS customers can't log in. */
 (function round11NotificationProviders() {
@@ -1210,7 +1210,7 @@ State.deliverySettings = {
     if (u) addAuditEvent({ action, entity: action.split(".")[0], entityId, actorType: "user", actorId: u.id, before, after });
   };
 
-  /* A. No shared provider: every card is the business's own account (the old "Use QuickKart's shared provider"
+  /* A. No shared provider: every card is the business's own account (the old "Use MyShopza's shared provider"
      choice is gone). */
   (() => {
     const cfg = State.notificationConfig || {};
@@ -1277,7 +1277,7 @@ State.deliverySettings = {
     ${owner ? `<button class="pill ${tab === "channels" ? "active" : ""}" data-action="notif-tab" data-tab="channels">Channels &amp; providers</button>` : ""}
     <button class="pill ${tab === "templates" ? "active" : ""}" data-action="notif-tab" data-tab="templates">Message templates</button>
   </div>
-  ${tab === "channels" ? `<div class="notice notice-ok" style="margin-bottom:14px">${ic("bell")}<span>Your business's <b>own</b> accounts — there is no QuickKart shared provider. One setting for all ${State.branches.length} stores. Passwords and keys are stored encrypted and are <b>never shown again</b> after saving. Only the Super Admin sees this tab, and every change emails every Super Admin.</span></div>` : ""}
+  ${tab === "channels" ? `<div class="notice notice-ok" style="margin-bottom:14px">${ic("bell")}<span>Your business's <b>own</b> accounts — there is no MyShopza shared provider. One setting for all ${State.branches.length} stores. Passwords and keys are stored encrypted and are <b>never shown again</b> after saving. Only the Super Admin sees this tab, and every change emails every Super Admin.</span></div>` : ""}
   ${tab === "templates" ? notifTemplatesHTML(editable) : notifChannelsHTML(owner)}`;
   };
 
@@ -1346,7 +1346,7 @@ State.deliverySettings = {
   const AUDIENCE = { customer: "Customer", staff: "Staff", rider: "Rider" };
   const byKey = (key) => MESSAGES.find((m) => m.key === key);
   const chans = (def) => CHANNELS.filter((ch) => def.channels[ch]);
-  const shopName = () => (State.companyProfile && State.companyProfile.tradingAs) || "QuickKart";
+  const shopName = () => (State.companyProfile && State.companyProfile.tradingAs) || "MyShopza";
   const audit = (action, entityId, before, after) => {
     const u = currentUser();
     if (u) addAuditEvent({ action, entity: action.split(".")[0], entityId, actorType: "user", actorId: u.id, before, after });
@@ -1995,7 +1995,7 @@ WHATS_NEW.unshift({ area: "Stock transfers, Home Screen, Business Settings, Deli
   ["Order cancelled", "Cancelling an order cancels its transfer requests that were not sent yet — Transfers ▸ Done shows them as \"Cancelled · with the order\". One already on the way still arrives: Mark received adds it to the store's stock."],
   ["Mark received", "A transfer for an order covers the short item only while the order is open and the item isn't marked unavailable; otherwise the units simply join the store's stock, and the toast says so."],
   ["Decline with a note", "Stock ▸ Transfers ▸ Decline: a note box next to the reason. The lists show the reason and the note, and who did the last step."],
-  ["Not enough to send", "With negative stock not allowed, Accept & send and Send to store say \"Only 2 on hand at QuickKart Clementi — this business does not allow negative stock\"."],
+  ["Not enough to send", "With negative stock not allowed, Accept & send and Send to store say \"Only 2 on hand at MyShopza Clementi — this business does not allow negative stock\"."],
   ["Deleting a product or a store", "Not while a stock transfer of the product — or to or from the store — is still requested or on the way: receive, decline or cancel it first."],
   ["Combo price", "Marketing ▸ Home Screen ▸ Deals & Combos: the bundle price must be below what its products cost apart — \"Bundle price must be below S$11.70 — what these products cost apart\". A combo holds at most 10 products."],
   ["Home Screen limits", "At most 20 tiles in a section, 10 promo sections, 20 products in a promo section and 30 combos — the message says to delete one first. Titles up to 80 characters, subtitles up to 200."],
@@ -2010,7 +2010,7 @@ WHATS_NEW.unshift({ area: "Stock transfers, Home Screen, Business Settings, Deli
   ["One-off slots", "A one-off slot's capacity box changes its own capacity, it starts empty, and it can't be deleted while orders are booked in it — move them first."],
   ["Move to…", "Move an order to any open slot of the store that isn't full or started, on any of its days — staff aren't held to the customer's cut-off. Orders edit may move too. The customer is not told: let them know."],
   ["Another date", "Delivery Slots ▸ \"Open another date\": any day up to 60 days ahead, e.g. to close a slot on a holiday."],
-  ["No QuickKart shared provider", "Setup ▸ Notifications ▸ Channels & providers: each business uses its own email (SMTP, SendGrid, Amazon SES, Mailgun, Postmark), SMS (Twilio, Vonage, Amazon SNS) and Firebase — the \"Use QuickKart's shared provider\" choice is gone. A card says \"Not set up\" until its provider is saved: nothing is sent on it, and without SMS customers can't log in."],
+  ["No MyShopza shared provider", "Setup ▸ Notifications ▸ Channels & providers: each business uses its own email (SMTP, SendGrid, Amazon SES, Mailgun, Postmark), SMS (Twilio, Vonage, Amazon SNS) and Firebase — the \"Use MyShopza's shared provider\" choice is gone. A card says \"Not set up\" until its provider is saved: nothing is sent on it, and without SMS customers can't log in."],
   ["Super Admin only", "Only the Super Admin sees Channels & providers — they decide where login codes and password-reset emails go; others with Notifications see the message templates. Every save, and every switch on or off, emails every Super Admin and shows in Setup ▸ Audit log."],
   ["SMS off", "Switching SMS off stops the SMS messages — never the login codes: customers must always be able to log in."],
   ["Send test", "Uses the saved settings and goes to you only: email to your address, SMS to your own mobile (add it to your profile first), push as a Firebase dry run (nothing delivered). At most 5 tests in 10 minutes."],

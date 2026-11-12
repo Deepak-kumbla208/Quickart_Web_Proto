@@ -1,5 +1,5 @@
 /* ====================================================================
-   QuickKart prototype — Round 14 (10 October 2026): each business's OWN
+   MyShopza prototype — Round 14 (10 October 2026): each business's OWN
    payment gateway, as the backend built it (P9-10a / b / c, decision D101,
    MR !103 on quickkart-api-service) — Razorpay is the first real gateway.
    Every change of the day is here.
@@ -7,7 +7,7 @@
    A. Setup ▸ Payments — the Super Admin only (no row in the permission
       grid; the backend allows it to the Super Admin alone). The business's
       own Razorpay account: Key ID, Key secret and Webhook secret. The money
-      goes straight to the business's own Razorpay account — QuickKart
+      goes straight to the business's own Razorpay account — MyShopza
       never holds it. The two secrets are WRITE-ONLY: once saved they show
       "•••• saved — type to replace" and are never shown again; leaving one
       empty on a later save keeps it.
@@ -41,7 +41,7 @@
       pages' 1100 px cap. Payments packs its four cards into columns. No other admin page changes.
    K. (later the same day) A REFUND THAT COULD NOT BE MADE (P10-6a / b, D102): the banner "A refund could not be made" on the order drawer and in
       Orders ▸ Returns, with three buttons — Try again · Refund to wallet instead (asks first; no bonus; the customer is told) · Mark as settled
-      outside QuickKart (a note, 3–300 characters). Orders ▸ Issues ▸ "Refund failed". Two demo refunds are seeded once.
+      outside MyShopza (a note, 3–300 characters). Orders ▸ Issues ▸ "Refund failed". Two demo refunds are seeded once.
          API: POST /admin/refunds/{payment|part}/:id/retry | to-wallet | settled-outside; refundProblem on the order, the return and the queue.
    ==================================================================== */
 
@@ -52,7 +52,7 @@
   const METHOD_OF = { "PayNow": "paynow", "GrabPay": "grabpay", "Credit / Debit Card": "card" };
   const TEST_LIMIT = 5;
   const TEST_WINDOW_MS = 10 * 60 * 1000;
-  const API_HOST = "https://api.quickkart.sg"; // the real value is the server's public address (API_PUBLIC_URL)
+  const API_HOST = "https://api.myshopza.com"; // the real value is the server's public address (API_PUBLIC_URL)
   const KEY_CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_-";
   const randomKey = () => Array.from({ length: 43 }, () => KEY_CHARS[Math.floor(Math.random() * KEY_CHARS.length)]).join("");
 
@@ -134,7 +134,7 @@
     const keyIdValue = draft.keyId !== undefined ? draft.keyId : g.keyId || "";
     const url = saved ? `${API_HOST}/api/v1/webhooks/payments/razorpay/${g.webhookKey}` : "";
     return `
-  <div class="notice notice-ok" style="margin-bottom:14px">${ic("wallet")}<span>Your business's <b>own</b> payment gateway — customers pay straight into <b>your</b> account and QuickKart never holds the money. One setting for all ${State.branches.length} stores.</span></div>
+  <div class="notice notice-ok" style="margin-bottom:14px">${ic("wallet")}<span>Your business's <b>own</b> payment gateway — customers pay straight into <b>your</b> account and MyShopza never holds the money. One setting for all ${State.branches.length} stores.</span></div>
   ${isOn() ? "" : `<div class="notice notice-warn" style="margin-bottom:14px">${ic("alert")}<span>${saved
       ? "Online payments are <b>off</b> — PayNow and Card are hidden at checkout. <b>Cash on Delivery and orders paid in full from the wallet still work.</b> Your saved keys stay, so refunds and late payments still work."
       : "No gateway is set up — PayNow, GrabPay and Card are hidden at checkout. <b>Cash on Delivery and orders paid in full from the wallet still work.</b>"}</span></div>`}
@@ -162,7 +162,7 @@
   ${saved ? `
   <div class="summary-card">
     <div class="summary-card-title">Your webhook address</div>
-    <div class="qk-muted small">Private to your business and it never changes. Paste it into Razorpay's webhook settings — Razorpay tells QuickKart here when a payment is paid or declined.</div>
+    <div class="qk-muted small">Private to your business and it never changes. Paste it into Razorpay's webhook settings — Razorpay tells MyShopza here when a payment is paid or declined.</div>
     <div style="display:flex; gap:8px; margin-top:10px"><input class="input" readonly value="${esc(url)}" style="flex:1; font-family:monospace; font-size:12px" onfocus="this.select()" /><button type="button" class="btn btn-outline" data-action="copy-payment-webhook">Copy</button></div>
   </div>` : ""}
   <div class="summary-card">
@@ -174,7 +174,7 @@
     <ul class="qk-muted small" style="margin:8px 0 0 18px; padding:0; line-height:1.6">
       <li>The <b>PayNow QR is valid for 10 minutes</b>; your customer has 15 minutes to pay an order. If the QR lapses they tap <b>Pay</b> again.</li>
       <li>PayNow needs <b>at least S$1</b> and has a <b>S$2,000 daily limit</b>; PayNow refunds are possible <b>within 30 days</b>.</li>
-      <li>Refunds go back to the customer's original method; QuickKart makes each refund once, even if it has to retry.</li>
+      <li>Refunds go back to the customer's original method; MyShopza makes each refund once, even if it has to retry.</li>
       <li>Every change here is in the <b>Audit log</b> (what changed — never a key) and <b>every Super Admin is emailed</b> about it.</li>
     </ul>
   </div>
@@ -322,7 +322,7 @@
 /* In the real admin app (quickkart-api-service docs/08 §63–§64): a refund to the original payment can be refused by the gateway (the
    payment is too old, the gateway balance is too low) or not finish in 24 hours. Then the order, the return and the Returns queue carry
    `refundProblem { id, kind, amount, reason, message, failedAt, actions[] }` and staff choose: Try again · Refund to wallet instead ·
-   Mark as settled outside QuickKart (a note, 3–300 characters). POST /admin/refunds/{payment|part}/:id/retry | to-wallet | settled-outside —
+   Mark as settled outside MyShopza (a note, 3–300 characters). POST /admin/refunds/{payment|part}/:id/retry | to-wallet | settled-outside —
    Orders edit, the refund's store. Every Super Admin is emailed once per failed refund; the customer only hears of it when the wallet gets
    the money. A failed refund is not in Needs action: Orders ▸ Issues ▸ "Refund failed" and the Returns view find it. */
 (function round14FailedRefunds() {
@@ -365,7 +365,7 @@
       ${editable ? `<div style="display:flex;gap:8px;flex-wrap:wrap">
         <button type="button" class="btn btn-sm btn-primary" data-action="rf-retry" data-id="${o.id}">Try again</button>
         <button type="button" class="btn btn-sm btn-outline" data-action="rf-wallet" data-id="${o.id}">Refund to wallet instead</button>
-        <button type="button" class="btn btn-sm btn-outline" data-action="rf-settle" data-id="${o.id}">Mark as settled outside QuickKart</button>
+        <button type="button" class="btn btn-sm btn-outline" data-action="rf-settle" data-id="${o.id}">Mark as settled outside MyShopza</button>
       </div>` : ""}
     </div>`;
   }
@@ -431,9 +431,9 @@
       const note = ((document.getElementById("rfNote") || {}).value ?? m.note ?? "").trim();
       if (note.length < 3 || note.length > 300) { UI.modal = { ...m, note, error: "Say how it was settled (3–300 characters)" }; render(); return; }
       UI.modal = null;
-      refundAudit("refund.settled_outside", o, { state: "Failed" }, { state: "Settled outside QuickKart", amount: money(p.amount), note });
+      refundAudit("refund.settled_outside", o, { state: "Failed" }, { state: "Settled outside MyShopza", amount: money(p.amount), note });
       resolve(o, "settled", { note });
-      showToast("Marked as settled outside QuickKart. Nothing was moved.");
+      showToast("Marked as settled outside MyShopza. Nothing was moved.");
     }
     render();
   };
@@ -449,13 +449,13 @@
     return `
   <div class="overlay" data-action="close-modal-backdrop">
     <div class="dialog dialog-static" role="dialog" aria-modal="true" data-action="noop">
-      <div class="dialog-head"><span>${wallet ? "Refund to the wallet instead" : "Settled outside QuickKart"} · #${esc(o.id)}</span><button class="dialog-close" data-action="close-modal" aria-label="Close">${ic("close")}</button></div>
+      <div class="dialog-head"><span>${wallet ? "Refund to the wallet instead" : "Settled outside MyShopza"} · #${esc(o.id)}</span><button class="dialog-close" data-action="close-modal" aria-label="Close">${ic("close")}</button></div>
       <div class="dialog-body">
         ${err}
         ${wallet
           ? `<div style="margin-bottom:10px">${money(p.amount)} will be added to the customer's wallet (no bonus) and the customer gets a message. <b>This cannot be undone.</b></div>
-             <div class="qk-muted small">QuickKart first asks the payment gateway whether it already made this refund — if it did, it is recorded as refunded and nothing is added to the wallet.</div>`
-          : `<div class="qk-muted small" style="margin-bottom:8px">For a refund you paid another way (a bank transfer, cash). Nothing moves in QuickKart — the note is kept with the refund and in the Audit log.</div>
+             <div class="qk-muted small">MyShopza first asks the payment gateway whether it already made this refund — if it did, it is recorded as refunded and nothing is added to the wallet.</div>`
+          : `<div class="qk-muted small" style="margin-bottom:8px">For a refund you paid another way (a bank transfer, cash). Nothing moves in MyShopza — the note is kept with the refund and in the Audit log.</div>
              <label class="field"><span class="field-label">How was it settled? (3–300 characters)</span><textarea class="input" id="rfNote" data-action="rf-keep" rows="3" maxlength="300">${esc(m.note || "")}</textarea></label>`}
         <div class="form-actions"><button type="button" class="btn btn-outline" data-action="close-modal">Back</button><button type="button" class="btn btn-primary" data-action="rf-confirm">${wallet ? `Add ${money(p.amount)} to the wallet` : "Mark as settled"}</button></div>
       </div>
@@ -468,15 +468,15 @@
   Object.assign(AUDIT_ACTION_TEXT, {
     "refund.retried": ["Refunds", "tried a failed refund again on order"],
     "refund.redirected_to_wallet": ["Refunds", "put a failed refund into the customer's wallet on order"],
-    "refund.settled_outside": ["Refunds", "marked a failed refund as settled outside QuickKart on order"],
+    "refund.settled_outside": ["Refunds", "marked a failed refund as settled outside MyShopza on order"],
   });
   Object.assign(AUDIT_ENTITY_LABEL, { refund: "Refunds" });
 })();
 
 /* ---------------- What's changed ---------------- */
 WHATS_NEW.unshift({ area: "Round 14 — your own payment gateway (Razorpay) and failed refunds", items: [
-  ["A refund that could not be made", "When the payment gateway refuses a refund to the original payment (the payment is too old, the gateway balance is too low) or it is not done in 24 hours, the order and Orders ▸ Returns show \"A refund could not be made\" with three buttons: Try again · Refund to wallet instead (asks first, no bonus, the customer is told) · Mark as settled outside QuickKart (a note is required). Every Super Admin is emailed once; Orders ▸ Issues ▸ Refund failed lists them."],
-  ["Setup ▸ Payments (Super Admin only)", "Your business's own Razorpay account: Key ID, Key secret and Webhook secret. The money goes straight to your Razorpay account — QuickKart never holds it. The two secrets are write-only: once saved they show \"•••• saved — type to replace\", are never shown again, and a later save leaves them as they are when the box is empty. Test mode / Live is read from the Key ID (a live server refuses a test key)."],
+  ["A refund that could not be made", "When the payment gateway refuses a refund to the original payment (the payment is too old, the gateway balance is too low) or it is not done in 24 hours, the order and Orders ▸ Returns show \"A refund could not be made\" with three buttons: Try again · Refund to wallet instead (asks first, no bonus, the customer is told) · Mark as settled outside MyShopza (a note is required). Every Super Admin is emailed once; Orders ▸ Issues ▸ Refund failed lists them."],
+  ["Setup ▸ Payments (Super Admin only)", "Your business's own Razorpay account: Key ID, Key secret and Webhook secret. The money goes straight to your Razorpay account — MyShopza never holds it. The two secrets are write-only: once saved they show \"•••• saved — type to replace\", are never shown again, and a later save leaves them as they are when the box is empty. Test mode / Live is read from the Key ID (a live server refuses a test key)."],
   ["Off, and what the customer sees", "Off stops new PayNow and Card payments only — your saved keys stay, so refunds and late payments still work. With no gateway on, checkout lists Cash on Delivery only; Cash on Delivery and an order the wallet pays in full never need a gateway. Razorpay offers PayNow and Card in Singapore — not GrabPay."],
   ["Webhook address and set-up checklist", "Your private webhook address (Copy button) to paste into Razorpay's webhook settings, with the five steps: API keys, webhook + your own secret + the events payment.captured and payment.failed, PayNow switched on, payment capture on Automatic, Send test."],
   ["Send test, audit log and emails", "Send test checks the saved keys without charging anything (5 per 10 minutes). Every change is in the Audit log — what changed, never a key — and every Super Admin is emailed about it."],

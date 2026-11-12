@@ -1,5 +1,5 @@
 /* ====================================================================
-   QuickKart prototype — Round 26 (2026-11-06): DELIVERY ZONES and
+   MyShopza prototype — Round 26 (2026-11-06): DELIVERY ZONES and
    SMART DISPATCH. A proposal for the user to confirm — nothing is in
    the backend yet (no decision, no plan step, no API).
 

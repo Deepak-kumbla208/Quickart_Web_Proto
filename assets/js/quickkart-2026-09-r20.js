@@ -1,5 +1,5 @@
 /* ====================================================================
-   QuickKart prototype — Round 20 (23 October 2026): SETUP ▸ BUSINESS
+   MyShopza prototype — Round 20 (23 October 2026): SETUP ▸ BUSINESS
    SETTINGS AND SETUP ▸ PAYMENTS LAID OUT IN SECTIONS. Layout only — no
    setting, rule, save, audit entry or backend call changes.
 

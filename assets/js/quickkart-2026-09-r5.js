@@ -1,5 +1,5 @@
 /* ====================================================================
-   QuickKart prototype — Round 5 (September 2026).
+   MyShopza prototype — Round 5 (September 2026).
 
    1. Vehicle types are the business's own list: add, rename, change the
       orders-per-trip capacity, remove (only when no rider uses it).
@@ -71,8 +71,8 @@ function shortLineHTML(o, it, idx, editable) {
   return `
   <div class="short-line small">
     <span class="tag tag-warn">Short ${it.short} at this store</span>
-    ${near.length ? `<span class="qk-muted">${near.slice(0, 2).map((n) => `${esc(n.b.name.replace("QuickKart ", ""))} has ${n.qty}`).join(" · ")}</span>` : `<span class="qk-muted">No other store has it</span>`}
-    ${editable && best && PREP_STATUSES.includes(o.status) ? `<button type="button" class="btn btn-sm btn-outline" data-action="transfer-for-order" data-order="${o.id}" data-idx="${idx}" data-from="${best.b.id}">Transfer ${Math.min(it.short, best.qty)} from ${esc(best.b.name.replace("QuickKart ", ""))}</button>` : ""}
+    ${near.length ? `<span class="qk-muted">${near.slice(0, 2).map((n) => `${esc(n.b.name.replace("MyShopza ", ""))} has ${n.qty}`).join(" · ")}</span>` : `<span class="qk-muted">No other store has it</span>`}
+    ${editable && best && PREP_STATUSES.includes(o.status) ? `<button type="button" class="btn btn-sm btn-outline" data-action="transfer-for-order" data-order="${o.id}" data-idx="${idx}" data-from="${best.b.id}">Transfer ${Math.min(it.short, best.qty)} from ${esc(best.b.name.replace("MyShopza ", ""))}</button>` : ""}
   </div>`;
 }
 (function wrapRound5() {

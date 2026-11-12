@@ -1,5 +1,5 @@
 /* ====================================================================
-   QuickKart prototype — Round 8 (2 October 2026): Stores, as the backend
+   MyShopza prototype — Round 8 (2 October 2026): Stores, as the backend
    built them (P8-5, MR !69 on quickkart-api-service).
 
    A. The open switch is its own flag (`isOpen`), apart from Active. A Store
@@ -176,7 +176,7 @@ function branchFormModal() {
     <div class="dialog dialog-static" role="dialog" aria-modal="true" data-action="noop">
       <div class="dialog-head"><span>${f.id ? "Edit branch" : "Add branch"}</span><button class="dialog-close" data-action="close-modal">${ic("close")}</button></div>
       <form class="dialog-body" data-action="save-branch">
-        <label class="field"><span class="field-label">Branch name *</span><input class="input ${err.name ? "invalid" : ""}" name="name" value="${esc(f.name)}" placeholder="e.g. QuickKart Tampines" /></label>
+        <label class="field"><span class="field-label">Branch name *</span><input class="input ${err.name ? "invalid" : ""}" name="name" value="${esc(f.name)}" placeholder="e.g. MyShopza Tampines" /></label>
         ${fieldErr("name")}
         <label class="field"><span class="field-label">Area</span><input class="input" name="area" value="${esc(f.area || "")}" placeholder="e.g. Tampines / Bedok" /></label>
         <div class="field-label" style="margin-top:4px">Location</div>

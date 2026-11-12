@@ -1,5 +1,5 @@
 /* ====================================================================
-   QuickKart prototype — Round 4 (September 2026): manual rider assignment.
+   MyShopza prototype — Round 4 (September 2026): manual rider assignment.
 
    Automatic round robin is gone: it could not handle different vehicle
    sizes or delivery slots. The admin assigns riders, and the screen does

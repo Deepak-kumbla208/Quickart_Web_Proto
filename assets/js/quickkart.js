@@ -15,7 +15,7 @@ const DEFAULT_SITE_CUSTOMIZATION = {
     footerBg: "#0B1826",
   },
   branding: {
-    logoUrl: LOGO_MARK_URI, // default: the built-in QuickKart logo asset
+    logoUrl: LOGO_MARK_URI, // default: the built-in MyShopza logo asset
     logoSize: "medium", // "small" | "medium" | "large"
   },
 };
@@ -73,7 +73,7 @@ function applyThemeVars(theme, branding) {
 }
 
 // ====================================================================
-// QuickKart Web — seed data & constants
+// MyShopza Web — seed data & constants
 // Ported from quickkart-prototype.html (the mobile HTML prototype).
 // Same brand, same pricing model (SGD, GST-inclusive), same business
 // rules — expanded catalog/categories for a fuller desktop storefront,
@@ -89,7 +89,7 @@ function img(id, w) {
 // the live values customers and Admin see are State.companyProfile.
 const DEFAULT_COMPANY_PROFILE = {
   name: "Prabhas Trading Pte Ltd",
-  tradingAs: "QuickKart",
+  tradingAs: "MyShopza",
   address1: "Blk 1093 Lower Delta Road, #03-21",
   address2: "Singapore 169204",
   uen: "2024XXXXXXA",
@@ -282,24 +282,24 @@ const SEED_COUPONS = [
 // Tags drive the homepage rails: bestseller / fresh / indian / sg / featured.
 const SEED_ITEMS = [
   // Fresh Fruits
-  { id: 1, name: "Bananas (6pc)", brand: "QuickKart Farm Fresh", cat: "Fresh Fruits", mrp: 3.5, price: 2.9, unit: "6 pc", eta: 15, stock: true, image: img("photo-1571771894821-ce9b6c11b08e"), stockCount: null, tags: ["bestseller", "fresh"] },
-  { id: 2, name: "Alphonso Mangoes 1kg", brand: "QuickKart Farm Fresh", cat: "Fresh Fruits", mrp: 15.9, price: 12.9, unit: "1 kg", eta: 18, stock: true, image: img("photo-1553279768-865429fa0078"), stockCount: 6, tags: ["fresh", "offer"] },
-  { id: 3, name: "Royal Gala Apples 1kg", brand: "QuickKart Farm Fresh", cat: "Fresh Fruits", mrp: 6.9, price: 5.9, unit: "1 kg", eta: 15, stock: true, image: img("photo-1560806887-1e4cd0b6cbd6"), stockCount: null, tags: ["fresh", "bestseller"] },
+  { id: 1, name: "Bananas (6pc)", brand: "MyShopza Farm Fresh", cat: "Fresh Fruits", mrp: 3.5, price: 2.9, unit: "6 pc", eta: 15, stock: true, image: img("photo-1571771894821-ce9b6c11b08e"), stockCount: null, tags: ["bestseller", "fresh"] },
+  { id: 2, name: "Alphonso Mangoes 1kg", brand: "MyShopza Farm Fresh", cat: "Fresh Fruits", mrp: 15.9, price: 12.9, unit: "1 kg", eta: 18, stock: true, image: img("photo-1553279768-865429fa0078"), stockCount: 6, tags: ["fresh", "offer"] },
+  { id: 3, name: "Royal Gala Apples 1kg", brand: "MyShopza Farm Fresh", cat: "Fresh Fruits", mrp: 6.9, price: 5.9, unit: "1 kg", eta: 15, stock: true, image: img("photo-1560806887-1e4cd0b6cbd6"), stockCount: null, tags: ["fresh", "bestseller"] },
   { id: 4, name: "Sunkist Oranges 1kg", brand: "Sunkist", cat: "Fresh Fruits", mrp: 5.2, price: 4.5, unit: "1 kg", eta: 15, stock: true, image: img("photo-1611080626919-7cf5a9dbab5b"), stockCount: null, tags: ["fresh"] },
-  { id: 5, name: "Seedless Grapes 500g", brand: "QuickKart Farm Fresh", cat: "Fresh Fruits", mrp: 5.9, price: 4.9, unit: "500 g", eta: 18, stock: true, image: img("photo-1619566636858-adf3ef46400b"), stockCount: 4, tags: ["fresh", "offer"] },
-  { id: 6, name: "Dragon Fruit (2pc)", brand: "QuickKart Farm Fresh", cat: "Fresh Fruits", mrp: 7.5, price: 6.5, unit: "2 pc", eta: 20, stock: true, image: img("photo-1631209121750-a9f656d28f46"), stockCount: null, tags: ["sg", "fresh"] },
+  { id: 5, name: "Seedless Grapes 500g", brand: "MyShopza Farm Fresh", cat: "Fresh Fruits", mrp: 5.9, price: 4.9, unit: "500 g", eta: 18, stock: true, image: img("photo-1619566636858-adf3ef46400b"), stockCount: 4, tags: ["fresh", "offer"] },
+  { id: 6, name: "Dragon Fruit (2pc)", brand: "MyShopza Farm Fresh", cat: "Fresh Fruits", mrp: 7.5, price: 6.5, unit: "2 pc", eta: 20, stock: true, image: img("photo-1631209121750-a9f656d28f46"), stockCount: null, tags: ["sg", "fresh"] },
 
   // Vegetables
-  { id: 7, name: "Tomato 500g", brand: "QuickKart Farm Fresh", cat: "Vegetables", mrp: 2.2, price: 2.2, unit: "500 g", eta: 12, stock: true, image: img("photo-1582284540020-8acbe03f4924"), stockCount: null, tags: ["fresh", "bestseller"] },
-  { id: 8, name: "Kang Kong Bunch", brand: "QuickKart Farm Fresh", cat: "Vegetables", mrp: 2.5, price: 1.9, unit: "1 bunch", eta: 12, stock: false, altId: 9, image: img("photo-1597362925123-77861d3fbac7"), stockCount: null, tags: ["fresh"] },
-  { id: 9, name: "Carrot 500g", brand: "QuickKart Farm Fresh", cat: "Vegetables", mrp: 2.0, price: 1.8, unit: "500 g", eta: 12, stock: true, image: img("photo-1447175008436-054170c2e979"), stockCount: null, tags: ["fresh"] },
-  { id: 10, name: "Broccoli 300g", brand: "QuickKart Farm Fresh", cat: "Vegetables", mrp: 3.6, price: 3.2, unit: "300 g", eta: 15, stock: true, image: img("photo-1590779033100-9f60a05a013d"), stockCount: null, tags: ["fresh", "offer"] },
-  { id: 11, name: "Onion 1kg", brand: "QuickKart Farm Fresh", cat: "Vegetables", mrp: 2.8, price: 2.5, unit: "1 kg", eta: 12, stock: true, image: img("photo-1580201092675-a0a6a6cafbb1"), stockCount: null, tags: ["fresh"] },
-  { id: 12, name: "Potato 1kg", brand: "QuickKart Farm Fresh", cat: "Vegetables", mrp: 2.3, price: 2.1, unit: "1 kg", eta: 12, stock: true, image: img("photo-1518977676601-b53f82aba655"), stockCount: null, tags: ["fresh", "bestseller"] },
+  { id: 7, name: "Tomato 500g", brand: "MyShopza Farm Fresh", cat: "Vegetables", mrp: 2.2, price: 2.2, unit: "500 g", eta: 12, stock: true, image: img("photo-1582284540020-8acbe03f4924"), stockCount: null, tags: ["fresh", "bestseller"] },
+  { id: 8, name: "Kang Kong Bunch", brand: "MyShopza Farm Fresh", cat: "Vegetables", mrp: 2.5, price: 1.9, unit: "1 bunch", eta: 12, stock: false, altId: 9, image: img("photo-1597362925123-77861d3fbac7"), stockCount: null, tags: ["fresh"] },
+  { id: 9, name: "Carrot 500g", brand: "MyShopza Farm Fresh", cat: "Vegetables", mrp: 2.0, price: 1.8, unit: "500 g", eta: 12, stock: true, image: img("photo-1447175008436-054170c2e979"), stockCount: null, tags: ["fresh"] },
+  { id: 10, name: "Broccoli 300g", brand: "MyShopza Farm Fresh", cat: "Vegetables", mrp: 3.6, price: 3.2, unit: "300 g", eta: 15, stock: true, image: img("photo-1590779033100-9f60a05a013d"), stockCount: null, tags: ["fresh", "offer"] },
+  { id: 11, name: "Onion 1kg", brand: "MyShopza Farm Fresh", cat: "Vegetables", mrp: 2.8, price: 2.5, unit: "1 kg", eta: 12, stock: true, image: img("photo-1580201092675-a0a6a6cafbb1"), stockCount: null, tags: ["fresh"] },
+  { id: 12, name: "Potato 1kg", brand: "MyShopza Farm Fresh", cat: "Vegetables", mrp: 2.3, price: 2.1, unit: "1 kg", eta: 12, stock: true, image: img("photo-1518977676601-b53f82aba655"), stockCount: null, tags: ["fresh", "bestseller"] },
 
   // Dairy & Eggs
   { id: 13, name: "Fresh Milk 1L", brand: "Marigold", cat: "Dairy & Eggs", mrp: 3.6, price: 3.4, unit: "1 L", eta: 10, stock: true, image: img("photo-1550583724-b2692b85b150"), stockCount: null, tags: ["bestseller"] },
-  { id: 14, name: "Farm Eggs (10pc)", brand: "QuickKart Farm Fresh", cat: "Dairy & Eggs", mrp: 4.2, price: 3.8, unit: "10 pc", eta: 10, stock: true, image: img("photo-1506976785307-8732e854ad03"), stockCount: null, tags: ["bestseller"] },
+  { id: 14, name: "Farm Eggs (10pc)", brand: "MyShopza Farm Fresh", cat: "Dairy & Eggs", mrp: 4.2, price: 3.8, unit: "10 pc", eta: 10, stock: true, image: img("photo-1506976785307-8732e854ad03"), stockCount: null, tags: ["bestseller"] },
   { id: 15, name: "Paneer 200g", brand: "Amul", cat: "Dairy & Eggs", mrp: 5.9, price: 5.2, unit: "200 g", eta: 14, stock: true, image: img("photo-1585584563699-0ae01ba660dd"), stockCount: 3, tags: ["indian"] },
   { id: 66, name: "Curd (Yogurt) 400g", brand: "Amul", cat: "Dairy & Eggs", mrp: 3.2, price: 3.2, unit: "400 g", eta: 14, stock: true, image: img("photo-1552593050-477020c5af3f"), stockCount: null, tags: ["indian"] },
   { id: 16, name: "Salted Butter 200g", brand: "Anchor", cat: "Dairy & Eggs", mrp: 4.9, price: 4.5, unit: "200 g", eta: 12, stock: true, image: img("photo-1642463028849-0d6fbf1eff85"), stockCount: null, tags: [] },
@@ -307,11 +307,11 @@ const SEED_ITEMS = [
   { id: 18, name: "Cheddar Cheese Slices 200g", brand: "Anchor", cat: "Dairy & Eggs", mrp: 6.2, price: 5.5, unit: "200 g", eta: 12, stock: true, image: img("photo-1675850412834-48d406410728"), stockCount: null, tags: [] },
 
   // Meat & Seafood
-  { id: 19, name: "Chicken Breast 500g", brand: "QuickKart Farm Fresh", cat: "Meat & Seafood", mrp: 7.9, price: 6.9, unit: "500 g", eta: 20, stock: true, image: img("photo-1615141982883-c7ad0e69fd62"), stockCount: null, tags: ["bestseller"] },
-  { id: 20, name: "Fresh Salmon Fillet 300g", brand: "QuickKart Farm Fresh", cat: "Meat & Seafood", mrp: 11.9, price: 9.9, unit: "300 g", eta: 22, stock: true, image: img("photo-1624938655931-ce0f87bb3557"), stockCount: 5, tags: ["sg", "offer"] },
-  { id: 21, name: "Tiger Prawns 400g", brand: "QuickKart Farm Fresh", cat: "Meat & Seafood", mrp: 9.9, price: 8.5, unit: "400 g", eta: 22, stock: true, image: img("photo-1611038333075-2efd28705f42"), stockCount: null, tags: ["sg"] },
-  { id: 22, name: "Minced Beef 500g", brand: "QuickKart Farm Fresh", cat: "Meat & Seafood", mrp: 8.9, price: 7.9, unit: "500 g", eta: 20, stock: true, image: img("photo-1634932515818-7f9292c4e149"), stockCount: null, tags: [] },
-  { id: 23, name: "Chicken Wings 500g", brand: "QuickKart Farm Fresh", cat: "Meat & Seafood", mrp: 6.2, price: 5.5, unit: "500 g", eta: 20, stock: true, image: img("photo-1690983323238-0b91789e1b5a"), stockCount: null, tags: ["sg", "bestseller"] },
+  { id: 19, name: "Chicken Breast 500g", brand: "MyShopza Farm Fresh", cat: "Meat & Seafood", mrp: 7.9, price: 6.9, unit: "500 g", eta: 20, stock: true, image: img("photo-1615141982883-c7ad0e69fd62"), stockCount: null, tags: ["bestseller"] },
+  { id: 20, name: "Fresh Salmon Fillet 300g", brand: "MyShopza Farm Fresh", cat: "Meat & Seafood", mrp: 11.9, price: 9.9, unit: "300 g", eta: 22, stock: true, image: img("photo-1624938655931-ce0f87bb3557"), stockCount: 5, tags: ["sg", "offer"] },
+  { id: 21, name: "Tiger Prawns 400g", brand: "MyShopza Farm Fresh", cat: "Meat & Seafood", mrp: 9.9, price: 8.5, unit: "400 g", eta: 22, stock: true, image: img("photo-1611038333075-2efd28705f42"), stockCount: null, tags: ["sg"] },
+  { id: 22, name: "Minced Beef 500g", brand: "MyShopza Farm Fresh", cat: "Meat & Seafood", mrp: 8.9, price: 7.9, unit: "500 g", eta: 20, stock: true, image: img("photo-1634932515818-7f9292c4e149"), stockCount: null, tags: [] },
+  { id: 23, name: "Chicken Wings 500g", brand: "MyShopza Farm Fresh", cat: "Meat & Seafood", mrp: 6.2, price: 5.5, unit: "500 g", eta: 20, stock: true, image: img("photo-1690983323238-0b91789e1b5a"), stockCount: null, tags: ["sg", "bestseller"] },
 
   // Rice & Grains
   { id: 24, name: "Jasmine Rice 5kg", brand: "Golden Phoenix", cat: "Rice & Grains", mrp: 13.9, price: 12.9, unit: "5 kg", eta: 15, stock: true, image: img("photo-1635562985686-4f8bb9c0d3bf"), stockCount: null, tags: ["sg", "bestseller"] },
@@ -325,7 +325,7 @@ const SEED_ITEMS = [
   // Snacks
   { id: 29, name: "Lay's Classic 52g", brand: "Lay's", cat: "Snacks", mrp: 1.9, price: 1.9, unit: "52 g", eta: 12, stock: true, image: img("photo-1558961363-fa8fdf82db35"), stockCount: null, tags: ["bestseller"] },
   { id: 30, name: "Oreo Cookies 137g", brand: "Oreo", cat: "Snacks", mrp: 2.9, price: 2.5, unit: "137 g", eta: 12, stock: true, image: img("photo-1599490659213-e2b9527bd087"), stockCount: null, tags: ["bestseller", "offer"] },
-  { id: 31, name: "Mixed Nuts 200g", brand: "QuickKart Pantry", cat: "Snacks", mrp: 7.9, price: 6.9, unit: "200 g", eta: 12, stock: true, image: img("photo-1613919113640-25732ec5e61f"), stockCount: null, tags: [] },
+  { id: 31, name: "Mixed Nuts 200g", brand: "MyShopza Pantry", cat: "Snacks", mrp: 7.9, price: 6.9, unit: "200 g", eta: 12, stock: true, image: img("photo-1613919113640-25732ec5e61f"), stockCount: null, tags: [] },
   { id: 32, name: "Popcorn 100g", brand: "Act II", cat: "Snacks", mrp: 3.2, price: 2.9, unit: "100 g", eta: 12, stock: true, image: img("photo-1576717585968-8ea8166b89b8"), stockCount: null, tags: [] },
   { id: 60, name: "Bak Kwa (BBQ Pork Slices) 200g", brand: "Bee Cheng Hiang", cat: "Snacks", mrp: 15.9, price: 15.9, unit: "200 g", eta: 14, stock: true, image: img("photo-1690983323238-0b91789e1b5a"), stockCount: null, tags: ["sg"] },
   { id: 61, name: "Prawn Crackers 150g", brand: "Mamee", cat: "Snacks", mrp: 2.9, price: 2.9, unit: "150 g", eta: 12, stock: true, image: img("photo-1613919113640-25732ec5e61f"), stockCount: null, tags: ["sg"] },
@@ -342,10 +342,10 @@ const SEED_ITEMS = [
   { id: 70, name: "Masala Chai 250g", brand: "Tata Tea", cat: "Beverages", mrp: 4.9, price: 4.9, unit: "250 g", eta: 14, stock: true, image: img("photo-1613510214658-f1e56b099811"), stockCount: null, tags: ["indian"] },
 
   // Frozen Foods
-  { id: 38, name: "Frozen Mixed Vegetables 500g", brand: "QuickKart Fresh", cat: "Frozen Foods", mrp: 3.9, price: 3.5, unit: "500 g", eta: 16, stock: true, image: img("photo-1651383140368-9b3ee59c2981"), stockCount: null, tags: [] },
+  { id: 38, name: "Frozen Mixed Vegetables 500g", brand: "MyShopza Fresh", cat: "Frozen Foods", mrp: 3.9, price: 3.5, unit: "500 g", eta: 16, stock: true, image: img("photo-1651383140368-9b3ee59c2981"), stockCount: null, tags: [] },
   { id: 39, name: "Frozen Dumplings 500g", brand: "CP", cat: "Frozen Foods", mrp: 7.9, price: 6.9, unit: "500 g", eta: 16, stock: true, image: img("photo-1601599967100-f16100982063"), stockCount: null, tags: ["offer"] },
   { id: 40, name: "Vanilla Ice Cream 1L", brand: "Magnolia", cat: "Frozen Foods", mrp: 8.9, price: 7.9, unit: "1 L", eta: 16, stock: true, image: img("photo-1498654200943-1088dd4438ae"), stockCount: null, tags: ["bestseller"] },
-  { id: 41, name: "Frozen Fish Fillet 400g", brand: "QuickKart Fresh", cat: "Frozen Foods", mrp: 9.5, price: 8.5, unit: "400 g", eta: 18, stock: true, image: img("photo-1547637205-fde0c9011f9d"), stockCount: null, tags: [] },
+  { id: 41, name: "Frozen Fish Fillet 400g", brand: "MyShopza Fresh", cat: "Frozen Foods", mrp: 9.5, price: 8.5, unit: "400 g", eta: 18, stock: true, image: img("photo-1547637205-fde0c9011f9d"), stockCount: null, tags: [] },
   { id: 64, name: "Curry Puffs (Frozen) 6pc", brand: "Old Chang Kee", cat: "Frozen Foods", mrp: 6.9, price: 6.9, unit: "6 pc", eta: 18, stock: true, image: img("photo-1601599967100-f16100982063"), stockCount: null, tags: ["sg"] },
   { id: 65, name: "Fish Balls 500g", brand: "Fisho", cat: "Frozen Foods", mrp: 5.5, price: 5.5, unit: "500 g", eta: 18, stock: true, image: img("photo-1611038333075-2efd28705f42"), stockCount: null, tags: ["sg"] },
   { id: 71, name: "Frozen Paratha (5pc)", brand: "MTR", cat: "Frozen Foods", mrp: 5.5, price: 5.5, unit: "5 pc", eta: 18, stock: true, image: img("photo-1651383140368-9b3ee59c2981"), stockCount: null, tags: ["indian"] },
@@ -594,9 +594,9 @@ function findServiceableBranch(postal, branches) {
 
 // ---------- Branches (stores) ----------
 const SEED_BRANCHES = [
-  { id: 1, name: "QuickKart Tampines", area: "Tampines / Bedok", lat: 1.3496, lng: 103.9568, radiusKm: 6, hoursOpen: "07:00", hoursClose: "23:00", active: true, pickupAvailable: true, pickupAddress: "10 Tampines Central 1, #01-05, Singapore 529536" },
-  { id: 2, name: "QuickKart Jurong West", area: "Jurong West / Clementi", lat: 1.3404, lng: 103.7090, radiusKm: 6, hoursOpen: "07:00", hoursClose: "23:00", active: true, pickupAvailable: true, pickupAddress: "1 Jurong West Central 2, #02-18, Singapore 648886" },
-  { id: 3, name: "QuickKart Ang Mo Kio", area: "Ang Mo Kio / Bishan", lat: 1.3691, lng: 103.8454, radiusKm: 6, hoursOpen: "07:00", hoursClose: "23:00", active: true, pickupAvailable: false, pickupAddress: "" },
+  { id: 1, name: "MyShopza Tampines", area: "Tampines / Bedok", lat: 1.3496, lng: 103.9568, radiusKm: 6, hoursOpen: "07:00", hoursClose: "23:00", active: true, pickupAvailable: true, pickupAddress: "10 Tampines Central 1, #01-05, Singapore 529536" },
+  { id: 2, name: "MyShopza Jurong West", area: "Jurong West / Clementi", lat: 1.3404, lng: 103.7090, radiusKm: 6, hoursOpen: "07:00", hoursClose: "23:00", active: true, pickupAvailable: true, pickupAddress: "1 Jurong West Central 2, #02-18, Singapore 648886" },
+  { id: 3, name: "MyShopza Ang Mo Kio", area: "Ang Mo Kio / Bishan", lat: 1.3691, lng: 103.8454, radiusKm: 6, hoursOpen: "07:00", hoursClose: "23:00", active: true, pickupAvailable: false, pickupAddress: "" },
 ];
 
 // ---------- Delivery partners ----------
@@ -725,7 +725,7 @@ function seedOrders() {
 
 
 // ====================================================================
-// QuickKart Web — desktop storefront. Plain JS, no framework.
+// MyShopza Web — desktop storefront. Plain JS, no framework.
 // Ported business logic from quickkart-prototype.html; UI rebuilt for
 // desktop per the redesign brief (see plan). Renders by rebuilding
 // innerHTML of #app from state; event handling is delegated so we
@@ -811,7 +811,8 @@ const LS_PREFIX = "qkweb_";
 function loadLS(key, fallback) {
   try {
     const raw = window.localStorage.getItem(LS_PREFIX + key);
-    if (raw !== null) return JSON.parse(raw);
+    // Round 27: data saved before the rename still says "Quick" + "Kart" — show it as MyShopza.
+    if (raw !== null) return JSON.parse(raw.split("Quick" + "Kart").join("MyShopza"));
   } catch (e) {}
   return typeof fallback === "function" ? fallback() : fallback;
 }
@@ -1281,7 +1282,7 @@ function viewLogin() {
     <div class="login-visual">
       <div class="login-visual-inner">
         <div class="brand-tile brand-tile-lg"><img src="${State.siteCustomization.branding.logoUrl}" alt="" /></div>
-        <div class="login-brand">QuickKart ${ic("sparkle")}</div>
+        <div class="login-brand">MyShopza ${ic("sparkle")}</div>
         <p class="login-tag">Fresh groceries, delivered across Singapore</p>
         <ul class="login-points">
           <li>${ic("truck")} Reliable island-wide delivery</li>
@@ -1295,7 +1296,7 @@ function viewLogin() {
         <div class="login-card-head">
           <div class="brand-tile"><img src="${State.siteCustomization.branding.logoUrl}" alt="" /></div>
           <div>
-            <div class="login-card-title">Sign in to QuickKart</div>
+            <div class="login-card-title">Sign in to MyShopza</div>
             <div class="login-card-sub">Demo login — any details work, no real account needed.</div>
           </div>
         </div>
@@ -1422,9 +1423,9 @@ function customerHeader(addr, cartCount, totalPrice, needAttn) {
   return `
   <header class="topbar customer-topbar">
     <div class="topbar-row container">
-      <button class="brand-btn" data-action="go" data-route="home" aria-label="QuickKart home">
+      <button class="brand-btn" data-action="go" data-route="home" aria-label="MyShopza home">
         <span class="brand-tile"><img src="${State.siteCustomization.branding.logoUrl}" alt="" /></span>
-        <span class="brand-word">QuickKart</span>
+        <span class="brand-word">MyShopza</span>
       </button>
       <button class="addr-btn" data-action="open-address-modal" data-origin="nav">
         ${ic("pin")}
@@ -1490,7 +1491,7 @@ function siteFooter() {
       <div class="footer-brand">
         <span class="brand-tile"><img src="${State.siteCustomization.branding.logoUrl}" alt="" /></span>
         <div>
-          <div class="footer-brand-name">QuickKart</div>
+          <div class="footer-brand-name">MyShopza</div>
           <div class="footer-brand-sub">by ${esc(State.companyProfile.name)}</div>
         </div>
       </div>
@@ -2476,7 +2477,7 @@ function viewCheckout() {
             }).join("")}
           </div>`;
         })() : `
-          <button class="btn btn-primary btn-lg btn-block" data-action="handle-pay" data-method="QuickKart Wallet" ${canPay ? "" : "disabled"}>${ic("wallet")} Confirm order — fully covered by wallet</button>`}
+          <button class="btn btn-primary btn-lg btn-block" data-action="handle-pay" data-method="MyShopza Wallet" ${canPay ? "" : "disabled"}>${ic("wallet")} Confirm order — fully covered by wallet</button>`}
       </div>
       <div class="qk-muted small" style="margin-top:10px">Prototype only — wired to a real payment gateway (Stripe/HitPay) at build time.</div>
     </div>
@@ -3151,7 +3152,7 @@ function invoiceHTML(order) {
         <div class="row"><span>Delivery charges</span><span>${deliveryFee > 0 ? money(deliveryFee) : "FREE"}</span></div>
         ${expressCharge > 0 ? `<div class="row"><span>Express delivery charge</span><span>${money(expressCharge)}</span></div>` : ""}
         <div class="row border-t"><b>Invoice value</b><b>${money(invoiceValue)}</b></div>
-        ${walletApplied > 0 ? `<div class="row"><span>Paid from QuickKart Wallet</span><span>− ${money(walletApplied)}</span></div>` : ""}
+        ${walletApplied > 0 ? `<div class="row"><span>Paid from MyShopza Wallet</span><span>− ${money(walletApplied)}</span></div>` : ""}
         <div class="row border-t2"><b>Amount payable</b><b>${money(amountDue)}</b></div>
         ${inclusive ? `<div class="row muted"><span>Of which GST (${tax.rate}%)</span><span>${money(gstTotal)}</span></div>` : ""}
       </div>
@@ -3279,7 +3280,7 @@ function viewAdminShell() {
   return `
   <div class="dash-shell">
     <aside class="dash-sidebar">
-      <div class="dash-brand"><span class="brand-tile"><img src="${State.siteCustomization.branding.logoUrl}" alt="" /></span><span class="brand-word">QuickKart</span></div>
+      <div class="dash-brand"><span class="brand-tile"><img src="${State.siteCustomization.branding.logoUrl}" alt="" /></span><span class="brand-word">MyShopza</span></div>
       <div class="dash-eyebrow">${esc(eyebrow)}</div>
       <nav class="dash-nav">${adminNavHTML(tabs)}</nav>
       <button class="dash-logout" data-action="logout">${ic("logout")}<span>Logout</span></button>
@@ -3807,7 +3808,7 @@ function adminThemeBranding(editable) {
           ${themeColorFieldHTML("footerBg", "Footer Background")}
         </div>
         <div class="qk-muted small" style="margin-top:2px">A darker shade is applied automatically for the header's gradient effect.</div>
-        ${lowContrast ? `<div class="field-error" style="margin-top:8px">${ic("alert")} Low contrast — the QuickKart wordmark may be hard to read against this header color.</div>` : ""}
+        ${lowContrast ? `<div class="field-error" style="margin-top:8px">${ic("alert")} Low contrast — the MyShopza wordmark may be hard to read against this header color.</div>` : ""}
       </div>
       <div class="summary-card">
         <div class="summary-card-title">Logo</div>
@@ -3850,7 +3851,7 @@ function themePreviewMock(d) {
   <div class="theme-preview-panel" style="${vars}">
     <div class="theme-preview-header">
       <span class="brand-tile"><img src="${esc(d.branding.logoUrl)}" alt="" /></span>
-      <span class="brand-word">QuickKart</span>
+      <span class="brand-word">MyShopza</span>
     </div>
     <div class="theme-preview-body">
       <div class="p-card theme-preview-card">
@@ -4648,7 +4649,7 @@ function branchFormModal() {
     <div class="dialog dialog-static" role="dialog" aria-modal="true" data-action="noop">
       <div class="dialog-head"><span>${f.id ? "Edit branch" : "Add branch"}</span><button class="dialog-close" data-action="close-modal">${ic("close")}</button></div>
       <form class="dialog-body" data-action="save-branch">
-        <label class="field"><span class="field-label">Branch name *</span><input class="input ${err.name ? "invalid" : ""}" name="name" value="${esc(f.name)}" placeholder="e.g. QuickKart Tampines" /></label>
+        <label class="field"><span class="field-label">Branch name *</span><input class="input ${err.name ? "invalid" : ""}" name="name" value="${esc(f.name)}" placeholder="e.g. MyShopza Tampines" /></label>
         ${err.name ? `<div class="field-error">${esc(err.name)}</div>` : ""}
         <label class="field"><span class="field-label">Area</span><input class="input" name="area" value="${esc(f.area)}" placeholder="e.g. Tampines / Bedok" /></label>
         <div class="field-grid-3">
@@ -4800,7 +4801,7 @@ function viewRiderShell() {
   <div class="site">
     <header class="topbar rider-topbar">
       <div class="topbar-row container">
-        <button class="brand-btn" data-action="noop"><span class="brand-tile"><img src="${State.siteCustomization.branding.logoUrl}" alt="" /></span><span class="brand-word">QuickKart</span></button>
+        <button class="brand-btn" data-action="noop"><span class="brand-tile"><img src="${State.siteCustomization.branding.logoUrl}" alt="" /></span><span class="brand-word">MyShopza</span></button>
         <div class="rider-title"><div class="qk-muted small" style="color:rgba(255,255,255,.75)">Delivery partner${branch ? ` · ${esc(branch.name)}` : ""}</div><div class="rider-name">${esc(session.name)}</div></div>
         <nav class="topbar-actions">
           <span class="online-toggle ${ready ? "on" : ""}"><span class="status-dot ${busy ? "busy" : ready ? "on" : ""}"></span>${statusLabel}</span>
@@ -5446,7 +5447,7 @@ const Actions = {
     render();
   },
   "reset-theme"() {
-    if (!window.confirm("Reset theme and logo to QuickKart defaults? This discards your customizations.")) return;
+    if (!window.confirm("Reset theme and logo to MyShopza defaults? This discards your customizations.")) return;
     State.siteCustomization = deepClone(DEFAULT_SITE_CUSTOMIZATION);
     persist("siteCustomization");
     applyThemeVars(State.siteCustomization.theme, State.siteCustomization.branding);

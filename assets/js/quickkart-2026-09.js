@@ -1,5 +1,5 @@
 /* ====================================================================
-   QuickKart prototype — Director change set, September 2026.
+   MyShopza prototype — Director change set, September 2026.
 
    Everything new from the directors' Admin Panel + Notification brief
    lives in this file so the frontend team can read the changes in one
@@ -114,8 +114,8 @@ const DEFAULT_PEAK_SECTIONS = [
   { id: 6, name: "Night", start: 20, end: 24 },
 ];
 const DEFAULT_NOTIFICATION_CONFIG = {
-  email: { enabled: true, mode: "default", host: "", port: 587, security: "STARTTLS", username: "", passwordSet: false, fromName: "QuickKart", fromEmail: "", replyTo: "" },
-  sms: { enabled: true, mode: "default", provider: "Twilio", accountId: "", tokenSet: false, senderId: "QuickKart" },
+  email: { enabled: true, mode: "default", host: "", port: 587, security: "STARTTLS", username: "", passwordSet: false, fromName: "MyShopza", fromEmail: "", replyTo: "" },
+  sms: { enabled: true, mode: "default", provider: "Twilio", accountId: "", tokenSet: false, senderId: "MyShopza" },
   push: { enabled: true, mode: "default", projectId: "", senderId: "", serviceAccountSet: false, serviceAccountFile: "", vapidKey: "" },
 };
 const NOTIFICATION_PLACEHOLDERS = ["customerName", "orderNo", "amount", "storeName", "otp", "eta", "itemName", "slot", "businessName"];
@@ -937,7 +937,7 @@ function notifChannelCard(ch, title, icon, editable, ownFields, defaultText) {
     ${c.enabled ? `
     <form data-action="save-notif-channel" data-ch="${ch}">
       <div class="notif-mode">
-        <label><input type="radio" name="mode" value="default" ${c.mode === "default" ? "checked" : ""} data-action="set-notif-mode" data-ch="${ch}" ${dis} /> Use QuickKart's shared provider</label>
+        <label><input type="radio" name="mode" value="default" ${c.mode === "default" ? "checked" : ""} data-action="set-notif-mode" data-ch="${ch}" ${dis} /> Use MyShopza's shared provider</label>
         <label><input type="radio" name="mode" value="own" ${c.mode === "own" ? "checked" : ""} data-action="set-notif-mode" data-ch="${ch}" ${dis} /> Use our own account</label>
       </div>
       ${c.mode === "own" ? ownFields(c, dis) : `<div class="qk-muted small" style="margin:8px 0">${defaultText(c, dis)}</div>`}
@@ -964,17 +964,17 @@ function notifChannelsHTML(editable) {
         <label class="field"><span class="field-label">From email *</span><input class="input" type="email" name="fromEmail" value="${val(c.fromEmail)}" placeholder="orders@yourdomain.sg" ${dis} /></label>
       </div>
       <label class="field"><span class="field-label">Reply-to email</span><input class="input" type="email" name="replyTo" value="${val(c.replyTo)}" ${dis} /></label>`,
-    (c, dis) => `Sent from <b>no-reply@quickkart.sg</b> with your business name as the sender name.
+    (c, dis) => `Sent from <b>no-reply@myshopza.com</b> with your business name as the sender name.
       <label class="field" style="margin-top:8px"><span class="field-label">Sender name</span><input class="input" name="fromName" value="${val(c.fromName)}" ${dis} /></label>`)}
     ${notifChannelCard("sms", "SMS", "phone", editable, (c, dis) => `
       <label class="field"><span class="field-label">Provider *</span><select class="input" name="provider" ${dis}>${SMS_PROVIDERS.map((p) => `<option ${c.provider === p ? "selected" : ""}>${p}</option>`).join("")}</select></label>
       <label class="field"><span class="field-label">Account SID / API key *</span><input class="input" name="accountId" value="${val(c.accountId)}" autocomplete="off" ${dis} /></label>
       ${secretField("token", "Auth token / API secret *", c.tokenSet)}
       <label class="field"><span class="field-label">Sender ID or number * <span class="qk-muted small">(up to 11 letters, or a number)</span></span><input class="input" name="senderId" maxlength="15" value="${val(c.senderId)}" ${dis} /></label>`,
-    (c, dis) => `Sent through QuickKart's SMS account. Login codes (OTP) always go by SMS.
+    (c, dis) => `Sent through MyShopza's SMS account. Login codes (OTP) always go by SMS.
       <label class="field" style="margin-top:8px"><span class="field-label">Sender ID</span><input class="input" name="senderId" maxlength="11" value="${val(c.senderId)}" ${dis} /></label>`)}
     ${notifChannelCard("push", "Push notifications", "bell", editable, (c, dis) => `
-      <div class="notice notice-warn" style="margin-bottom:10px">${ic("alert")}<span>Your own Firebase (FCM) project only works if your customers use <b>your own branded app build</b> registered to that project. With the shared QuickKart app, keep the shared provider.</span></div>
+      <div class="notice notice-warn" style="margin-bottom:10px">${ic("alert")}<span>Your own Firebase (FCM) project only works if your customers use <b>your own branded app build</b> registered to that project. With the shared MyShopza app, keep the shared provider.</span></div>
       <div class="field-grid-2">
         <label class="field"><span class="field-label">Firebase project ID *</span><input class="input" name="projectId" value="${val(c.projectId)}" ${dis} /></label>
         <label class="field"><span class="field-label">Sender ID</span><input class="input" name="senderId" value="${val(c.senderId)}" ${dis} /></label>
@@ -984,7 +984,7 @@ function notifChannelsHTML(editable) {
         <span class="qk-muted small">${c.serviceAccountSet ? `Saved (${esc(c.serviceAccountFile || "service-account.json")}) — upload a new file to replace it.` : "Not uploaded yet."}${UI.pendingSaFile ? ` Ready to save: <b>${esc(UI.pendingSaFile)}</b>` : ""}</span>
       </label>
       <label class="field"><span class="field-label">Web push key (VAPID public key)</span><input class="input" name="vapidKey" value="${val(c.vapidKey)}" ${dis} /></label>`,
-    () => `Sent through the QuickKart app's Firebase project. Nothing to set up.`)}
+    () => `Sent through the MyShopza app's Firebase project. Nothing to set up.`)}
   </div>`;
 }
 function notifTemplatesHTML(editable) {
@@ -1001,7 +1001,7 @@ function notifTemplatesHTML(editable) {
   </div>`;
 }
 function fillPlaceholders(text) {
-  const sample = { customerName: "Priya", orderNo: "QK00123", amount: "S$42.50", storeName: "QuickKart Tampines", otp: "482913", eta: "6:40 PM", itemName: "Fresh Milk 1L", slot: "6:00 PM – 8:00 PM", businessName: State.companyProfile.tradingAs || "QuickKart" };
+  const sample = { customerName: "Priya", orderNo: "QK00123", amount: "S$42.50", storeName: "MyShopza Tampines", otp: "482913", eta: "6:40 PM", itemName: "Fresh Milk 1L", slot: "6:00 PM – 8:00 PM", businessName: State.companyProfile.tradingAs || "MyShopza" };
   return String(text || "").replace(/\{\{(\w+)\}\}/g, (m, k) => (k in sample ? sample[k] : m));
 }
 function templateFormModal() {
@@ -1092,7 +1092,7 @@ const WHATS_NEW = [
     ["Masters ▸ Suppliers (new)", "Supplier list with code, contact, UEN, payment terms, lead time; used when receiving stock."],
     ["Bulk import", "Import Categories, Products, Stock (counts per store) and Suppliers from Excel or CSV: download the template, upload, preview every row (new / update / error), then confirm. Products match by SKU."],
     ["Export", "Excel and CSV export on Orders, Customers, Catalogue, Categories, Brands, Stock, Stock history, Suppliers, Users, Delivery Partners, Coupons, Delivery Slots and the Dashboard insights."],
-    ["Setup ▸ Notifications (new)", "Business-wide (all stores) channel settings: Email (SMTP), SMS (provider, keys, sender ID), Push (FCM). Each channel on/off, shared QuickKart provider or own account, send test. Secrets are write-only. Message templates per event with channel choice, wording, placeholders and preview."],
+    ["Setup ▸ Notifications (new)", "Business-wide (all stores) channel settings: Email (SMTP), SMS (provider, keys, sender ID), Push (FCM). Each channel on/off, shared MyShopza provider or own account, send test. Secrets are write-only. Message templates per event with channel choice, wording, placeholders and preview."],
   ] },
   { area: "Customer app", items: [
     ["Checkout — Express", "'Deliver at your convenience' is now 'Express delivery' with its charge shown on the button and as its own bill line. Hidden when the business switches it off."],
@@ -1285,7 +1285,7 @@ const IMPORT_DEFS = {
   },
   inventory: {
     label: "Inventory (stock counts)", columns: ["store*", "sku*", "quantity*", "unit_cost", "note"],
-    sample: [["QuickKart Tampines", "QK-0001", "48", "2.05", "Monthly stock take"]],
+    sample: [["MyShopza Tampines", "QK-0001", "48", "2.05", "Monthly stock take"]],
     notes: "Sets each store's quantity on hand to the number in the file (like a stock take). Every change is written to Stock history as 'Bulk import'.",
     plan(rows) {
       const seen = new Set();

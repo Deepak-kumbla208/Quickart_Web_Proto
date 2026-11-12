@@ -1,5 +1,5 @@
 /* ====================================================================
-   QuickKart prototype — Round 16 (14 October 2026): PICKING AND PACKING
+   MyShopza prototype — Round 16 (14 October 2026): PICKING AND PACKING
    ARE ONE STEP, "PREPARING" (backend P10-2f, MR !118, decision D108).
 
    This round is a *removal*, so unlike the other rounds it has almost no

@@ -1,5 +1,5 @@
 /* ============================================================
-   QuickKart prototype — Round 24 (2026-10-30)
+   MyShopza prototype — Round 24 (2026-10-30)
    Buy 1 Get 1 — one free unit per product, per customer, per day
    (backend D140, FX-15; customer contract 0.28.0-draft):
 

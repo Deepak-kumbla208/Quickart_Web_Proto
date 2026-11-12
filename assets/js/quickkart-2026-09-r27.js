@@ -12,3 +12,11 @@
     if (taps >= 5) { taps = 0; window.location.href = 'control.html'; }
   });
 })();
+
+/* The prototype now uses the product's new name, MyShopza, everywhere it said the old name: sign-in, header, footer,
+   the sample shop and store names, the wallet, the rider app, help texts and the sample sender address. Order numbers
+   keep the QK prefix. Saved sample data from before is shown with the new name too (see loadLS in quickkart.js). */
+WHATS_NEW.unshift({ area: "Round 27 — the new name: MyShopza (2026-11-12)", items: [
+  ["MyShopza everywhere", "Sign-in, the header and footer, the sample shop and its stores (MyShopza Tampines…), the wallet (MyShopza Wallet), the rider app (MyShopza Rider), help texts and sample addresses (no-reply@myshopza.com) now say MyShopza. Order numbers keep QK (QK00123)."],
+  ["Saved sample data", "Anything this browser saved earlier shows the new name too — no need to reset."],
+] });

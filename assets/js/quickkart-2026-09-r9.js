@@ -1,5 +1,5 @@
 /* ====================================================================
-   QuickKart prototype — Round 9 (2 October 2026): Audit log, as the
+   MyShopza prototype — Round 9 (2 October 2026): Audit log, as the
    backend built it (P8-6, MR !70 on quickkart-api-service).
 
    A. Setup ▸ Audit log — the Super Admin only (no row in the permission

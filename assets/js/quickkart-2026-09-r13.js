@@ -1,5 +1,5 @@
 /* ====================================================================
-   QuickKart prototype — Round 13 (9 October 2026): combo bundles in the
+   MyShopza prototype — Round 13 (9 October 2026): combo bundles in the
    cart and a limit on each combo, as the backend built them (P9-5b,
    BE-ADM-025, D100) on quickkart-api-service. Every change of the day is here.
 

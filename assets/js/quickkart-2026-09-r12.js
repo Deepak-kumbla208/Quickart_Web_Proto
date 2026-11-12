@@ -1,5 +1,5 @@
 /* ====================================================================
-   QuickKart prototype — Round 12 (7 October 2026): staff status changes as
+   MyShopza prototype — Round 12 (7 October 2026): staff status changes as
    the backend built them (P10-2d, MR !89, D90) on quickkart-api-service.
    Every change of the day is here.
 
@@ -529,7 +529,7 @@
     return `
     <div class="tr-row" style="grid-template-columns: minmax(0,2.2fr) minmax(0,1.3fr) auto">
       <span class="tr-what"><b><button class="link-btn" data-action="open-order" data-id="${o.id}">#${esc(o.id)}</button> · ${esc(o.customerName || o.contactName || "")}</b>
-        <span class="qk-muted small">${esc(store.replace("QuickKart ", ""))} · ${money(o.total)} · ${esc(o.paymentMethod || "")} · asked ${timeAgo(r.createdAt)}</span>
+        <span class="qk-muted small">${esc(store.replace("MyShopza ", ""))} · ${money(o.total)} · ${esc(o.paymentMethod || "")} · asked ${timeAgo(r.createdAt)}</span>
         <span class="small">“${esc(r.reason)}”</span>
         ${st === "completed" && r.refund ? `<span class="small">Refunded ${money(r.refund.amount)}${r.refund.toPayment ? ` · ${money(r.refund.toPayment)} to ${esc(o.paymentMethod)}` : ""}${r.refund.toWallet ? ` · ${money(r.refund.toWallet)} to the wallet` : ""}</span>` : ""}
         ${st === "completed" && r.resolution === "replacement" ? `<span class="small">Replacement arranged</span>` : ""}

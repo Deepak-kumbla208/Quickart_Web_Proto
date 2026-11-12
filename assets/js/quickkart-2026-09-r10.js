@@ -1,5 +1,5 @@
 /* ====================================================================
-   QuickKart prototype — Round 10 (2 October 2026): picture uploads (P9-1,
+   MyShopza prototype — Round 10 (2 October 2026): picture uploads (P9-1,
    MR !72, D77), Categories / Brands (P9-2, MR !73), and Products / Stock
    (P9-3 MR !75, P9-4 MR !76, D79, D80), as the backend built them on
    quickkart-api-service. Every change of the day is here.

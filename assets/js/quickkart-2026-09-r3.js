@@ -1,5 +1,5 @@
 /* ====================================================================
-   QuickKart prototype — Round 3 (September 2026): filters, the Orders
+   MyShopza prototype — Round 3 (September 2026): filters, the Orders
    workspace and the Customers section.
 
    Loads after quickkart.js and quickkart-2026-09.js. The same filter bar
@@ -182,7 +182,7 @@ function orderKind(o) {
   return "express";
 }
 const KIND_META = { express: { label: "Express", tone: "blue" }, scheduled: { label: "Scheduled", tone: "gray" }, pickup: { label: "Pickup", tone: "green" } };
-const ONLINE_METHODS = ["PayNow", "GrabPay", "Credit / Debit Card", "QuickKart Wallet"];
+const ONLINE_METHODS = ["PayNow", "GrabPay", "Credit / Debit Card", "MyShopza Wallet"];
 function orderPayStatus(o) {
   if (["cancelled", "returned"].includes(o.status)) return { key: "refunded", label: "Refunded / void", tone: "gray" };
   if (o.paymentMethod === "Cash on Delivery") return o.status === "delivered" ? { key: "paid", label: "Cash collected", tone: "green" } : { key: "collect", label: "To collect", tone: "yellow" };
@@ -498,7 +498,7 @@ function adminOrdersV2() {
       fields: [
         { key: "type", label: "Type", options: [["express", "Express"], ["scheduled", "Scheduled"], ["pickup", "Pickup"]] },
         { key: "slot", label: "Slot", groups: slotGroups },
-        { key: "pay", label: "Payment", options: [...State.deliverySettings.paymentMethods.map((m) => [m.name, m.name]), ["QuickKart Wallet", "QuickKart Wallet"]] },
+        { key: "pay", label: "Payment", options: [...State.deliverySettings.paymentMethods.map((m) => [m.name, m.name]), ["MyShopza Wallet", "MyShopza Wallet"]] },
         { key: "payStatus", label: "Paid?", options: [["paid", "Paid / collected"], ["collect", "Cash to collect"], ["refunded", "Refunded / void"]] },
         { key: "rider", label: "Rider", options: [["none", "Not assigned"], ...riders.map((p) => [String(p.id), p.name])] },
         { key: "issue", label: "Issues", options: [["late", "Late"], ["short", "Short at store"], ["unavailable", "Item unavailable"], ["return", "Return requested"], ["refund_failed", "Refund failed"]] },

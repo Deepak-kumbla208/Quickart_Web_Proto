@@ -1,5 +1,5 @@
 /* ====================================================================
-   QuickKart prototype — Round 6 (September 2026).
+   MyShopza prototype — Round 6 (September 2026).
 
    A. Stock transfers are requests, not instant moves:
         short store: Request N from <store>
@@ -279,14 +279,14 @@ window.shortLineHTML = function (o, it, idx, editable) {
   <div class="short-line small">
     <span class="tag tag-warn">Short ${it.short} at this store</span>
     ${active ? `
-      <span class="tr-chip tr-${active.status}">${esc(TRANSFER_STATUS[active.status].label)}: ${active.qty} from ${esc(findBranch(active.fromId).name.replace("QuickKart ", ""))} · ${timeAgo(active.history[active.history.length - 1].at)}</span>
+      <span class="tr-chip tr-${active.status}">${esc(TRANSFER_STATUS[active.status].label)}: ${active.qty} from ${esc(findBranch(active.fromId).name.replace("MyShopza ", ""))} · ${timeAgo(active.history[active.history.length - 1].at)}</span>
       ${editable && active.status === "requested" ? `<button type="button" class="link-btn small" data-action="transfer-cancel" data-id="${active.id}">Cancel request</button>` : ""}
       ${editable && active.status === "sent" && canReceiveHere ? `<button type="button" class="btn btn-sm btn-primary" data-action="transfer-receive" data-id="${active.id}">Mark received</button>` : ""}` : ""}
-    ${lastDeclined && !active ? `<span class="tone-red">${esc(findBranch(lastDeclined.fromId).name.replace("QuickKart ", ""))} declined: ${esc(lastDeclined.declineReason || "")}</span>` : ""}
+    ${lastDeclined && !active ? `<span class="tone-red">${esc(findBranch(lastDeclined.fromId).name.replace("MyShopza ", ""))} declined: ${esc(lastDeclined.declineReason || "")}</span>` : ""}
   </div>
   ${editable && need > 0 && !active && PREP_STATUSES.includes(o.status) ? `
   <div class="short-line small">
-    ${near.length ? near.slice(0, 3).map((n) => `<button type="button" class="btn btn-sm btn-outline" data-action="transfer-request" data-order="${o.id}" data-idx="${idx}" data-from="${n.b.id}" data-qty="${Math.min(need, n.qty)}">Request ${Math.min(need, n.qty)} from ${esc(n.b.name.replace("QuickKart ", ""))} <span class="qk-muted">(has ${n.qty})</span></button>`).join("") : `<span class="qk-muted">No other store has it — mark it Not available so the customer can choose.</span>`}
+    ${near.length ? near.slice(0, 3).map((n) => `<button type="button" class="btn btn-sm btn-outline" data-action="transfer-request" data-order="${o.id}" data-idx="${idx}" data-from="${n.b.id}" data-qty="${Math.min(need, n.qty)}">Request ${Math.min(need, n.qty)} from ${esc(n.b.name.replace("MyShopza ", ""))} <span class="qk-muted">(has ${n.qty})</span></button>`).join("") : `<span class="qk-muted">No other store has it — mark it Not available so the customer can choose.</span>`}
   </div>` : ""}`;
 };
 
@@ -306,7 +306,7 @@ function transfersHTML(branchId) {
     return `
     <div class="tr-row">
       <span class="tr-what"><b>${t.qty} × ${esc(item.name || "")}</b><span class="qk-muted small">${esc(item.sku || "")}${t.orderId ? ` · for order <button class="link-btn small" data-action="open-order" data-id="${t.orderId}">#${esc(t.orderId)}</button>` : ""}${t.note ? ` · ${esc(t.note)}` : ""}</span></span>
-      <span class="small">${esc(findBranch(t.fromId).name.replace("QuickKart ", ""))} → ${esc(findBranch(t.toId).name.replace("QuickKart ", ""))}</span>
+      <span class="small">${esc(findBranch(t.fromId).name.replace("MyShopza ", ""))} → ${esc(findBranch(t.toId).name.replace("MyShopza ", ""))}</span>
       <span><span class="tr-chip tr-${t.status}">${esc(TRANSFER_STATUS[t.status].label)}</span><span class="qk-muted small"> ${timeAgo(last.at)}${t.status === "declined" && t.declineReason ? ` · ${esc(t.declineReason)}` : ""}</span></span>
       <span class="tr-act">${editable ? actions : ""}</span>
     </div>
@@ -365,7 +365,7 @@ function transfersHTML(branchId) {
     const shortLines = orderShortLines(o);
     if (shortLines.length && PREP_STATUSES.includes(o.status)) {
       const t = activeLineTransfer(o, shortLines[0].idx);
-      if (t) return t.status === "sent" ? `Transfer on the way from ${findBranch(t.fromId).name.replace("QuickKart ", "")} — mark received` : `Waiting for ${findBranch(t.fromId).name.replace("QuickKart ", "")} to send the transfer`;
+      if (t) return t.status === "sent" ? `Transfer on the way from ${findBranch(t.fromId).name.replace("MyShopza ", "")} — mark received` : `Waiting for ${findBranch(t.fromId).name.replace("MyShopza ", "")} to send the transfer`;
       return "Short at this store — request a transfer or mark unavailable";
     }
     return reason(o);

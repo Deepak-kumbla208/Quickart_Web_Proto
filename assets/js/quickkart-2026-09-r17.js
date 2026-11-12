@@ -1,5 +1,5 @@
 /* ====================================================================
-   QuickKart prototype — Round 17 (17 October 2026): THE CART SHOWS A
+   MyShopza prototype — Round 17 (17 October 2026): THE CART SHOWS A
    COMBO AS THE COMBO ALONE (backend decision D120, customer contract
    0.21.0-draft).
 

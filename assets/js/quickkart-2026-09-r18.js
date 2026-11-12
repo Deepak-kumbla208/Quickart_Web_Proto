@@ -1,5 +1,5 @@
 /* ====================================================================
-   QuickKart prototype — Round 18 (21 October 2026): THE DELIVERY
+   MyShopza prototype — Round 18 (21 October 2026): THE DELIVERY
    PROMISE (backend decision D121, phase P20-1, MR !135; customer
    contract 0.23.0-draft).
 

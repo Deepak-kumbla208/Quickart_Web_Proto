@@ -1,5 +1,5 @@
 /* ====================================================================
-   QuickKart prototype — Round 19 (22 October 2026): COMBOS ONLY WHEN
+   MyShopza prototype — Round 19 (22 October 2026): COMBOS ONLY WHEN
    CHOSEN (backend decision D122, phase P21-1, MR !137; customer
    contract 0.24.0-draft).
 

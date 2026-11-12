@@ -1,5 +1,5 @@
 /* ============================================================
-   QuickKart prototype — Round 25 (2026-11-03)
+   MyShopza prototype — Round 25 (2026-11-03)
    Buy 1 Get 1 — every unit at half price, no cap
    (backend D143, FX-18; customer contract 0.29.0-draft; replaces Round 24):
 
