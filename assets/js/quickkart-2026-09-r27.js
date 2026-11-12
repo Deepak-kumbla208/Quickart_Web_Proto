@@ -18,5 +18,13 @@
    keep the QK prefix. Saved sample data from before is shown with the new name too (see loadLS in quickkart.js). */
 WHATS_NEW.unshift({ area: "Round 27 — the new name: MyShopza (2026-11-12)", items: [
   ["MyShopza everywhere", "Sign-in, the header and footer, the sample shop and its stores (MyShopza Tampines…), the wallet (MyShopza Wallet), the rider app (MyShopza Rider), help texts and sample addresses (no-reply@myshopza.com) now say MyShopza. Order numbers keep QK (QK00123)."],
-  ["Saved sample data", "Anything this browser saved earlier shows the new name too — no need to reset."],
+  ["The MyShopza logo", "The bag mark is in every logo tile (sign-in, header, footer, admin, rider app) and on the browser tab; the full MyShopza logo sits at the bottom of the sign-in card (it was the Prabhas Trading logo). Theme & Branding ▸ Reset goes back to the MyShopza logo."],
+  ["Saved sample data", "Anything this browser saved earlier shows the new name and logo too — no need to reset. A logo the admin uploaded stays."],
 ] });
+
+/* The full MyShopza logo is wide, so the sign-in card's bottom logo is shown shorter than the old square one. */
+(function () {
+  var style = document.createElement("style");
+  style.textContent = ".login-footer-logo { height: 34px; width: auto; }";
+  document.head.appendChild(style);
+})();
