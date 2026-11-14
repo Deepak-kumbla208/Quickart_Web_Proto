@@ -386,39 +386,63 @@
     setTimeout(() => {
       if (!form.isConnected) return;
       const hit = DEMO_BARCODES[code];
+      lastFound = hit ? { code, hit } : null;
       if (!hit) return sayBarcode(form, "qk-muted", "No details found for this barcode — fill them in yourself.");
-      const filled = [];
-      const notes = [];
-      const name = form.querySelector('[name="name"]');
-      if (name && !name.value.trim()) { name.value = hit.name; filled.push("name"); }
-      const brand = form.querySelector('select[name="brand"]');
-      if (brand && !brand.value) {
-        const known = State.brands.find((b) => b.name.toLowerCase() === hit.brand.toLowerCase());
-        if (known) { brand.value = known.name; filled.push("brand"); }
-        else notes.push(`The pack says <b>${esc(hit.brand)}</b> — not in your brands yet (Masters ▸ Brands).`);
-      }
-      const kind = form.querySelector('[name="unitKind"]');
-      const amount = form.querySelector('[name="unitAmount"]');
-      const pack = form.querySelector('[name="unitPack"]');
-      if (kind && amount && !kind.value && !amount.value.trim()) {
-        const m = PACK_RE.exec(hit.quantity.trim());
-        if (m) {
-          const u = m[3].toLowerCase();
-          kind.value = u === "l" ? "L" : u.startsWith("pc") ? "pc" : u;
-          amount.value = m[2];
-          if (pack) pack.value = m[1] || "";
-          amount.dispatchEvent(new Event("input", { bubbles: true })); // Round 22's range line follows
-          filled.push("pack size");
-        } else {
-          notes.push(`Pack size on the pack: “${esc(hit.quantity)}” — choose it below.`);
-        }
-      }
-      const head = filled.length
-        ? `Filled the ${listText(filled)} from Open Food Facts — check them before saving.`
-        : "Open Food Facts knows this barcode, but those boxes are already filled — nothing changed.";
-      sayBarcode(form, filled.length ? "r29-ok" : "qk-muted", [head, ...notes].join(" "));
+      const { filled, kept, notes } = fillFromPack(form, hit, false);
+      const found = `Found: <b>${esc(hit.name)}</b> · ${esc(hit.brand)} · ${esc(hit.quantity)}.`;
+      const head = filled.length ? `Filled the ${listText(filled)} from Open Food Facts — check before saving.`
+        : kept.length ? found : `${found} The boxes already match.`;
+      const keptText = kept.length
+        ? ` Your ${listText(kept)} already had something, so ${kept.length === 1 ? "it was" : "they were"} left as typed. <button type="button" class="link-btn" data-action="r29-use-found">Use these</button>`
+        : "";
+      sayBarcode(form, filled.length ? "r29-ok" : "qk-muted", `${head}${keptText}${notes.length ? ` ${notes.join(" ")}` : ""}`);
     }, 450);
   }
+  /* Puts what the pack says into the form: only empty boxes, or every box when the user asked ("Use these").
+     A brand is chosen only if the shop has it; a pack size only if it reads as one of the listed units. */
+  let lastFound = null;
+  function fillFromPack(form, hit, overwrite) {
+    const filled = [], kept = [], notes = [];
+    const name = form.querySelector('[name="name"]');
+    if (name) {
+      if (overwrite || !name.value.trim()) { name.value = hit.name; filled.push("name"); }
+      else if (name.value.trim() !== hit.name) kept.push("name");
+    }
+    const brand = form.querySelector('select[name="brand"]');
+    const known = State.brands.find((b) => b.name.toLowerCase() === hit.brand.toLowerCase());
+    if (brand) {
+      if (!known) notes.push(`The pack says <b>${esc(hit.brand)}</b> — not in your brands yet (Masters ▸ Brands).`);
+      else if (overwrite || !brand.value) { brand.value = known.name; filled.push("brand"); }
+      else if (brand.value !== known.name) kept.push("brand");
+    }
+    const kind = form.querySelector('[name="unitKind"]');
+    const amount = form.querySelector('[name="unitAmount"]');
+    const pack = form.querySelector('[name="unitPack"]');
+    if (kind && amount) {
+      const m = PACK_RE.exec(hit.quantity.trim());
+      const empty = !kind.value && !amount.value.trim();
+      const u = m ? m[3].toLowerCase() : "";
+      const unit = u === "l" ? "L" : u.startsWith("pc") ? "pc" : u;
+      const same = m && kind.value === unit && Number(amount.value) === Number(m[2]) && (pack ? (pack.value || "") === (m[1] || "") : true);
+      if (!m) notes.push(`Pack size on the pack: “${esc(hit.quantity)}” — choose it yourself.`);
+      else if (same && !overwrite) { /* already what the pack says */ }
+      else if (overwrite || empty) {
+        kind.value = unit;
+        amount.value = m[2];
+        if (pack) pack.value = m[1] || "";
+        amount.dispatchEvent(new Event("input", { bubbles: true })); // Round 22's range line follows
+        filled.push("pack size");
+      } else kept.push("pack size");
+    }
+    return { filled, kept, notes };
+  }
+  Actions["r29-use-found"] = (el) => {
+    const form = el.closest("form");
+    const box = form && form.querySelector('input[name="barcode"]');
+    if (!form || !lastFound || !box || box.value !== lastFound.code) return;
+    const { filled, notes } = fillFromPack(form, lastFound.hit, true);
+    sayBarcode(form, "r29-ok", `Replaced the ${listText(filled)} with Open Food Facts' — check before saving.${notes.length ? ` ${notes.join(" ")}` : ""}`);
+  };
   Actions["r29-lookup"] = (el) => lookUpBarcode(el.closest("form"));
   Actions["r29-scan"] = (el) => {
     const form = el.closest("form");
@@ -461,7 +485,6 @@
       const field = sku.closest(".field");
       field.querySelector(".field-label").textContent = "SKU";
       sku.setAttribute("placeholder", `Leave empty: ${nextCode("sku")}`);
-      if (!field.querySelector(".field-error")) field.insertAdjacentHTML("beforeend", `<span class="qk-muted small">Left empty, the next code is used.</span>`);
     }
 
     const bc = root.querySelector('input[name="barcode"]');
@@ -473,7 +496,7 @@
       wrap.className = "field r29-barcode";
       wrap.innerHTML = `<span class="field-label">Barcode</span>
         <div class="r29-barcode-row">${bc.outerHTML}<button type="button" class="btn btn-outline btn-sm r29-scan" data-action="r29-scan" title="Scan with the camera" aria-label="Scan with the camera">${ic("camera")}</button><button type="button" class="btn btn-outline btn-sm" data-action="r29-lookup">Look up</button></div>
-        <span class="small r29-barcode-msg qk-muted" data-r29-barcode-msg>Your own products first, then Open Food Facts.</span>`;
+        <span class="small r29-barcode-msg qk-muted" data-r29-barcode-msg>Scan first — it fills the name, brand and pack size.</span>`;
       // Its own row under the SKU: the dialog is too narrow for the box and two buttons in half a row.
       const grid = bc.closest(".field-grid-2");
       bc.closest(".field").remove();
@@ -501,12 +524,75 @@
         grid.insertAdjacentElement("afterend", field);
       }
     }
+
+    /* The order staff work in (the user chose this, 2026-11-14): scan first; then what every product needs; then one
+       "More details" section, closed, for what most products never need. On Edit its line says what is filled. */
+    const form = root.querySelector('form[data-action="save-item"]');
+    const actions = form && form.querySelector(".form-actions");
+    if (form && actions) {
+      const part = (name) => {
+        let n = form.querySelector(`[name="${name}"]`);
+        while (n && n.parentElement !== form) n = n.parentElement;
+        return n || null;
+      };
+      const fieldOf = (name) => { const el = form.querySelector(`[name="${name}"]`); return el ? el.closest(".field") : null; };
+      const media = form.querySelector(".form-media-row");
+      const hint = media && [...media.querySelectorAll("*")].find((e) => !e.children.length && /^JPEG/.test(e.textContent.trim()));
+      if (hint) hint.textContent = "JPEG, PNG, WebP or SVG, up to 2 MB — or paste an https:// link.";
+      const pack = part("unitKind");
+      if (pack) pack.querySelectorAll(".r21-hint").forEach((s) => { if (/^Saved as e\.g\./.test(s.textContent.trim())) s.remove(); });
+      const prices = part("mrp");
+      const cost = fieldOf("costPrice");
+      if (prices && cost) { cost.remove(); prices.classList.replace("field-grid-3", "field-grid-2"); }
+      const supplyGrid = part("supplierId");
+      const supplier = fieldOf("supplierId");
+      const reorder = fieldOf("reorderLevel");
+      const stockGrid = document.createElement("div");
+      stockGrid.className = "field-grid-2";
+      [cost, reorder].filter(Boolean).forEach((n) => stockGrid.append(n));
+      const tags = part("tags");
+      const tagsHead = tags && tags.previousElementSibling && !tags.previousElementSibling.querySelector("[name]") ? tags.previousElementSibling : null;
+      const qtyNote = [...form.children].find((c) => c.classList.contains("qk-muted") && /Quantities are kept per store/.test(c.textContent));
+
+      const filled = [];
+      if (f.id) {
+        if (f.costPrice != null) filled.push(`cost ${money(f.costPrice)}`);
+        if (f.supplierId) filled.push("supplier");
+        if (Number(f.eta) > DAY) filled.push(`delivery ${etaWords(f.eta)}`);
+        if (f.hsnCode) filled.push("HSN code");
+        if (f.defaultSubstituteId) filled.push("substitute");
+        if (f.description) filled.push("description");
+        if ((f.tags || []).length) filled.push(`${f.tags.length} tag${f.tags.length === 1 ? "" : "s"}`);
+        if (f.bogo) filled.push("Buy 1 Get 1");
+      }
+      const more = document.createElement("details");
+      more.className = "r29-details";
+      if (UI.r29MoreOpen) more.setAttribute("open", "");
+      more.innerHTML = `<summary><span class="r29-details-title">${ic("chevronRight")}More details</span><span class="qk-muted small">${filled.length ? `Filled: ${esc(filled.join(", "))}` : "Cost, supplier, reorder level, delivery time, HSN code, substitute, description, tags, Buy 1 Get 1"}</span></summary>`;
+      const body = document.createElement("div");
+      body.className = "r29-details-body";
+      const sub = (text) => { const d = document.createElement("div"); d.className = "r29-details-sub"; d.textContent = text; return d; };
+      [sub("Stock and supplier"), stockGrid, supplier, part("etaAmount"), qtyNote, sub("Invoice and substitute"), part("hsnCode"), sub("On the shop"), part("description"), part("bogo"), tagsHead, tags]
+        .filter(Boolean).forEach((n) => body.append(n));
+      more.append(body);
+      if (supplyGrid && !supplyGrid.children.length) supplyGrid.remove();
+
+      [form.querySelector(".r29-barcode"), media, part("name"), part("brand"), pack, prices, part("stock"), part("sku"), more]
+        .filter(Boolean).forEach((n) => form.insertBefore(n, actions));
+    }
     return t.innerHTML;
   };
+  // "More details" stays open or closed while the form is redrawn (an error, a new unit); a new form starts closed.
+  document.addEventListener("toggle", (ev) => {
+    if (ev.target.classList && ev.target.classList.contains("r29-details")) UI.r29MoreOpen = ev.target.open;
+  }, true);
+  const editItemBefore = Actions["edit-item"];
+  Actions["edit-item"] = (...args) => { UI.r29MoreOpen = false; return editItemBefore(...args); };
 
   // Add product used to suggest the next QK code; the SKU now starts empty (the server makes the next code).
   const newItemBefore = Actions["new-item"];
   Actions["new-item"] = (...args) => {
+    UI.r29MoreOpen = false;
     newItemBefore(...args);
     if (UI.modal && UI.modal.form && !UI.modal.form.id) { UI.modal.form.sku = ""; render(); }
   };
@@ -523,9 +609,12 @@
       const mins = n * (UNIT_MINUTES[unit.value] || 1);
       const problem = !Number.isInteger(n) || n < 1 ? "Delivery time: a whole number, 1 or more" : mins > ETA_MAX ? "Delivery time: up to 30 days" : null;
       amt.classList.toggle("invalid", !!problem);
-      if (problem) { showToast(problem, "danger"); amt.focus(); return; }
+      if (problem) { const more = amt.closest("details"); if (more) more.open = true; showToast(problem, "danger"); amt.focus(); return; }
       hidden.value = String(mins);
     }
+    // An HSN code Round 10 will refuse sits in "More details": open it so the box can be seen.
+    const hsn = form.querySelector('[name="hsnCode"]');
+    if (hsn && hsn.value.trim() && !/^[0-9]{4,10}$/.test(hsn.value.replace(/[\s.]/g, ""))) { const more = hsn.closest("details"); if (more) more.open = true; }
     // A. A new product with an empty SKU gets the next code.
     const box = form.querySelector('input[name="sku"]');
     const made = box && !f.id && !box.value.trim() ? peekCodes("sku", 1)[0] : null;
@@ -1215,6 +1304,15 @@
     .r29-eta select { width: 120px; flex: none; }
     .r29-eta .small { flex: 1 1 170px; min-width: 0; line-height: 1.35; }
     .p-card-eta.r29-eta-long { color: #B54708; }
+    .r29-details { display: block; margin: 2px 0 14px; border: 1px solid var(--line); border-radius: 12px; }
+    .r29-details > summary { list-style: none; cursor: pointer; display: grid; gap: 2px; padding: 10px 12px; }
+    .r29-details > summary::-webkit-details-marker { display: none; }
+    .r29-details > summary:hover .r29-details-title { color: var(--primary); }
+    .r29-details-title { display: flex; align-items: center; gap: 4px; font-weight: 700; font-size: 14px; }
+    .r29-details-title .ic { width: 16px; height: 16px; transition: transform .15s; }
+    .r29-details[open] .r29-details-title .ic { transform: rotate(90deg); }
+    .r29-details-body { padding: 0 12px 4px; border-top: 1px solid var(--line); }
+    .r29-details-sub { margin: 12px 0 6px; font-size: 11.5px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: #6B7785; }
     .filter-pill.r29-off { opacity: .45; cursor: not-allowed; }
     .r29-eta-note { margin: 0 0 10px; }
     .r29-approval-note { margin-bottom: 12px; }
@@ -1240,7 +1338,8 @@ WHATS_NEW.unshift({ area: "Round 29 — the Shop filters as an Amazon-style list
   ["SKU can be left empty", "Catalogue ▸ Add product: SKU is optional. Left empty, the next code is made from the shop's prefix and a running number — SKU-00001, SKU-00002 … (Business Settings ▸ Stock Rules ▸ Codes); a code someone typed by hand is skipped. Editing a product still needs its SKU (imports match on it). In a product import, a row with no SKU is a new product with the next code — export first to update products."],
   ["Supplier code can be left empty", "Masters ▸ Suppliers ▸ Add supplier: the same, with its own prefix (SUP-00001 …). In a supplier import, a row with no code is a new supplier with the next code."],
   ["Codes in Business Settings", "Stock Rules ▸ Codes: the SKU prefix and the supplier code prefix (1–10 letters, digits, - or _), with the next code shown under each. The number keeps counting when a prefix changes."],
-  ["Barcode: Scan and Look up", "The product form's Barcode has a camera button (the app scans with the camera; a USB scanner already types into the box) and Look up. Enter in the box looks up too, so a scanner's Enter never saves the form. Your own products first: a barcode you already sell says \"Already in your catalogue\" with Open it. Otherwise Open Food Facts fills the empty name, brand and pack size — only the barcode is sent; check them before saving. A brand you don't have yet is named, not added. Nothing found: nothing is filled. (The prototype knows a few demo barcodes, e.g. 8901262150118; the camera button picks one.)"],
+  ["Barcode: Scan and Look up", "The product form's Barcode has a camera button (the app scans with the camera; a USB scanner already types into the box) and Look up. Enter in the box looks up too, so a scanner's Enter never saves the form. Your own products first: a barcode you already sell says \"Already in your catalogue\" with Open it. Otherwise Open Food Facts (a free, volunteer-built database of packaged products) fills the empty name, brand and pack size — only the barcode is sent; check them before saving. A box that already has something is left as typed: the message shows what was found and \"Use these\" replaces them. A brand you don't have yet is named, not added. Nothing found: nothing is filled. (The prototype knows a few demo barcodes, e.g. 8901262150118; the camera button picks one.)"],
+  ["Add product: the everyday boxes first", "The product form had about 22 boxes in one narrow window. Now: Barcode first (scan, and it fills the rest), then picture, name, brand and category, pack size, MRP and selling price, the Selling switch and the SKU. Everything most products never need is in one \"More details\" section, closed: Stock and supplier (cost price, reorder level, supplier, delivery time), Invoice and substitute (HSN code, default substitute), On the shop (description, Buy 1 Get 1, tags). On Edit its line says what is filled (\"Filled: cost S$10.20, delivery 2 days, 1 tag\"). An error in a box inside opens it. Shorter hints (the picture's one line; the pack size's \"Saved as e.g.\" line gone — the range line under it says the same). Same boxes and rules — only the order and the folding changed."],
   ["Delivery time in minutes, hours or days", "The product form's ETA is a number with min / hours / days, up to 30 days (the API keeps minutes, up to 43,200). Customers see \"Delivery in 3 days\" on the product card and page when it is over a day."],
   ["A slow product makes the cart scheduled-only", "When the cart holds a product that takes more than a day, Express is greyed out with the reason and the delivery times start after that product's time: the first slot that starts once it is ready, and the days customers can book ahead count from there. The cart banner says \"Scheduled delivery only — from Mon 17 Nov\"; pickup says when it is ready. Demo: Basmati Rice 5kg takes 3 days."],
   ["Receipts and adjustments in the Audit log", "Setup ▸ Audit log ▸ What: Stock. Every stock receipt (unit cost, supplier, invoice no.) and every adjustment (stock take, damaged, expired, correction) is an entry: who, product and store, on hand before → after, reason and note. A stock import is one entry per store (how many products, the file). Stock history still lists every movement."],
